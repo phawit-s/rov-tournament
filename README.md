@@ -1,9 +1,20 @@
-# ROV Team Randomizer 🎲
+# ROV Tournament Hub 🎲
 
-เว็บสุ่มแบ่งทีมสำหรับทัวร์นาเมนต์ RoV — ใส่รายชื่อ กำหนดว่าทีมละกี่คน แล้วกดสุ่มทีละคนพร้อมเอฟเฟกต์เต็มจอ
-ทำงานในเบราว์เซอร์ล้วน ไม่มีเซิร์ฟเวอร์ ไม่มีการส่งข้อมูลออก deploy เป็น static site บน GitHub Pages ได้เลย
+เครื่องมือจัดทัวร์นาเมนต์ RoV ครบวงจร — สุ่มแบ่งทีม หมุนวงล้อ จัดสายแข่ง กรอกผล คำนวณเงินรางวัล
+และเก็บประวัติผู้เล่น ทำงานในเบราว์เซอร์ล้วน ไม่มีเซิร์ฟเวอร์ deploy เป็น static site บน GitHub Pages
 
-## ฟีเจอร์
+**เว็บจริง:** [phawit-s.github.io/rov-tournament](https://phawit-s.github.io/rov-tournament/)
+
+## 4 เมนู
+
+| เมนู | ทำอะไร |
+| --- | --- |
+| **สุ่มทีม** | ใส่รายชื่อ กำหนดทีมละกี่คน จับสลากทีละคนเข้าทีม |
+| **วงล้อ** | วงล้อเสี่ยงโชค สะบัดด้วยเมาส์ได้ ถ่วงน้ำหนักได้ คัดชื่อที่ออกแล้วทิ้งได้ |
+| **ทัวร์นาเมนต์** | สร้างทัวร์ (ชื่อ/รูป/กติกา/วันสมัคร) รับสมัครทีม จัดสาย BO3/5/7 กรอกผล ตารางแข่ง เงินรางวัล ป้ายไลฟ์ |
+| **ผู้เล่น** | ประวัติรายคน — ลงทัวร์ไหนบ้าง อัตราชนะ จำนวนแชมป์ |
+
+## เมนูสุ่มทีม
 
 ### การตั้งค่า
 
@@ -72,18 +83,38 @@ repo นี้มี workflow ให้แล้วที่ [.github/workflows/
 | รูป PNG | Canvas 2D เขียนเอง ไม่มี dependency |
 | เก็บข้อมูล | localStorage |
 
+## ข้อจำกัดที่ต้องรู้
+
+เว็บนี้เป็น static ล้วน **ไม่มีเซิร์ฟเวอร์และไม่มีฐานข้อมูล** ทุกอย่างเก็บใน localStorage ของเครื่องที่เปิด
+เพราะฉะนั้น:
+
+- **การสมัครแข่ง** = ผู้จัดกรอกทีมเองในเครื่องผู้จัด คนอื่นสมัครจากเครื่องตัวเองแล้วส่งเข้ามาไม่ได้
+- **โหมดผู้จัด (PIN)** กันมือลั่นเท่านั้น ไม่ใช่ระบบสิทธิ์จริง — เปิด devtools ก็เห็นทุกอย่าง
+- **ระบบผู้ใช้** ใช้ "ชื่อ" เป็นตัวระบุตัวตน ไม่มีบัญชี ไม่มีรหัสผ่าน
+- **แชร์** ทำโดยฝังข้อมูลทัวร์ทั้งก้อนไว้ใน URL (`#s=...`) คนเปิดจะเห็นสถานะ ณ ตอนที่กดแชร์
+  ถ้าผู้จัดกรอกผลเพิ่มต้องส่งลิงก์ใหม่ (รูปปกไม่ติดไปกับลิงก์ เพราะจะยาวเกิน)
+
+ถ้าอยากได้แบบสมัครข้ามเครื่อง / ผลอัปเดตสดทุกคน ต้องมี backend + ฐานข้อมูล
+
 ## โครงสร้าง
 
 ```text
-app/          layout + หน้าเดียวจบ
-components/   Randomizer (shell) → SetupScreen / DrawScreen / ResultScreen
-              DrawMachine (เครื่องสุ่ม), TeamBoard (การ์ดทีม)
-  ui/         Panel, Button
-  fx/         BackgroundFX (แสงนวลตามเมาส์), GoldDust (ผงทองตอนจบ)
-hooks/        useTournament (reducer + persist), useClient
-lib/          random (seeded PRNG), teams (แบ่งทีม), rov (ข้อมูลทีม/เลน),
-              sound, theme, share, exportImage
+app/            /  ·  /wheel  ·  /tournaments  ·  /tournament  ·  /players
+components/
+  AppShell      เฮดเดอร์ + เมนู + พื้นหลัง ใช้ร่วมทุกหน้า
+  Randomizer    เครื่องมือสุ่มทีม → SetupScreen / DrawScreen / ResultScreen
+  wheel/        Wheel (canvas), WheelView
+  tournament/   TournamentsView, TournamentForm, TournamentDetail,
+                TeamsPanel, BracketPanel, SchedulePanel, PrizePanel, PlayersView
+  ui/           Panel, Button
+  fx/           BackgroundFX, GoldDust
+hooks/          useTournament (reducer + persist), useClient
+lib/            random, teams, rov, sound, theme, share, exportImage, wheel
+  tournament/   types, store, bracket, prize, players, admin, share
 ```
+
+หัวใจของสายแข่งอยู่ที่ [lib/tournament/bracket.ts](lib/tournament/bracket.ts) — `createBracket()` สุ่มคู่จาก seed
+แล้ว `propagate()` ดันผู้ชนะเข้ารอบถัดไปให้เองทุกครั้งที่แก้ผล ทำให้แก้คะแนนย้อนหลังได้โดยสายไม่เพี้ยน
 
 หัวใจอยู่ที่ [lib/teams.ts](lib/teams.ts) — `planTeams()` กางที่นั่งทั้งหมดออกเป็นลิสต์ล่วงหน้า
 แล้ว `buildTeams()` ประกอบทีมจาก "จำนวนคนที่เปิดแล้ว" อย่างเดียว ทำให้ย้อนกลับ / ข้ามไปท้ายสุด
