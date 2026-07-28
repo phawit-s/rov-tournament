@@ -1,27 +1,28 @@
 import type { TeamIdentity } from "./types";
 
 /** อัตลักษณ์ทีม เรียงตามลำดับที่ถูกใช้ วนซ้ำถ้าทีมเยอะกว่านี้ */
+/** โทนอัญมณี ไม่ฉูดฉาด อ่านง่ายบนพื้นดำ */
 export const TEAM_IDENTITIES: TeamIdentity[] = [
-  { name: "CRIMSON", short: "CRM", rgb: "244 63 94", hex: "#f43f5e", glyph: "🔥" },
-  { name: "AZURE", short: "AZR", rgb: "34 211 238", hex: "#22d3ee", glyph: "💠" },
-  { name: "VIOLET", short: "VLT", rgb: "168 85 247", hex: "#a855f7", glyph: "🔮" },
-  { name: "EMERALD", short: "EMR", rgb: "16 185 129", hex: "#10b981", glyph: "🐉" },
-  { name: "AMBER", short: "AMB", rgb: "251 191 36", hex: "#fbbf24", glyph: "⚡" },
-  { name: "ORCHID", short: "ORC", rgb: "236 72 153", hex: "#ec4899", glyph: "🌸" },
-  { name: "LIME", short: "LIM", rgb: "163 230 53", hex: "#a3e635", glyph: "🍀" },
-  { name: "COBALT", short: "CBT", rgb: "99 102 241", hex: "#6366f1", glyph: "🛡️" },
-  { name: "SOLAR", short: "SLR", rgb: "249 115 22", hex: "#f97316", glyph: "☀️" },
-  { name: "FROST", short: "FRS", rgb: "125 211 252", hex: "#7dd3fc", glyph: "❄️" },
-  { name: "ONYX", short: "ONX", rgb: "148 163 184", hex: "#94a3b8", glyph: "🌑" },
-  { name: "TOXIC", short: "TXC", rgb: "132 204 22", hex: "#84cc16", glyph: "☠️" },
+  { name: "RUBY", short: "RBY", rgb: "224 96 112", hex: "#e06070", glyph: "◆" },
+  { name: "SAPPHIRE", short: "SPH", rgb: "109 146 219", hex: "#6d92db", glyph: "◇" },
+  { name: "AMETHYST", short: "AMT", rgb: "160 121 216", hex: "#a079d8", glyph: "✦" },
+  { name: "EMERALD", short: "EMR", rgb: "77 181 145", hex: "#4db591", glyph: "❖" },
+  { name: "TOPAZ", short: "TPZ", rgb: "221 175 100", hex: "#ddaf64", glyph: "◈" },
+  { name: "ROSE", short: "ROS", rgb: "219 133 163", hex: "#db85a3", glyph: "✧" },
+  { name: "JADE", short: "JAD", rgb: "129 191 127", hex: "#81bf7f", glyph: "▲" },
+  { name: "COBALT", short: "CBT", rgb: "122 133 214", hex: "#7a85d6", glyph: "●" },
+  { name: "AMBER", short: "AMB", rgb: "220 148 89", hex: "#dc9459", glyph: "■" },
+  { name: "AQUA", short: "AQA", rgb: "104 184 197", hex: "#68b8c5", glyph: "★" },
+  { name: "PEARL", short: "PRL", rgb: "193 198 214", hex: "#c1c6d6", glyph: "◐" },
+  { name: "ONYX", short: "ONX", rgb: "146 151 172", hex: "#9297ac", glyph: "◼" },
 ];
 
 export const BENCH_IDENTITY: TeamIdentity = {
   name: "ตัวสำรอง",
   short: "SUB",
-  rgb: "139 139 181",
-  hex: "#8b8bb5",
-  glyph: "🪑",
+  rgb: "155 160 179",
+  hex: "#9ba0b3",
+  glyph: "○",
 };
 
 export function identityFor(index: number): TeamIdentity {

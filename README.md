@@ -17,10 +17,10 @@
 
 ### การจับสลาก
 
-- กดทีละครั้ง = สุ่มทีละคน มีวงล้อชื่อหมุนแล้วหยุด → การ์ดชื่อบินเข้าช่องของทีมนั้น
+- กดทีละครั้ง = สุ่มทีละคน มีวงล้อชื่อหมุนแล้วหยุด → การ์ดชื่อเลื่อนเข้าช่องของทีมนั้น
 - โหมดสุ่มอัตโนมัติ / ข้ามไปดูผลลัพธ์ทันที / ย้อนกลับทีละคน
 - กด `Space` แทนการคลิกได้
-- ทีมเต็มเมื่อไหร่มีคอนเฟตตี + เสียงฉลอง
+- ออกผลแต่ละครั้งมีวงแหวนทองขยายออก จบครบทุกคนมีผงทองร่วง — ไม่ใช้พลุกระดาษ
 
 ### ผลลัพธ์
 
@@ -33,9 +33,10 @@
 ใครก็ตรวจซ้ำได้ ใส่ seed เดิมกับรายชื่อเดิมต้องได้ผลเดิมเสมอ และ seed ถูกโชว์ไว้ตลอดเวลาจับสลาก
 จะประกาศ seed ก่อนเริ่มก็ได้ เพื่อยืนยันว่าไม่ได้แอบสุ่มใหม่จนกว่าจะถูกใจ
 
-**หน้าตา** — พื้นหลังกริดเปอร์สเปกทีฟ + อนุภาคที่หลบเมาส์, เคอร์เซอร์เรืองแสง, ปุ่มแม่เหล็ก,
-การ์ดเอียงตามเมาส์, กรอบแบบ HUD, เสียงเอฟเฟกต์สังเคราะห์ (ปิดได้), รองรับมือถือเต็มรูปแบบ
-และเคารพ `prefers-reduced-motion`
+**หน้าตา** — โทน luxury: ดำหมึก/งาช้าง + ทองแชมเปญ, พื้นผิวมีเกรน, เส้นคั่นบางๆ,
+แสงนวลเคลื่อนช้าตามเมาส์, เสียงเอฟเฟกต์สังเคราะห์ (ปิดได้)
+มีทั้ง **ธีมมืดและธีมสว่าง** สลับได้จากปุ่มมุมขวาบน (ครั้งแรกดูจากค่าระบบ แล้วจำไว้ให้)
+รองรับมือถือเต็มรูปแบบ และเคารพ `prefers-reduced-motion`
 
 ## รันในเครื่อง
 
@@ -64,10 +65,11 @@ repo นี้มี workflow ให้แล้วที่ [.github/workflows/
 | ส่วน | ใช้ |
 | --- | --- |
 | Framework | Next.js 16 (App Router, static export) |
-| UI | React 19 + Tailwind CSS v4 |
-| Animation | Motion (framer-motion) + canvas 2D |
-| Confetti | canvas-confetti |
+| UI | React 19 + Tailwind CSS v4 (ธีมสลับด้วย `data-theme` + CSS variables) |
+| Animation | Motion (framer-motion) |
+| ฟอนต์ | Prompt + IBM Plex Sans Thai (self-host ผ่าน `next/font`) |
 | เสียง | Web Audio API (สังเคราะห์เอง ไม่มีไฟล์เสียง) |
+| รูป PNG | Canvas 2D เขียนเอง ไม่มี dependency |
 | เก็บข้อมูล | localStorage |
 
 ## โครงสร้าง
@@ -75,11 +77,12 @@ repo นี้มี workflow ให้แล้วที่ [.github/workflows/
 ```text
 app/          layout + หน้าเดียวจบ
 components/   Randomizer (shell) → SetupScreen / DrawScreen / ResultScreen
-  ui/         Panel, MagneticButton, TiltCard
-  fx/         BackgroundFX (canvas), CursorGlow
+              DrawMachine (เครื่องสุ่ม), TeamBoard (การ์ดทีม)
+  ui/         Panel, Button
+  fx/         BackgroundFX (แสงนวลตามเมาส์), GoldDust (ผงทองตอนจบ)
 hooks/        useTournament (reducer + persist), useClient
 lib/          random (seeded PRNG), teams (แบ่งทีม), rov (ข้อมูลทีม/เลน),
-              sound, confetti, share, exportImage
+              sound, theme, share, exportImage
 ```
 
 หัวใจอยู่ที่ [lib/teams.ts](lib/teams.ts) — `planTeams()` กางที่นั่งทั้งหมดออกเป็นลิสต์ล่วงหน้า

@@ -10,20 +10,17 @@ type Props = {
   accent?: string;
   style?: CSSProperties;
   interactive?: boolean;
-  /** มุมกรอบแบบ HUD */
-  corners?: boolean;
-  /** ป้ายกำกับเล็กๆ มุมบนขวา */
+  /** ป้ายกำกับตัวเล็กบนหัวการ์ด */
   tag?: string;
 };
 
-/** กล่องกระจกพร้อมขอบเรืองแสง มุม HUD และไฟสปอตไลต์ตามเมาส์ */
+/** การ์ดพื้นผิวหรู: ขอบบาง เส้นทองพาดบน และไฟนวลตามเมาส์ */
 export default function Panel({
   children,
   className = "",
-  accent = "34 211 238",
+  accent = "207 167 101",
   style,
   interactive = true,
-  corners = true,
   tag,
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -43,30 +40,16 @@ export default function Panel({
           : undefined
       }
       style={{ ["--accent" as string]: accent, ...style }}
-      className={`glass neon-edge ${interactive ? "spotlight" : ""} relative rounded-3xl ${className}`}
+      className={`surface hairline-top ${interactive ? "spotlight" : ""} relative rounded-2xl ${className}`}
     >
-      {corners && (
-        <>
-          <span className="hud-corner tl" />
-          <span className="hud-corner tr" />
-          <span className="hud-corner bl" />
-          <span className="hud-corner br" />
-        </>
-      )}
-
       {tag && (
         <span
-          className="pointer-events-none absolute -top-2.5 right-6 rounded-md px-2 py-0.5 font-display text-[9px] tracking-[0.3em] backdrop-blur"
-          style={{
-            color: `rgb(${accent})`,
-            background: `rgb(${accent} / 0.12)`,
-            boxShadow: `inset 0 0 0 1px rgb(${accent} / 0.35)`,
-          }}
+          className="pointer-events-none absolute top-4 right-5 font-display text-[10px] font-medium tracking-luxe uppercase"
+          style={{ color: `rgb(${accent} / 0.65)` }}
         >
           {tag}
         </span>
       )}
-
       {children}
     </div>
   );

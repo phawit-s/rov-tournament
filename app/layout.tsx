@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Chakra_Petch, IBM_Plex_Sans_Thai } from "next/font/google";
+import { IBM_Plex_Sans_Thai, Prompt } from "next/font/google";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme-script";
 import "./globals.css";
 
-const chakra = Chakra_Petch({
+const prompt = Prompt({
   subsets: ["latin", "thai"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-chakra",
+  weight: ["300", "400", "500", "600"],
+  variable: "--font-prompt",
   display: "swap",
 });
 
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#04040c",
+  themeColor: "#0a0a0e",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -42,8 +43,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="th" className={`${chakra.variable} ${plexThai.variable}`}>
-      <body className="scanlines antialiased">{children}</body>
+    <html
+      lang="th"
+      data-theme="dark"
+      className={`${prompt.variable} ${plexThai.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        {/* ตั้งธีมก่อนเบราว์เซอร์วาดหน้าจอ ไม่งั้นจะเห็นจอกระพริบตอนโหลด */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

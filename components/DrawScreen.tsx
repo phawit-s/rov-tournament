@@ -1,15 +1,14 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { BENCH_IDENTITY, identityFor } from "@/lib/rov";
-import { teamCompleteBurst } from "@/lib/confetti";
 import { sfx } from "@/lib/sound";
 import type { Tournament } from "@/hooks/useTournament";
 import DrawMachine from "./DrawMachine";
 import TeamBoard from "./TeamBoard";
 import Panel from "./ui/Panel";
-import MagneticButton from "./ui/MagneticButton";
+import Button from "./ui/Button";
 
 export default function DrawScreen({ t }: { t: Tournament }) {
   const { state, dispatch, derived } = t;
@@ -30,15 +29,11 @@ export default function DrawScreen({ t }: { t: Tournament }) {
         ? BENCH_IDENTITY.name
         : state.teamNames[slot.teamIndex] || identity.name;
 
-  // ฉลองทุกครั้งที่มีทีมเต็ม
+  // ทีมเต็มเมื่อไหร่ ส่งเสียงสั้นๆ พอ ไม่ต้องมีเอฟเฟกต์ฟุ้ง
   const fullCount = useRef(0);
   useEffect(() => {
     const nowFull = teams.filter((team) => team.isFull).length;
-    if (nowFull > fullCount.current) {
-      const justFilled = teams.filter((team) => team.isFull).at(-1);
-      sfx.play("teamComplete");
-      if (justFilled) teamCompleteBurst(justFilled.identity.hex);
-    }
+    if (nowFull > fullCount.current) sfx.play("teamComplete");
     fullCount.current = nowFull;
   }, [teams]);
 
@@ -60,31 +55,31 @@ export default function DrawScreen({ t }: { t: Tournament }) {
       className="space-y-5"
     >
       {/* แถบความคืบหน้า */}
-      <div className="flex flex-wrap items-center gap-3">
-        <MagneticButton
+      <div className="flex flex-wrap items-center gap-4">
+        <Button
           variant="ghost"
-          strength={0.2}
           className="px-4 py-2 text-xs"
           onClick={() => dispatch({ type: "backToSetup" })}
         >
           ← แก้ไขรายชื่อ
-        </MagneticButton>
+        </Button>
 
-        <div className="flex min-w-45 flex-1 items-center gap-3">
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/8">
+        <div className="flex min-w-45 flex-1 items-center gap-3.5">
+          <div className="h-px flex-1 overflow-hidden rule">
             <motion.div
-              className="h-full rounded-full bg-linear-to-r from-cyan via-violet to-magenta"
+              className="h-full bg-[linear-gradient(90deg,#8f7038,#f2dcb0)]"
               animate={{ width: `${progress}%` }}
               transition={{ type: "spring", stiffness: 140, damping: 24 }}
             />
           </div>
-          <span className="font-display text-sm font-bold text-white tabular-nums">
-            {state.revealed}/{total}
+          <span className="font-display text-sm text-champagne tabular-nums">
+            {state.revealed}
+            <span className="text-muted">/{total}</span>
           </span>
         </div>
 
-        <span className="rounded-lg bg-white/6 px-2.5 py-1.5 font-display text-[11px] tracking-widest text-gold">
-          SEED {state.seed}
+        <span className="font-display text-[10px] tracking-luxe text-muted uppercase">
+          Seed <span className="text-champagne/80">{state.seed}</span>
         </span>
       </div>
 
@@ -114,28 +109,28 @@ export default function DrawScreen({ t }: { t: Tournament }) {
             onRevealAll={() => dispatch({ type: "revealAll" })}
           />
 
-          <Panel tag="POOL" className="p-4" accent="139 139 181">
-            <p className="mb-2 font-display text-[11px] tracking-[0.25em] text-muted">
-              ยังไม่ถูกจับ ({remaining.length})
+          <Panel tag="Pool" className="p-5" accent="155 160 179">
+            <p className="mb-3.5 text-sm font-medium text-ice/85">
+              ยังไม่ถูกจับ <span className="text-muted">({remaining.length})</span>
             </p>
-            <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+            <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
               <AnimatePresence mode="popLayout" initial={false}>
                 {remaining.map((player) => (
                   <motion.span
                     key={player.id}
                     layout
-                    initial={{ opacity: 0, scale: 0.7 }}
+                    initial={{ opacity: 0, scale: 0.85 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.4, filter: "blur(6px)" }}
-                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                    className="rounded-lg border border-white/8 bg-white/5 px-2 py-1 text-xs text-ice/70"
+                    exit={{ opacity: 0, scale: 0.6 }}
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    className="rounded-lg border border-hair px-2.5 py-1 text-xs text-ice/70"
                   >
                     {player.name}
                   </motion.span>
                 ))}
               </AnimatePresence>
               {remaining.length === 0 && (
-                <span className="text-xs text-muted">— หมดแล้ว —</span>
+                <span className="text-xs text-muted">หมดแล้ว</span>
               )}
             </div>
           </Panel>

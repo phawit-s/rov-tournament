@@ -1,22 +1,19 @@
-"use client";
+﻿"use client";
 
 import { AnimatePresence, motion } from "motion/react";
 import { BENCH_IDENTITY } from "@/lib/rov";
 import type { BuiltTeam, Member } from "@/lib/types";
 import Panel from "./ui/Panel";
-import TiltCard from "./ui/TiltCard";
 
 type Props = {
   teams: BuiltTeam[];
   bench: Member[];
   benchCount: number;
   activeTeamIndex: number | null;
-  /** null = กำลังจะสุ่มเข้าโซนตัวสำรอง */
   activeIsBench?: boolean;
   teamName: (index: number) => string;
   onRenameTeam?: (index: number, name: string) => void;
   layoutAnimations?: boolean;
-  tilt?: boolean;
   compact?: boolean;
 };
 
@@ -29,7 +26,6 @@ export default function TeamBoard({
   teamName,
   onRenameTeam,
   layoutAnimations = false,
-  tilt = false,
   compact = false,
 }: Props) {
   return (
@@ -48,7 +44,6 @@ export default function TeamBoard({
           active={activeTeamIndex === team.index}
           onRename={onRenameTeam}
           layoutAnimations={layoutAnimations}
-          tilt={tilt}
         />
       ))}
 
@@ -58,30 +53,10 @@ export default function TeamBoard({
           size={benchCount}
           active={activeIsBench}
           layoutAnimations={layoutAnimations}
-          tilt={tilt}
         />
       )}
     </div>
   );
-}
-
-function CardShell({
-  children,
-  tilt,
-  className,
-  accent,
-}: {
-  children: React.ReactNode;
-  tilt: boolean;
-  className: string;
-  accent: string;
-}) {
-  const panel = (
-    <Panel accent={accent} className={className}>
-      {children}
-    </Panel>
-  );
-  return tilt ? <TiltCard max={7}>{panel}</TiltCard> : panel;
 }
 
 function TeamCard({
@@ -90,14 +65,12 @@ function TeamCard({
   active,
   onRename,
   layoutAnimations,
-  tilt,
 }: {
   team: BuiltTeam;
   label: string;
   active: boolean;
   onRename?: (index: number, name: string) => void;
   layoutAnimations: boolean;
-  tilt: boolean;
 }) {
   const { identity, members, size } = team;
   const fill = size ? (members.length / size) * 100 : 0;
@@ -106,35 +79,30 @@ function TeamCard({
   return (
     <motion.div
       layout={layoutAnimations}
-      initial={{ opacity: 0, y: 18, scale: 0.96 }}
-      animate={{
-        opacity: 1,
-        y: 0,
-        scale: active ? 1.015 : 1,
-      }}
-      transition={{ type: "spring", stiffness: 260, damping: 26 }}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 240, damping: 28 }}
       className="relative"
     >
       {active && (
         <motion.div
           layoutId="active-team-halo"
-          className="pointer-events-none absolute -inset-1.5 rounded-[26px]"
+          className="pointer-events-none absolute -inset-px rounded-2xl"
           style={{
-            background: `radial-gradient(120% 100% at 50% 0%, rgb(${identity.rgb} / 0.35), transparent 70%)`,
-            boxShadow: `0 0 0 1.5px rgb(${identity.rgb} / 0.65), 0 0 45px -8px rgb(${identity.rgb} / 0.75)`,
-            borderRadius: 26,
+            boxShadow: `0 0 0 1px rgb(${identity.rgb} / 0.5), 0 20px 60px -30px rgb(${identity.rgb} / 0.8)`,
           }}
-          transition={{ type: "spring", stiffness: 250, damping: 28 }}
+          transition={{ type: "spring", stiffness: 240, damping: 30 }}
         />
       )}
 
-      <CardShell tilt={tilt} accent={identity.rgb} className="overflow-hidden p-4">
-        <header className="mb-3 flex items-center gap-3">
+      <Panel accent={identity.rgb} className="p-5">
+        <header className="mb-4 flex items-center gap-3">
           <span
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-lg"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full border text-sm"
             style={{
-              background: `linear-gradient(140deg, rgb(${identity.rgb} / 0.35), rgb(${identity.rgb} / 0.08))`,
-              boxShadow: `inset 0 0 0 1px rgb(${identity.rgb} / 0.45)`,
+              borderColor: `rgb(${identity.rgb} / 0.4)`,
+              color: identity.hex,
+              background: `rgb(${identity.rgb} / 0.08)`,
             }}
           >
             {identity.glyph}
@@ -146,43 +114,32 @@ function TeamCard({
                 value={displayName}
                 onChange={(e) => onRename(team.index, e.target.value)}
                 aria-label={`ชื่อทีมที่ ${team.index + 1}`}
-                className="w-full truncate bg-transparent font-display text-base font-bold tracking-wide outline-none focus:text-white"
+                className="w-full truncate bg-transparent font-display text-base font-medium tracking-wide outline-none focus:text-ice"
                 style={{ color: identity.hex }}
               />
             ) : (
               <p
-                className="truncate font-display text-base font-bold tracking-wide"
+                className="truncate font-display text-base font-medium tracking-wide"
                 style={{ color: identity.hex }}
               >
                 {displayName}
               </p>
             )}
-            <p className="text-[11px] text-muted">TEAM {team.index + 1}</p>
+            <p className="mt-0.5 font-display text-[10px] tracking-luxe text-muted uppercase">
+              Team {team.index + 1}
+            </p>
           </div>
 
-          <motion.span
-            animate={
-              team.isFull
-                ? { scale: [1, 1.18, 1] }
-                : { scale: 1 }
-            }
-            transition={{ duration: 0.45 }}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 font-display text-xs font-semibold tabular-nums"
-            style={{
-              color: team.isFull ? "#05050e" : identity.hex,
-              background: team.isFull
-                ? `rgb(${identity.rgb} / 0.95)`
-                : `rgb(${identity.rgb} / 0.12)`,
-            }}
+          <span
+            className="shrink-0 font-display text-sm tabular-nums"
+            style={{ color: team.isFull ? identity.hex : "var(--color-muted)" }}
           >
-            {team.isFull && (
-              <span className="text-[9px] tracking-[0.15em]">FULL</span>
-            )}
-            {members.length}/{size}
-          </motion.span>
+            {members.length}
+            <span className="text-muted">/{size}</span>
+          </span>
         </header>
 
-        <ul className="space-y-1.5">
+        <ul className="space-y-2">
           {Array.from({ length: size }, (_, seat) => {
             const member = members.find((m) => m.seat === seat);
             return (
@@ -194,36 +151,25 @@ function TeamCard({
                       layoutId={
                         layoutAnimations ? `player-${member.player.id}` : undefined
                       }
-                      initial={
-                        layoutAnimations ? false : { opacity: 0, x: -12 }
-                      }
+                      initial={layoutAnimations ? false : { opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                      className="flex items-center gap-2.5 rounded-xl px-2.5 py-2"
+                      className="flex items-center gap-3 rounded-lg border px-3 py-2"
                       style={{
-                        background: `linear-gradient(100deg, rgb(${identity.rgb} / 0.18), rgb(${identity.rgb} / 0.04))`,
-                        boxShadow: `inset 0 0 0 1px rgb(${identity.rgb} / 0.22)`,
+                        borderColor: `rgb(${identity.rgb} / 0.2)`,
+                        background: `rgb(${identity.rgb} / 0.07)`,
                       }}
                     >
-                      <span
-                        className="grid h-6 w-6 shrink-0 place-items-center rounded-md font-display text-[11px] font-bold tabular-nums"
-                        style={{
-                          background: `rgb(${identity.rgb} / 0.25)`,
-                          color: "#fff",
-                        }}
-                      >
-                        {seat + 1}
+                      <span className="font-display text-[11px] text-muted tabular-nums">
+                        {String(seat + 1).padStart(2, "0")}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-white">
+                      <span className="min-w-0 flex-1 truncate text-sm text-ice">
                         {member.player.name}
                       </span>
                       {member.lane && (
                         <span
-                          className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
-                          style={{
-                            background: `rgb(${identity.rgb} / 0.2)`,
-                            color: identity.hex,
-                          }}
+                          className="shrink-0 text-[11px]"
+                          style={{ color: `rgb(${identity.rgb} / 0.9)` }}
                         >
                           {member.lane}
                         </span>
@@ -235,14 +181,12 @@ function TeamCard({
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="flex items-center gap-2.5 rounded-xl border border-dashed border-white/10 px-2.5 py-2"
+                      className="flex items-center gap-3 rounded-lg tile-dashed px-3 py-2"
                     >
-                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-white/5 font-display text-[11px] text-muted tabular-nums">
-                        {seat + 1}
+                      <span className="font-display text-[11px] text-muted/50 tabular-nums">
+                        {String(seat + 1).padStart(2, "0")}
                       </span>
-                      <span className="h-2 flex-1 overflow-hidden rounded-full bg-white/5">
-                        <span className="block h-full w-1/3 animate-shimmer bg-linear-to-r from-transparent via-white/25 to-transparent" />
-                      </span>
+                      <span className="h-px flex-1 rule" />
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -251,17 +195,16 @@ function TeamCard({
           })}
         </ul>
 
-        <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/8">
+        <div className="mt-4 h-px overflow-hidden rule">
           <motion.div
-            className="h-full rounded-full"
-            style={{ background: `linear-gradient(90deg, rgb(${identity.rgb}), #fff)` }}
+            className="h-full"
+            style={{ background: `rgb(${identity.rgb})` }}
             initial={{ width: 0 }}
             animate={{ width: `${fill}%` }}
-            transition={{ type: "spring", stiffness: 180, damping: 26 }}
+            transition={{ type: "spring", stiffness: 160, damping: 26 }}
           />
         </div>
-
-      </CardShell>
+      </Panel>
     </motion.div>
   );
 }
@@ -271,34 +214,41 @@ function BenchCard({
   size,
   active,
   layoutAnimations,
-  tilt,
 }: {
   members: Member[];
   size: number;
   active: boolean;
   layoutAnimations: boolean;
-  tilt: boolean;
 }) {
   const id = BENCH_IDENTITY;
   return (
     <motion.div
       layout={layoutAnimations}
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0, scale: active ? 1.015 : 1 }}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
       className="relative"
     >
-      <CardShell tilt={tilt} accent={id.rgb} className="p-4">
-        <header className="mb-3 flex items-center gap-3">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/6 text-lg">
+      {active && (
+        <motion.div
+          layoutId="active-team-halo"
+          className="pointer-events-none absolute -inset-px rounded-2xl"
+          style={{ boxShadow: `0 0 0 1px rgb(${id.rgb} / 0.45)` }}
+        />
+      )}
+      <Panel accent={id.rgb} className="p-5">
+        <header className="mb-4 flex items-center gap-3">
+          <span className="grid h-9 w-9 place-items-center rounded-full border border-hair text-sm text-muted">
             {id.glyph}
           </span>
           <div className="flex-1">
-            <p className="font-display text-base font-bold tracking-wide text-muted">
+            <p className="font-display text-base font-medium tracking-wide text-muted">
               {id.name}
             </p>
-            <p className="text-[11px] text-muted/70">รอเสียบแทน</p>
+            <p className="mt-0.5 font-display text-[10px] tracking-luxe text-muted/70 uppercase">
+              Substitute
+            </p>
           </div>
-          <span className="rounded-lg bg-white/6 px-2 py-1 font-display text-xs font-semibold text-muted tabular-nums">
+          <span className="font-display text-sm text-muted tabular-nums">
             {members.length}/{size}
           </span>
         </header>
@@ -309,24 +259,22 @@ function BenchCard({
             return member ? (
               <motion.li
                 key={member.player.id}
-                layoutId={
-                  layoutAnimations ? `player-${member.player.id}` : undefined
-                }
-                className="rounded-lg bg-white/8 px-2.5 py-1.5 text-sm text-white/85"
+                layoutId={layoutAnimations ? `player-${member.player.id}` : undefined}
+                className="tile rounded-lg px-3 py-1.5 text-sm text-ice/85"
               >
                 {member.player.name}
               </motion.li>
             ) : (
               <li
                 key={`e-${seat}`}
-                className="rounded-lg border border-dashed border-white/10 px-4 py-1.5 text-sm text-muted/50"
+                className="rounded-lg tile-dashed px-5 py-1.5 text-sm text-muted/40"
               >
                 —
               </li>
             );
           })}
         </ul>
-      </CardShell>
+      </Panel>
     </motion.div>
   );
 }

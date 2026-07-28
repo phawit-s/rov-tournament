@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
@@ -7,7 +7,7 @@ import { MAX_PER_TEAM, MAX_TEAMS, MIN_PER_TEAM } from "@/lib/teams";
 import { sfx } from "@/lib/sound";
 import type { Tournament } from "@/hooks/useTournament";
 import { configSummary } from "@/hooks/useTournament";
-import MagneticButton from "./ui/MagneticButton";
+import Button from "./ui/Button";
 import Panel from "./ui/Panel";
 
 type Props = { t: Tournament };
@@ -34,43 +34,22 @@ export default function SetupScreen({ t }: Props) {
     inputRef.current?.focus();
   };
 
-  const addBulk = () => {
-    dispatch({ type: "addNames", names: bulkText.split(/[,\n\t;]+/) });
-    setBulkText("");
-    setBulk(false);
-  };
-
   const canStart = derived.total >= 2;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 24 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -18 }}
-      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="grid gap-5 lg:grid-cols-[1.15fr_1fr] xl:gap-6"
+      exit={{ opacity: 0, y: -14 }}
+      transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+      className="grid gap-5 lg:grid-cols-[1.1fr_1fr] xl:gap-6"
     >
       {/* ---------------- รายชื่อผู้เล่น ---------------- */}
-      <Panel tag="ROSTER" className="p-5 sm:p-6">
-        <div className="mb-4 flex items-end justify-between gap-3">
-          <div>
-            <p className="font-display text-[11px] tracking-[0.3em] text-cyan">
-              STEP 01
-            </p>
-            <h2 className="font-display text-xl font-bold text-white sm:text-2xl">
-              ใส่รายชื่อผู้เล่น
-            </h2>
-          </div>
-          <div className="text-right">
-            <p className="font-display text-3xl leading-none font-bold text-white tabular-nums">
-              {derived.total}
-            </p>
-            <p className="text-[11px] text-muted">คน</p>
-          </div>
-        </div>
+      <Panel className="p-6 sm:p-7">
+        <SectionHead step="01" title="ใส่รายชื่อผู้เล่น" count={derived.total} />
 
         {!bulk ? (
-          <div className="flex gap-2">
+          <div className="flex gap-2.5">
             <div className="relative flex-1">
               <input
                 ref={inputRef}
@@ -82,80 +61,71 @@ export default function SetupScreen({ t }: Props) {
                     addFromDraft();
                   }
                 }}
-                placeholder="พิมพ์ชื่อแล้วกด Enter..."
+                placeholder="พิมพ์ชื่อแล้วกด Enter"
                 maxLength={120}
-                className="w-full rounded-2xl border border-white/12 bg-black/35 px-4 py-3 text-base text-white outline-none transition-all placeholder:text-muted/70 focus:border-cyan/60 focus:bg-black/55 focus:shadow-[0_0_0_3px_rgba(34,211,238,0.15)]"
+                className="w-full field rounded-xl px-4 py-3 text-base text-ice outline-none transition-all duration-300 placeholder:text-muted/80"
               />
               {draft && (
-                <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[10px] text-muted">
-                  ↵ Enter
+                <span className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[11px] text-muted">
+                  ↵
                 </span>
               )}
             </div>
-            <MagneticButton
-              onClick={addFromDraft}
-              disabled={!draft.trim()}
-              className="shrink-0 px-5"
-            >
+            <Button onClick={addFromDraft} disabled={!draft.trim()} className="shrink-0 px-6">
               เพิ่ม
-            </MagneticButton>
+            </Button>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <textarea
               value={bulkText}
               onChange={(e) => setBulkText(e.target.value)}
               rows={6}
               placeholder={"วางรายชื่อทีละบรรทัด\nหรือคั่นด้วยลูกน้ำ"}
-              className="w-full resize-y rounded-2xl border border-white/12 bg-black/35 px-4 py-3 text-sm text-white outline-none placeholder:text-muted/70 focus:border-cyan/60"
+              className="w-full resize-y field rounded-xl px-4 py-3 text-sm text-ice outline-none placeholder:text-muted/80 focus:border-champagne/50"
             />
             <div className="flex gap-2">
-              <MagneticButton onClick={addBulk} disabled={!bulkText.trim()}>
+              <Button
+                onClick={() => {
+                  dispatch({ type: "addNames", names: bulkText.split(/[,\n\t;]+/) });
+                  setBulkText("");
+                  setBulk(false);
+                }}
+                disabled={!bulkText.trim()}
+              >
                 เพิ่มทั้งหมด
-              </MagneticButton>
-              <MagneticButton variant="ghost" onClick={() => setBulk(false)}>
+              </Button>
+              <Button variant="ghost" onClick={() => setBulk(false)}>
                 ยกเลิก
-              </MagneticButton>
+              </Button>
             </div>
           </div>
         )}
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          {!bulk && (
-            <Chip onClick={() => setBulk(true)}>📋 วางหลายชื่อพร้อมกัน</Chip>
-          )}
+        <div className="mt-3.5 flex flex-wrap gap-2">
+          {!bulk && <Chip onClick={() => setBulk(true)}>วางหลายชื่อพร้อมกัน</Chip>}
           <Chip
             onClick={() =>
               dispatch({ type: "addNames", names: SAMPLE_NAMES.slice(0, 10) })
             }
           >
-            ✨ ใส่ชื่อตัวอย่าง
+            ใส่ชื่อตัวอย่าง
           </Chip>
           {derived.total > 0 && (
             <Chip danger onClick={() => dispatch({ type: "clearPlayers" })}>
-              🗑 ล้างทั้งหมด
+              ล้างทั้งหมด
             </Chip>
           )}
         </div>
 
-        {/* รายชื่อ */}
-        <div className="mt-4 max-h-[38vh] min-h-24 overflow-y-auto pr-1 lg:max-h-[46vh]">
+        <div className="mt-5 max-h-[38vh] min-h-28 overflow-y-auto pr-1 lg:max-h-[46vh]">
           {derived.total === 0 ? (
-            <div className="relative grid h-40 place-items-center overflow-hidden rounded-2xl border border-dashed border-white/10 bg-black/20">
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_80%_at_50%_50%,rgba(34,211,238,0.10),transparent_70%)]" />
-              <div className="relative text-center">
-                <motion.div
-                  animate={{ y: [0, -6, 0], opacity: [0.6, 1, 0.6] }}
-                  transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
-                  className="mx-auto mb-3 grid h-14 w-14 place-items-center"
-                >
-                  <span className="hex-clip absolute h-14 w-14 bg-linear-to-br from-cyan/30 to-violet/20" />
-                  <span className="relative font-display text-2xl text-cyan">◈</span>
-                </motion.div>
-                <p className="font-display text-sm tracking-[0.25em] text-cyan/80">
-                  NO PLAYERS DETECTED
+            <div className="grid h-32 place-items-center rounded-xl tile-dashed">
+              <div className="text-center">
+                <p className="font-display text-sm tracking-[0.2em] text-champagne/70">
+                  ยังไม่มีรายชื่อ
                 </p>
-                <p className="mt-1 text-xs text-muted">
+                <p className="mt-1.5 text-xs text-muted">
                   เริ่มพิมพ์ชื่อด้านบน หรือกดใส่ชื่อตัวอย่าง
                 </p>
               </div>
@@ -167,14 +137,13 @@ export default function SetupScreen({ t }: Props) {
                   <motion.li
                     key={player.id}
                     layout
-                    initial={{ opacity: 0, scale: 0.7, y: 8 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.6, filter: "blur(4px)" }}
-                    transition={{ type: "spring", stiffness: 420, damping: 28 }}
-                    className="group relative"
+                    initial={{ opacity: 0, scale: 0.85 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
                   >
-                    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/6 py-1.5 pr-1.5 pl-2.5 transition-colors hover:border-cyan/45 hover:bg-white/12">
-                      <span className="font-display text-[10px] text-muted tabular-nums">
+                    <div className="flex items-center gap-2 tile rounded-lg py-1.5 pr-1.5 pl-3 transition-colors duration-300 hover:border-champagne/35 hover-tile">
+                      <span className="font-display text-[11px] text-muted tabular-nums">
                         {String(index + 1).padStart(2, "0")}
                       </span>
                       {editingId === player.id ? (
@@ -193,13 +162,13 @@ export default function SetupScreen({ t }: Props) {
                             if (e.key === "Enter") e.currentTarget.blur();
                             if (e.key === "Escape") setEditingId(null);
                           }}
-                          className="w-28 rounded-md bg-black/50 px-1.5 py-0.5 text-sm text-white outline-none"
+                          className="w-28 field rounded-md px-1.5 py-0.5 text-sm text-ice outline-none"
                         />
                       ) : (
                         <button
                           type="button"
                           onClick={() => setEditingId(player.id)}
-                          className="max-w-[10rem] cursor-text truncate text-sm text-white"
+                          className="max-w-40 cursor-text truncate text-sm text-ice"
                           title="คลิกเพื่อแก้ชื่อ"
                         >
                           {player.name}
@@ -208,10 +177,8 @@ export default function SetupScreen({ t }: Props) {
                       <button
                         type="button"
                         aria-label={`ลบ ${player.name}`}
-                        onClick={() =>
-                          dispatch({ type: "removePlayer", id: player.id })
-                        }
-                        className="grid h-6 w-6 cursor-pointer place-items-center rounded-lg text-muted transition-colors hover:bg-magenta/25 hover:text-magenta"
+                        onClick={() => dispatch({ type: "removePlayer", id: player.id })}
+                        className="grid h-6 w-6 cursor-pointer place-items-center rounded-md text-muted transition-colors hover-tile hover:text-[#e79a9a]"
                       >
                         ✕
                       </button>
@@ -225,20 +192,16 @@ export default function SetupScreen({ t }: Props) {
       </Panel>
 
       {/* ---------------- ตั้งค่าการแบ่งทีม ---------------- */}
-      <Panel tag="CONFIG" accent="168 85 247" className="flex flex-col p-5 sm:p-6">
-        <div className="mb-4">
-          <p className="font-display text-[11px] tracking-[0.3em] text-violet">
-            STEP 02
-          </p>
-          <h2 className="font-display text-xl font-bold text-white sm:text-2xl">
-            ตั้งค่าทีม
-          </h2>
-        </div>
+      <Panel className="flex flex-col p-6 sm:p-7">
+        <SectionHead step="02" title="ตั้งค่าทีม" />
 
-        <SegmentedControl
+        <Segmented
           value={state.config.sizeMode}
           onChange={(v) =>
-            dispatch({ type: "setConfig", patch: { sizeMode: v as "perTeam" | "teamCount" } })
+            dispatch({
+              type: "setConfig",
+              patch: { sizeMode: v as "perTeam" | "teamCount" },
+            })
           }
           options={[
             { value: "perTeam", label: "กำหนดคนต่อทีม" },
@@ -246,7 +209,7 @@ export default function SetupScreen({ t }: Props) {
           ]}
         />
 
-        <div className="mt-5">
+        <div className="mt-6">
           {state.config.sizeMode === "perTeam" ? (
             <Stepper
               label="ทีมละกี่คน"
@@ -270,16 +233,16 @@ export default function SetupScreen({ t }: Props) {
           )}
         </div>
 
+        <div className="my-6 h-px rule" />
+
         {/* พรีวิว */}
-        <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4">
+        <div>
           <div className="mb-3 flex items-baseline justify-between">
-            <p className="font-display text-xs tracking-widest text-muted">
-              พรีวิวผลลัพธ์
-            </p>
-            <p className="font-display text-sm font-bold text-white">
+            <p className="text-sm font-medium text-ice/85">พรีวิวผลลัพธ์</p>
+            <p className="font-display text-sm text-champagne">
               {summary.teams} ทีม
               {summary.bench > 0 && (
-                <span className="ml-1 text-gold">+ สำรอง {summary.bench}</span>
+                <span className="ml-1.5 text-muted">+ สำรอง {summary.bench}</span>
               )}
             </p>
           </div>
@@ -293,29 +256,27 @@ export default function SetupScreen({ t }: Props) {
                   <motion.div
                     key={i}
                     layout
-                    initial={{ opacity: 0, scale: 0.6 }}
+                    initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="flex items-center gap-1.5 rounded-lg px-2 py-1"
+                    className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5"
                     style={{
-                      background: `rgb(${id.rgb} / 0.16)`,
-                      boxShadow: `inset 0 0 0 1px rgb(${id.rgb} / 0.4)`,
+                      borderColor: `rgb(${id.rgb} / 0.35)`,
+                      background: `rgb(${id.rgb} / 0.08)`,
                     }}
                   >
-                    <span className="text-xs">{id.glyph}</span>
-                    <span
-                      className="font-display text-xs font-bold"
-                      style={{ color: id.hex }}
-                    >
+                    <span className="text-[10px]" style={{ color: id.hex }}>
+                      {id.glyph}
+                    </span>
+                    <span className="font-display text-xs" style={{ color: id.hex }}>
                       {size}
                     </span>
                   </motion.div>
                 );
               })}
               {summary.bench > 0 && (
-                <div className="flex items-center gap-1.5 rounded-lg border border-dashed border-white/20 px-2 py-1">
-                  <span className="text-xs">🪑</span>
-                  <span className="font-display text-xs font-bold text-muted">
-                    {summary.bench}
+                <div className="flex items-center gap-2 rounded-lg border tile-dashed px-2.5 py-1.5">
+                  <span className="font-display text-xs text-muted">
+                    ○ {summary.bench}
                   </span>
                 </div>
               )}
@@ -323,11 +284,12 @@ export default function SetupScreen({ t }: Props) {
           )}
         </div>
 
-        {/* ตัวเลือกเสริม */}
-        <div className="mt-4 space-y-3">
+        <div className="my-6 h-px rule" />
+
+        <div className="space-y-5">
           {state.config.sizeMode === "perTeam" && (
             <Field label="คนที่เหลือเศษ (หารไม่ลงตัว)">
-              <SegmentedControl
+              <Segmented
                 small
                 value={state.config.remainderMode}
                 onChange={(v) =>
@@ -346,7 +308,7 @@ export default function SetupScreen({ t }: Props) {
           )}
 
           <Field label="ลำดับการเติมคน">
-            <SegmentedControl
+            <Segmented
               small
               value={state.config.fillMode}
               onChange={(v) =>
@@ -376,7 +338,7 @@ export default function SetupScreen({ t }: Props) {
               <input
                 value={state.seed}
                 onChange={(e) => dispatch({ type: "setSeed", seed: e.target.value })}
-                className="min-w-0 flex-1 rounded-xl border border-white/12 bg-black/40 px-3 py-2 font-display text-sm tracking-widest text-gold uppercase outline-none focus:border-gold/60"
+                className="min-w-0 flex-1 field rounded-xl px-3.5 py-2.5 font-display text-sm tracking-[0.18em] text-champagne uppercase outline-none focus:border-champagne/50"
               />
               <button
                 type="button"
@@ -384,30 +346,29 @@ export default function SetupScreen({ t }: Props) {
                   sfx.play("click");
                   dispatch({ type: "reseed" });
                 }}
-                className="cursor-pointer rounded-xl border border-white/12 bg-white/5 px-3 py-2 text-sm transition-colors hover:bg-white/12"
+                className="cursor-pointer rounded-xl border border-hair tile px-3.5 text-sm text-ice/80 transition-colors hover:border-champagne/40 hover:text-champagne"
                 title="สุ่ม seed ใหม่"
               >
-                🎲
+                ↻
               </button>
             </div>
           </Field>
         </div>
 
-        <div className="mt-6 flex-1" />
+        <div className="mt-8 flex-1" />
 
-        <MagneticButton
+        <Button
           onClick={() => {
             sfx.play("reveal");
             dispatch({ type: "start" });
           }}
           disabled={!canStart}
-          strength={0.4}
           className="w-full py-4 text-base"
         >
-          🚀 เริ่มจับสลาก
-        </MagneticButton>
+          เริ่มจับสลาก
+        </Button>
         {!canStart && (
-          <p className="mt-2 text-center text-xs text-muted">
+          <p className="mt-2.5 text-center text-xs text-muted">
             ต้องมีอย่างน้อย 2 คนถึงจะเริ่มได้
           </p>
         )}
@@ -417,6 +378,37 @@ export default function SetupScreen({ t }: Props) {
 }
 
 /* ------------------------- ชิ้นส่วนเล็กๆ ------------------------- */
+
+function SectionHead({
+  step,
+  title,
+  count,
+}: {
+  step: string;
+  title: string;
+  count?: number;
+}) {
+  return (
+    <div className="mb-6 flex items-end justify-between gap-4">
+      <div>
+        <p className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase">
+          Step {step}
+        </p>
+        <h2 className="mt-1.5 font-display text-xl font-medium text-ice sm:text-2xl">
+          {title}
+        </h2>
+      </div>
+      {count !== undefined && (
+        <div className="text-right">
+          <p className="font-display text-3xl leading-none font-light text-ice tabular-nums">
+            {count}
+          </p>
+          <p className="mt-1 text-xs text-muted">คน</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Chip({
   children,
@@ -434,10 +426,10 @@ function Chip({
         sfx.play("click");
         onClick();
       }}
-      className={`cursor-pointer rounded-lg border px-2.5 py-1.5 text-xs transition-all duration-200 ${
+      className={`cursor-pointer rounded-lg border px-3 py-1.5 text-xs transition-all duration-300 ${
         danger
-          ? "border-magenta/30 bg-magenta/10 text-magenta hover:bg-magenta/20"
-          : "border-white/12 bg-white/5 text-ice/75 hover:border-cyan/40 hover:bg-white/10 hover:text-white"
+          ? "border-[#e79a9a]/25 text-[#e79a9a]/90 hover:bg-[#e79a9a]/10"
+          : "border-hair text-ice/75 hover:border-champagne/35 hover:text-champagne"
       }`}
     >
       {children}
@@ -445,22 +437,16 @@ function Chip({
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1.5 text-xs text-muted">{label}</p>
+      <p className="mb-2.5 text-sm font-medium text-ice/85">{label}</p>
       {children}
     </div>
   );
 }
 
-function SegmentedControl({
+function Segmented({
   value,
   onChange,
   options,
@@ -472,7 +458,7 @@ function SegmentedControl({
   small?: boolean;
 }) {
   return (
-    <div className="relative flex gap-1 rounded-2xl border border-white/10 bg-black/35 p-1">
+    <div className="relative flex gap-1 tile rounded-xl p-1">
       {options.map((opt) => {
         const active = opt.value === value;
         return (
@@ -483,15 +469,15 @@ function SegmentedControl({
               sfx.play("click");
               onChange(opt.value);
             }}
-            className={`relative flex-1 cursor-pointer rounded-xl px-2 py-2 font-display font-semibold transition-colors duration-200 ${
-              small ? "text-[11px]" : "text-xs sm:text-sm"
-            } ${active ? "text-white" : "text-muted hover:text-ice"}`}
+            className={`relative flex-1 cursor-pointer rounded-lg px-2 py-2.5 font-display transition-colors duration-300 ${
+              small ? "text-xs" : "text-sm"
+            } ${active ? "text-[#1b1509]" : "text-ice/65 hover:text-ice"}`}
           >
             {active && (
               <motion.span
                 layoutId={`seg-${options.map((o) => o.value).join("-")}`}
-                className="absolute inset-0 rounded-xl bg-linear-to-r from-cyan/25 to-violet/25 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.4)]"
-                transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                className="absolute inset-0 rounded-lg bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)]"
+                transition={{ type: "spring", stiffness: 340, damping: 32 }}
               />
             )}
             <span className="relative z-10">{opt.label}</span>
@@ -528,17 +514,17 @@ function Stepper({
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm text-ice/80">{label}</p>
-        <div className="flex items-center gap-2">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-sm font-medium text-ice/85">{label}</p>
+        <div className="flex items-center gap-3">
           <StepButton onClick={() => bump(-1)} disabled={value <= min}>
             −
           </StepButton>
           <motion.span
             key={value}
-            initial={{ scale: 1.35, color: "#22d3ee" }}
-            animate={{ scale: 1, color: "#ffffff" }}
-            className="w-10 text-center font-display text-3xl font-bold tabular-nums"
+            initial={{ opacity: 0.4, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-10 text-center font-display text-3xl font-light text-champagne tabular-nums"
           >
             {value}
           </motion.span>
@@ -557,7 +543,7 @@ function Stepper({
         className="w-full cursor-pointer"
         aria-label={label}
       />
-      <p className="mt-1 text-right text-[11px] text-muted">{suffix}</p>
+      <p className="mt-2 text-right text-xs text-muted">{suffix}</p>
     </div>
   );
 }
@@ -576,7 +562,7 @@ function StepButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="grid h-9 w-9 cursor-pointer place-items-center rounded-xl border border-white/12 bg-white/5 font-display text-xl leading-none text-ice transition-all hover:border-cyan/50 hover:bg-cyan/15 active:scale-90 disabled:cursor-not-allowed disabled:opacity-30"
+      className="grid h-9 w-9 cursor-pointer place-items-center rounded-full border border-hair text-lg leading-none text-ice/80 transition-all duration-300 hover:border-champagne/45 hover:text-champagne active:scale-90 disabled:cursor-not-allowed disabled:opacity-25"
     >
       {children}
     </button>
@@ -601,23 +587,23 @@ function Toggle({
         sfx.play("click");
         onChange(!checked);
       }}
-      className="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-black/25 px-3 py-2.5 text-left transition-colors hover:border-white/20"
+      className="flex w-full cursor-pointer items-center gap-3.5 tile rounded-xl px-4 py-3 text-left transition-colors duration-300 hover:border-champagne/35"
     >
       <span
         className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-300 ${
-          checked ? "bg-linear-to-r from-cyan to-violet" : "bg-white/12"
+          checked ? "bg-[linear-gradient(90deg,#bd9350,#f0d8ab)]" : "rule"
         }`}
       >
         <motion.span
           layout
-          transition={{ type: "spring", stiffness: 500, damping: 32 }}
+          transition={{ type: "spring", stiffness: 500, damping: 34 }}
           className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow"
           style={{ left: checked ? 22 : 2 }}
         />
       </span>
       <span className="min-w-0">
-        <span className="block text-sm text-white">{label}</span>
-        {hint && <span className="block text-[11px] text-muted">{hint}</span>}
+        <span className="block text-sm text-ice">{label}</span>
+        {hint && <span className="block text-xs text-muted">{hint}</span>}
       </span>
     </button>
   );
