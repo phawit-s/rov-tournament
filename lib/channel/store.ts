@@ -15,7 +15,7 @@ import { getDb, hasBackend } from "@/lib/backend/firebase";
 import { DEFAULT_CHANNEL, type Channel } from "./types";
 
 const COL = "channels";
-const KEY = "rov-randomizer/channel/v1";
+const KEY = "tourney-hub/channel/v1";
 
 /* ---------------- สำเนาในเครื่อง ---------------- */
 

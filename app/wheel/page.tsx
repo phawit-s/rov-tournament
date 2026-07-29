@@ -3,7 +3,7 @@ import AppShell from "@/components/AppShell";
 import WheelView from "@/components/wheel/WheelView";
 
 export const metadata: Metadata = {
-  title: "วงล้อสุ่ม — ROV Tournament Hub",
+  title: "วงล้อสุ่ม — Tourney Hub",
   description: "ใส่ชื่อแล้วหมุนวงล้อ สุ่มผู้โชคดีแบบมีลุ้น",
 };
 

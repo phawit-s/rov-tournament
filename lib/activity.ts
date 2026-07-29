@@ -31,7 +31,7 @@ export type ActivityEntry = {
   actor?: string;
 };
 
-const KEY = "rov-randomizer/activity/v1";
+const KEY = "tourney-hub/activity/v1";
 const MAX = 300;
 
 let cache: ActivityEntry[] | null = null;

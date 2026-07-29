@@ -1,12 +1,18 @@
-﻿"use client";
+"use client";
 
-import { safeImageSrc } from "@/lib/safe";
+import type { ReactNode } from "react";
 import { useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { safeImageSrc } from "@/lib/safe";
 import { PRIZE_PRESETS, calcPrizes, formatMoney } from "@/lib/tournament/prize";
+import { formatThaiDay } from "@/lib/tournament/share";
 import { tournamentStore } from "@/lib/tournament/store";
 import type { Tournament, TournamentStatus } from "@/lib/tournament/types";
 import Button from "../ui/Button";
 import Panel from "../ui/Panel";
+import SectionHead from "../ui/SectionHead";
+import { IconCheck } from "../ui/icons";
+import TournamentCard from "./TournamentCard";
 import {
   Input,
   Label,
@@ -29,6 +35,7 @@ const MAX_COVER_KB = 400;
 export default function TournamentForm({ tournament, onClose, onSaved }: Props) {
   const [draft, setDraft] = useState<Tournament>(tournament);
   const [coverError, setCoverError] = useState<string | null>(null);
+  const reduced = useReducedMotion();
 
   const set = <K extends keyof Tournament>(key: K, value: Tournament[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -64,338 +71,454 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
   };
 
   return (
-    <Panel className="p-6 sm:p-7">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <h2 className="font-display text-xl font-medium text-ice">
-          {tournament.name ? "แก้ไขทัวร์นาเมนต์" : "สร้างทัวร์นาเมนต์"}
-        </h2>
+    <div className="space-y-5">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="slug">{tournament.name ? "Edit" : "New tournament"}</p>
+          <h2 className="mt-1.5 font-display text-2xl font-light text-ice">
+            {tournament.name ? "แก้ไขทัวร์นาเมนต์" : "สร้างทัวร์นาเมนต์"}
+          </h2>
+        </div>
         <button
           type="button"
           onClick={onClose}
-          className="cursor-pointer text-sm text-muted transition-colors hover:text-ice"
+          className="hover-tile tile min-h-10 shrink-0 cursor-pointer rounded-xl px-4 text-sm text-muted transition-colors hover:text-ice"
         >
-          ✕ ปิด
+          ปิด
         </button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="space-y-5">
-          <div>
-            <Label>ชื่อทัวร์นาเมนต์</Label>
-            <Input
-              value={draft.name}
-              onChange={(e) => set("name", e.target.value)}
-              placeholder="เช่น AFFA RAIN CUP #1"
-              maxLength={80}
-            />
-          </div>
+      <div className="grid gap-5 lg:grid-cols-[1fr_minmax(280px,21rem)] lg:items-start">
+        <Panel className="p-6 sm:p-7">
+          <div className="space-y-10">
+            {/* ---------- 01 ตัวตนทัวร์ ---------- */}
+            <section>
+              <SectionHead no="01" eyebrow="Identity" title="ตัวตนทัวร์" />
 
-          <div>
-            <Label>คำโปรยสั้นๆ</Label>
-            <Input
-              value={draft.tagline ?? ""}
-              onChange={(e) => set("tagline", e.target.value)}
-              placeholder="เช่น ศึกชิงแชมป์ประจำเดือน"
-              maxLength={120}
-            />
-          </div>
-
-          <div>
-            <Label>รายละเอียด / กติกา</Label>
-            <Textarea
-              rows={6}
-              value={draft.description ?? ""}
-              onChange={(e) => set("description", e.target.value)}
-              placeholder={"เช่น\n- แข่ง 5v5 โหมดจัดอันดับ\n- ห้ามใช้ตัวละครซ้ำในซีรีส์เดียวกัน"}
-            />
-          </div>
-
-          <div>
-            <Label hint={`ไฟล์ไม่เกิน ${MAX_COVER_KB}KB`}>รูปปก</Label>
-            <div className="flex items-center gap-3">
-              {draft.cover ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={safeImageSrc(draft.cover) ?? ""}
-                  alt="รูปปก"
-                  className="h-16 w-28 rounded-lg object-cover"
-                />
-              ) : (
-                <div className="grid h-16 w-28 place-items-center rounded-lg tile-dashed text-xs text-muted">
-                  ยังไม่มีรูป
-                </div>
-              )}
-              <div className="flex flex-col gap-2">
-                <label className="cursor-pointer rounded-lg tile px-3 py-1.5 text-xs text-ice/80 transition-colors hover-tile">
-                  เลือกรูป
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => pickCover(e.target.files?.[0])}
+              <div className="mt-6 space-y-5">
+                <div>
+                  <Label>ชื่อทัวร์นาเมนต์</Label>
+                  <Input
+                    value={draft.name}
+                    onChange={(e) => set("name", e.target.value)}
+                    placeholder="เช่น AFFA RAIN CUP #1"
+                    maxLength={80}
                   />
-                </label>
-                {draft.cover && (
-                  <button
-                    type="button"
-                    onClick={() => set("cover", undefined)}
-                    className="cursor-pointer text-xs text-muted transition-colors hover:text-[#e79a9a]"
-                  >
-                    ลบรูป
-                  </button>
-                )}
-              </div>
-            </div>
-            {coverError && (
-              <p className="mt-2 text-xs text-[#e79a9a]">{coverError}</p>
-            )}
-          </div>
-        </div>
+                </div>
 
-        <div className="space-y-5">
-          <div>
-            <Label hint="เปลี่ยนภายหลังได้ แต่ต้องรับสมัครใหม่">วิธีรับสมัคร</Label>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {(
-                [
-                  {
-                    value: "team",
-                    title: "ล็อกทีม",
-                    detail: "สมัครมาเป็นทีมพร้อมรายชื่อ ใช้ทีมนั้นแข่งเลย",
-                  },
-                  {
-                    value: "solo",
-                    title: "สมัครเดี่ยว แล้วสุ่มทีม",
-                    detail: "รับรายบุคคล แล้วผู้จัดกดสุ่มแบ่งทีมให้",
-                  },
-                ] as const
-              ).map((opt) => {
-                const active = draft.entryMode === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => set("entryMode", opt.value)}
-                    className={`cursor-pointer rounded-xl px-4 py-3 text-left transition-all ${
-                      active
-                        ? "bg-champagne/14 shadow-[inset_0_0_0_1px_rgb(207_167_101/0.45)]"
-                        : "tile hover:border-champagne/30"
-                    }`}
-                  >
-                    <p
-                      className={`font-display text-sm ${active ? "text-champagne" : "text-ice"}`}
-                    >
-                      {active && "✓ "}
-                      {opt.title}
-                    </p>
-                    <p className="mt-1 text-xs text-muted">{opt.detail}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+                <div>
+                  <Label>คำโปรยสั้นๆ</Label>
+                  <Input
+                    value={draft.tagline ?? ""}
+                    onChange={(e) => set("tagline", e.target.value)}
+                    placeholder="เช่น ศึกชิงแชมป์ประจำเดือน"
+                    maxLength={120}
+                  />
+                </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>ทีมละกี่คน</Label>
-              <NumberInput
-                min={1}
-                max={10}
-                value={draft.teamSize}
-                onChange={(teamSize) => set("teamSize", teamSize)}
-              />
-            </div>
-            <div>
-              <Label hint="0 = ไม่จำกัด">รับกี่ทีม</Label>
-              <NumberInput
-                min={0}
-                max={64}
-                value={draft.maxTeams}
-                onChange={(maxTeams) => set("maxTeams", maxTeams)}
-                placeholder="ไม่จำกัด"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>เปิดรับสมัคร</Label>
-              <Input
-                type="datetime-local"
-                value={toLocalInput(draft.registerOpenAt)}
-                onChange={(e) => set("registerOpenAt", fromLocalInput(e.target.value))}
-              />
-            </div>
-            <div>
-              <Label>ปิดรับสมัคร</Label>
-              <Input
-                type="datetime-local"
-                value={toLocalInput(draft.registerCloseAt)}
-                onChange={(e) => set("registerCloseAt", fromLocalInput(e.target.value))}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>วันแข่ง</Label>
-              <Input
-                type="datetime-local"
-                value={toLocalInput(draft.startAt)}
-                onChange={(e) => set("startAt", fromLocalInput(e.target.value))}
-              />
-            </div>
-            <div>
-              <Label>สถานที่ / ช่องทาง</Label>
-              <Input
-                value={draft.venue ?? ""}
-                onChange={(e) => set("venue", e.target.value)}
-                placeholder="เช่น ออนไลน์"
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label>สถานะ</Label>
-            <div className="flex flex-wrap gap-2">
-              {(Object.keys(STATUS_META) as TournamentStatus[]).map((status) => {
-                const meta = STATUS_META[status];
-                const active = draft.status === status;
-                return (
-                  <button
-                    key={status}
-                    type="button"
-                    onClick={() => set("status", status)}
-                    className="cursor-pointer rounded-lg px-3 py-1.5 font-display text-xs transition-all"
-                    style={{
-                      color: active ? meta.hex : "var(--color-muted)",
-                      background: active ? `rgb(${meta.rgb} / 0.14)` : "transparent",
-                      boxShadow: `inset 0 0 0 1px rgb(${meta.rgb} / ${active ? 0.4 : 0.15})`,
-                    }}
-                  >
-                    {meta.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <Label hint="ผู้ชมยังดูสายและผลได้ตามปกติ">
-              PIN โหมดผู้จัด (ไม่ใส่ก็ได้)
-            </Label>
-            <Input
-              value={draft.adminPin ?? ""}
-              onChange={(e) => set("adminPin", e.target.value.trim() || undefined)}
-              placeholder="เช่น 2468"
-              maxLength={12}
-            />
-            <p className="mt-2 text-xs text-muted">
-              กันมือลั่นเฉยๆ ไม่ใช่ระบบความปลอดภัยจริง เพราะเว็บนี้ไม่มีเซิร์ฟเวอร์
-            </p>
-          </div>
-
-          <div>
-            <Label>เงินรางวัลรวม</Label>
-            <div className="flex gap-2">
-              <NumberInput
-                value={draft.prize.total}
-                onChange={(total) => set("prize", { ...draft.prize, total })}
-                placeholder="0"
-                max={100_000_000}
-              />
-              <Input
-                value={draft.prize.currency}
-                onChange={(e) =>
-                  set("prize", { ...draft.prize, currency: e.target.value })
-                }
-                className="w-16 text-center"
-                maxLength={3}
-              />
-            </div>
-
-            <div className="mt-2.5 flex flex-wrap gap-2">
-              {PRIZE_PRESETS.map((preset) => {
-                const active =
-                  preset.slots.length === draft.prize.slots.length &&
-                  preset.slots.every(
-                    (s, i) => draft.prize.slots[i]?.percent === s.percent,
-                  );
-                return (
-                  <button
-                    key={preset.name}
-                    type="button"
-                    onClick={() =>
-                      set("prize", {
-                        ...draft.prize,
-                        slots: preset.slots.map((s) => ({ ...s })),
-                      })
+                <div>
+                  <Label>รายละเอียด / กติกา</Label>
+                  <Textarea
+                    rows={6}
+                    value={draft.description ?? ""}
+                    onChange={(e) => set("description", e.target.value)}
+                    placeholder={
+                      "เช่น\n- แข่ง 5v5 โหมดจัดอันดับ\n- ห้ามใช้ตัวละครซ้ำในซีรีส์เดียวกัน"
                     }
-                    className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-xs transition-colors ${
-                      active
-                        ? "bg-champagne/18 text-champagne shadow-[inset_0_0_0_1px_rgb(207_167_101/0.45)]"
-                        : "tile text-muted hover:text-champagne"
-                    }`}
-                  >
-                    {active && "✓ "}
-                    {preset.name}
-                  </button>
-                );
-              })}
-            </div>
+                  />
+                </div>
 
-            {/* โชว์ผลทันทีที่กด ไม่งั้นดูเหมือนปุ่มไม่ทำงาน */}
-            <ul className="mt-3 space-y-1.5 rounded-xl tile px-4 py-3">
-              {prizePreview.breakdown.map((row) => (
-                <li
-                  key={row.slot.place}
-                  className="flex items-center justify-between gap-3 text-xs"
-                >
-                  <span className="text-muted">
-                    {row.slot.label}{" "}
-                    <span className="text-muted/60">({row.slot.percent}%)</span>
-                  </span>
-                  <span className="font-display text-ice">
-                    {formatMoney(row.amount, draft.prize.currency)}
-                  </span>
-                </li>
-              ))}
-              {prizePreview.breakdown.length === 0 && (
-                <li className="text-xs text-muted">ยังไม่ได้เลือกรูปแบบการแบ่ง</li>
-              )}
-            </ul>
-          </div>
+                <div>
+                  <Label hint={`ไฟล์ไม่เกิน ${MAX_COVER_KB}KB`}>รูปปก</Label>
+                  <div className="flex items-center gap-3">
+                    {draft.cover ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={safeImageSrc(draft.cover) ?? ""}
+                        alt="รูปปก"
+                        className="h-16 w-28 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div className="tile-dashed grid h-16 w-28 place-items-center rounded-lg text-xs text-muted">
+                        ยังไม่มีรูป
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-2">
+                      <label className="hover-tile tile cursor-pointer rounded-lg px-3 py-2 text-xs text-ice/80 transition-colors">
+                        เลือกรูป
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => pickCover(e.target.files?.[0])}
+                        />
+                      </label>
+                      {draft.cover && (
+                        <button
+                          type="button"
+                          onClick={() => set("cover", undefined)}
+                          className="cursor-pointer text-xs text-muted transition-colors hover:text-[#e79a9a]"
+                        >
+                          ลบรูป
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {coverError && (
+                    <p className="mt-2 text-xs text-[#e79a9a]">{coverError}</p>
+                  )}
+                </div>
+              </div>
+            </section>
 
-          <div>
-            <Label hint="แปะลิงก์ไลฟ์ TikTok / YouTube / Facebook">ลิงก์ไลฟ์</Label>
-            <Input
-              value={draft.live.url}
-              onChange={(e) =>
-                set("live", { ...draft.live, url: e.target.value.trim() })
-              }
-              placeholder="https://www.tiktok.com/@affarain/live"
-            />
-            <label className="mt-2.5 flex cursor-pointer items-center gap-2.5 text-sm text-ice/85">
-              <input
-                type="checkbox"
-                checked={draft.live.isLive}
-                onChange={(e) =>
-                  set("live", { ...draft.live, isLive: e.target.checked })
-                }
-                className="h-4 w-4 accent-[#e0566b]"
-              />
-              ตอนนี้กำลังไลฟ์อยู่ (จะขึ้นป้าย LIVE)
-            </label>
+            {/* ---------- 02 การรับสมัคร ---------- */}
+            <section>
+              <SectionHead no="02" eyebrow="Registration" title="การรับสมัคร" />
+
+              <div className="mt-6 space-y-5">
+                <div>
+                  <Label hint="เปลี่ยนภายหลังได้ แต่ต้องรับสมัครใหม่">วิธีรับสมัคร</Label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {(
+                      [
+                        {
+                          value: "team",
+                          title: "ล็อกทีม",
+                          detail: "สมัครมาเป็นทีมพร้อมรายชื่อ ใช้ทีมนั้นแข่งเลย",
+                        },
+                        {
+                          value: "solo",
+                          title: "สมัครเดี่ยว แล้วสุ่มทีม",
+                          detail: "รับรายบุคคล แล้วผู้จัดกดสุ่มแบ่งทีมให้",
+                        },
+                      ] as const
+                    ).map((opt) => {
+                      const active = draft.entryMode === opt.value;
+                      return (
+                        <Choice
+                          key={opt.value}
+                          active={active}
+                          reduced={!!reduced}
+                          layoutId="form-entry"
+                          onClick={() => set("entryMode", opt.value)}
+                          className="px-4 py-3 text-left"
+                        >
+                          <p
+                            className={`flex items-center gap-1.5 font-display text-sm ${
+                              active ? "text-champagne" : "text-ice"
+                            }`}
+                          >
+                            {active && <IconCheck className="h-3.5 w-3.5" strokeWidth={2} />}
+                            {opt.title}
+                          </p>
+                          <p className="mt-1 text-xs text-muted">{opt.detail}</p>
+                        </Choice>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>ทีมละกี่คน</Label>
+                    <NumberInput
+                      min={1}
+                      max={10}
+                      value={draft.teamSize}
+                      onChange={(teamSize) => set("teamSize", teamSize)}
+                    />
+                  </div>
+                  <div>
+                    <Label hint="0 = ไม่จำกัด">รับกี่ทีม</Label>
+                    <NumberInput
+                      min={0}
+                      max={64}
+                      value={draft.maxTeams}
+                      onChange={(maxTeams) => set("maxTeams", maxTeams)}
+                      placeholder="ไม่จำกัด"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label>เปิดรับสมัคร</Label>
+                    <Input
+                      type="datetime-local"
+                      value={toLocalInput(draft.registerOpenAt)}
+                      onChange={(e) =>
+                        set("registerOpenAt", fromLocalInput(e.target.value))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>ปิดรับสมัคร</Label>
+                    <Input
+                      type="datetime-local"
+                      value={toLocalInput(draft.registerCloseAt)}
+                      onChange={(e) =>
+                        set("registerCloseAt", fromLocalInput(e.target.value))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>วันแข่ง</Label>
+                    <Input
+                      type="datetime-local"
+                      value={toLocalInput(draft.startAt)}
+                      onChange={(e) => set("startAt", fromLocalInput(e.target.value))}
+                    />
+                  </div>
+                  <div>
+                    <Label>สถานที่ / ช่องทาง</Label>
+                    <Input
+                      value={draft.venue ?? ""}
+                      onChange={(e) => set("venue", e.target.value)}
+                      placeholder="เช่น ออนไลน์"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>สถานะ</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {(Object.keys(STATUS_META) as TournamentStatus[]).map((status) => {
+                      const meta = STATUS_META[status];
+                      const active = draft.status === status;
+                      return (
+                        <Choice
+                          key={status}
+                          active={active}
+                          reduced={!!reduced}
+                          layoutId="form-status"
+                          indicatorStyle={{
+                            background: `rgb(${meta.rgb} / 0.16)`,
+                            boxShadow: `inset 0 0 0 1px rgb(${meta.rgb} / 0.45)`,
+                          }}
+                          onClick={() => set("status", status)}
+                          className="px-3 py-1.5"
+                        >
+                          <span
+                            className="font-display text-xs"
+                            style={{ color: active ? meta.hex : "var(--color-muted)" }}
+                          >
+                            {meta.label}
+                          </span>
+                        </Choice>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <Label hint="ผู้ชมยังดูสายและผลได้ตามปกติ">
+                    PIN โหมดผู้จัด (ไม่ใส่ก็ได้)
+                  </Label>
+                  <Input
+                    value={draft.adminPin ?? ""}
+                    onChange={(e) => set("adminPin", e.target.value.trim() || undefined)}
+                    placeholder="เช่น 2468"
+                    maxLength={12}
+                  />
+                  <p className="mt-2 text-xs text-muted">
+                    กันมือลั่นเฉยๆ ไม่ใช่ระบบความปลอดภัยจริง เพราะเว็บนี้ไม่มีเซิร์ฟเวอร์
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            {/* ---------- 03 รางวัลกับไลฟ์ ---------- */}
+            <section>
+              <SectionHead no="03" eyebrow="Prize & Live" title="รางวัลกับไลฟ์" />
+
+              <div className="mt-6 space-y-5">
+                <div>
+                  <Label>เงินรางวัลรวม</Label>
+                  <div className="flex gap-2">
+                    <NumberInput
+                      value={draft.prize.total}
+                      onChange={(total) => set("prize", { ...draft.prize, total })}
+                      placeholder="0"
+                      max={100_000_000}
+                    />
+                    <Input
+                      value={draft.prize.currency}
+                      onChange={(e) =>
+                        set("prize", { ...draft.prize, currency: e.target.value })
+                      }
+                      className="w-16 text-center"
+                      maxLength={3}
+                    />
+                  </div>
+
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    {PRIZE_PRESETS.map((preset) => {
+                      const active =
+                        preset.slots.length === draft.prize.slots.length &&
+                        preset.slots.every(
+                          (s, i) => draft.prize.slots[i]?.percent === s.percent,
+                        );
+                      return (
+                        <Choice
+                          key={preset.name}
+                          active={active}
+                          reduced={!!reduced}
+                          layoutId="form-preset"
+                          onClick={() =>
+                            set("prize", {
+                              ...draft.prize,
+                              slots: preset.slots.map((s) => ({ ...s })),
+                            })
+                          }
+                          className="px-2.5 py-1.5"
+                        >
+                          <span
+                            className={`text-xs ${active ? "text-champagne" : "text-muted"}`}
+                          >
+                            {preset.name}
+                          </span>
+                        </Choice>
+                      );
+                    })}
+                  </div>
+
+                  {/* โชว์ผลทันทีที่กด ไม่งั้นดูเหมือนปุ่มไม่ทำงาน */}
+                  <ul className="tile mt-3 space-y-1.5 rounded-xl px-4 py-3">
+                    {prizePreview.breakdown.map((row) => (
+                      <li
+                        key={row.slot.place}
+                        className="flex items-center justify-between gap-3 text-xs"
+                      >
+                        <span className="text-muted">
+                          {row.slot.label}{" "}
+                          <span className="num text-muted/60">({row.slot.percent}%)</span>
+                        </span>
+                        <span className="num font-display text-ice">
+                          {formatMoney(row.amount, draft.prize.currency)}
+                        </span>
+                      </li>
+                    ))}
+                    {prizePreview.breakdown.length === 0 && (
+                      <li className="text-xs text-muted">ยังไม่ได้เลือกรูปแบบการแบ่ง</li>
+                    )}
+                  </ul>
+                </div>
+
+                <div>
+                  <Label hint="แปะลิงก์ไลฟ์ TikTok / YouTube / Facebook">ลิงก์ไลฟ์</Label>
+                  <Input
+                    value={draft.live.url}
+                    onChange={(e) =>
+                      set("live", { ...draft.live, url: e.target.value.trim() })
+                    }
+                    placeholder="https://www.tiktok.com/@affarain/live"
+                  />
+                  <label className="mt-2.5 flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-ice/85">
+                    <input
+                      type="checkbox"
+                      checked={draft.live.isLive}
+                      onChange={(e) =>
+                        set("live", { ...draft.live, isLive: e.target.checked })
+                      }
+                      className="h-4 w-4 accent-[#e0566b]"
+                    />
+                    ตอนนี้กำลังไลฟ์อยู่ (จะขึ้นป้าย LIVE)
+                  </label>
+                </div>
+              </div>
+            </section>
           </div>
+        </Panel>
+
+        {/* ---------- พรีวิวการ์ดจริง อัปเดตสดตามที่พิมพ์ ---------- */}
+        <aside className="lg:sticky lg:top-24">
+          <p className="slug mb-3">พรีวิว</p>
+          <TournamentCard tournament={draft} preview />
+          <p className="mt-3 text-xs leading-relaxed text-muted">
+            นี่คือหน้าตาการ์ดที่คนอื่นจะเห็นในหน้ารายการทัวร์และในลิงก์ที่แชร์ออกไป
+          </p>
+        </aside>
+      </div>
+
+      {/* ---------- แถบบันทึกที่ติดขอบล่างจอ ---------- */}
+      <div
+        className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-hair px-1 py-3 pb-[calc(0.75rem+var(--sab))] backdrop-blur-md"
+        style={{
+          background: "color-mix(in srgb, var(--color-ink) 84%, transparent)",
+        }}
+      >
+        <p className="num min-w-0 flex-1 truncate text-xs text-muted">
+          <span className="text-ice">{draft.name.trim() || "ยังไม่ได้ตั้งชื่อ"}</span>
+          {" · "}
+          {draft.startAt ? formatThaiDay(draft.startAt) : "ยังไม่ระบุวันแข่ง"}
+          {" · "}
+          {draft.prize.total > 0
+            ? formatMoney(draft.prize.total, draft.prize.currency)
+            : "ไม่มีเงินรางวัล"}
+        </p>
+        <div className="flex shrink-0 gap-2">
+          <Button size="sm" variant="ghost" onClick={onClose} className="min-h-11">
+            ยกเลิก
+          </Button>
+          <Button size="sm" onClick={save} className="min-h-11">
+            บันทึก
+          </Button>
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="mt-7 flex flex-wrap justify-end gap-2.5">
-        <Button variant="ghost" onClick={onClose}>
-          ยกเลิก
-        </Button>
-        <Button onClick={save}>บันทึก</Button>
-      </div>
-    </Panel>
+/**
+ * ปุ่มตัวเลือกที่ตัวชี้ตำแหน่ง "เลื่อน" ไปหาตัวที่เลือก แทนการสลับสีเฉยๆ
+ * ปิด layout animation เมื่อผู้ใช้ขอลดการเคลื่อนไหว
+ */
+function Choice({
+  active,
+  onClick,
+  children,
+  layoutId,
+  indicatorStyle,
+  reduced,
+  className = "",
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+  layoutId: string;
+  indicatorStyle?: React.CSSProperties;
+  reduced: boolean;
+  className?: string;
+}) {
+  const fallback: React.CSSProperties = {
+    background: "rgb(var(--accent) / 0.14)",
+    boxShadow: "inset 0 0 0 1px rgb(var(--accent) / 0.45)",
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`hover-tile relative cursor-pointer rounded-xl transition-colors ${
+        active ? "" : "tile"
+      } ${className}`}
+    >
+      {active &&
+        (reduced ? (
+          <span
+            className="pointer-events-none absolute inset-0 rounded-xl"
+            style={indicatorStyle ?? fallback}
+          />
+        ) : (
+          <motion.span
+            layoutId={layoutId}
+            className="pointer-events-none absolute inset-0 rounded-xl"
+            style={indicatorStyle ?? fallback}
+            transition={{ type: "spring", stiffness: 420, damping: 34 }}
+          />
+        ))}
+      <span className="relative block">{children}</span>
+    </button>
   );
 }

@@ -25,7 +25,7 @@ export type WheelState = {
   useWeights: boolean;
 };
 
-const KEY = "rov-randomizer/wheel/v1";
+const KEY = "tourney-hub/wheel/v1";
 
 export const DEFAULT_WHEEL: WheelState = {
   entries: [],

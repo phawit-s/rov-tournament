@@ -1,36 +1,74 @@
 "use client";
 
-import { motion } from "motion/react";
+import { useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   BEST_OF_OPTIONS,
+  championId,
   matchesByRound,
   roundLabel,
   setMatchScore,
   setRoundBestOf,
-  winsNeeded,
 } from "@/lib/tournament/bracket";
 import { tournamentStore } from "@/lib/tournament/store";
-import { identityFor } from "@/lib/rov";
-import type { BestOf, Match, Tournament } from "@/lib/tournament/types";
-import Panel from "../ui/Panel";
-import { EmptyNote } from "./ui";
+import { useMediaQuery } from "@/hooks/useClient";
+import type { BestOf, Tournament } from "@/lib/tournament/types";
+import Button from "../ui/Button";
+import BracketCanvas from "./BracketCanvas";
+import MatchPlate from "./MatchPlate";
+import RoundRail from "./RoundRail";
+import { ArtBracket, EmptyState } from "./ui";
 
-type Props = { tournament: Tournament; isAdmin: boolean };
+type Props = {
+  tournament: Tournament;
+  isAdmin: boolean;
+  /** ให้ปุ่มในสถานะว่างพาไปแท็บทีมได้ */
+  onGoTeams?: () => void;
+};
 
-export default function BracketPanel({ tournament, isAdmin }: Props) {
+export default function BracketPanel({ tournament, isAdmin, onGoTeams }: Props) {
   const bracket = tournament.bracket;
+  const reduced = useReducedMotion();
+  // ผังแนวนอนอ่านออกจริงตั้งแต่ lg ขึ้นไป ต่ำกว่านั้นเปลี่ยนเป็นดูทีละรอบ
+  const wide = useMediaQuery("(min-width: 1024px)");
+
+  const [hoverTeamId, setHoverTeamId] = useState<string | null>(null);
+  // เปิดมาที่รอบที่กำลังแข่งอยู่ ไม่ใช่รอบแรกที่จบไปแล้ว
+  const [activeRound, setActiveRound] = useState(() => {
+    if (!bracket) return 1;
+    const pending = bracket.matches
+      .filter((m) => !m.bye && !m.winnerId)
+      .sort((a, b) => a.round - b.round || a.order - b.order)[0];
+    return pending?.round ?? bracket.rounds;
+  });
+
   if (!bracket) {
     return (
-      <EmptyNote>
-        ยังไม่ได้จัดสาย — ไปที่แท็บ &ldquo;ทีม&rdquo; แล้วกด &ldquo;สุ่มสายแข่ง&rdquo;
-      </EmptyNote>
+      <EmptyState
+        no="03"
+        art={<ArtBracket />}
+        title="ยังไม่ได้จัดสาย"
+        description="สายแข่งสุ่มจาก seed — ใส่ seed เดิมกับทีมชุดเดิมจะได้คู่เดิมเสมอ ตรวจย้อนหลังได้ทุกเมื่อ"
+        action={
+          onGoTeams ? (
+            <Button size="sm" onClick={onGoTeams}>
+              ไปสุ่มสายแข่ง
+            </Button>
+          ) : undefined
+        }
+      />
     );
   }
 
   const rounds = matchesByRound(bracket);
-  const teamName = (id: string | null) =>
+  const champ = championId(bracket);
+  const championName = champ
+    ? (tournament.teams.find((t) => t.id === champ)?.name ?? null)
+    : null;
+
+  const nameOf = (id: string | null) =>
     id ? (tournament.teams.find((t) => t.id === id)?.name ?? "—") : null;
-  const teamIndex = (id: string | null) =>
+  const indexOf = (id: string | null) =>
     id ? tournament.teams.findIndex((t) => t.id === id) : -1;
 
   const changeScore = (matchId: string, a: number, b: number) =>
@@ -46,211 +84,103 @@ export default function BracketPanel({ tournament, isAdmin }: Props) {
       bracket: t.bracket ? setRoundBestOf(t.bracket, round, bo) : null,
     }));
 
-  return (
-    <div className="space-y-4">
-      <p className="text-xs text-muted">
-        สายนี้สุ่มด้วย seed{" "}
-        <span className="font-display tracking-[0.16em] text-champagne">
-          {bracket.seed}
-        </span>{" "}
-        — ใส่ seed เดิมกับทีมชุดเดิมจะได้สายเดิมเสมอ
-      </p>
-
-      <div className="overflow-x-auto pb-4">
-        <div className="flex min-w-max gap-5">
-          {rounds.map((matches, i) => {
-            const round = i + 1;
-            return (
-              <div key={round} className="w-72 shrink-0">
-                <div className="mb-3.5 flex items-center justify-between gap-2">
-                  <h3 className="font-display text-sm text-ice">
-                    {roundLabel(round, bracket.rounds)}
-                  </h3>
-                  {isAdmin ? (
-                    <select
-                      value={matches[0]?.bestOf ?? 3}
-                      onChange={(e) =>
-                        changeRoundBo(round, Number(e.target.value) as BestOf)
-                      }
-                      className="field cursor-pointer rounded-lg px-2 py-1 font-display text-xs text-champagne outline-none"
-                    >
-                      {BEST_OF_OPTIONS.map((bo) => (
-                        <option key={bo} value={bo}>
-                          BO{bo}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="font-display text-xs text-champagne">
-                      BO{matches[0]?.bestOf ?? 3}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex flex-col justify-around gap-3">
-                  {matches.map((match) => (
-                    <MatchCard
-                      key={match.id}
-                      match={match}
-                      nameOf={teamName}
-                      indexOf={teamIndex}
-                      isAdmin={isAdmin}
-                      onScore={changeScore}
-                    />
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MatchCard({
-  match,
-  nameOf,
-  indexOf,
-  isAdmin,
-  onScore,
-}: {
-  match: Match;
-  nameOf: (id: string | null) => string | null;
-  indexOf: (id: string | null) => number;
-  isAdmin: boolean;
-  onScore: (matchId: string, a: number, b: number) => void;
-}) {
-  const need = winsNeeded(match.bestOf);
-  const done = !!match.winnerId;
-
-  return (
-    <Panel
-      accent={done ? "207 167 101" : "155 160 179"}
-      interactive={false}
-      className={`p-3.5 ${match.bye ? "opacity-60" : ""}`}
-    >
-      <Side
-        side="a"
-        match={match}
-        nameOf={nameOf}
-        indexOf={indexOf}
-        need={need}
-        isAdmin={isAdmin}
-        onScore={onScore}
-      />
-      <div className="my-2 flex items-center gap-2">
-        <span className="h-px flex-1 rule" />
-        <span className="font-display text-[10px] text-muted">
-          {match.bye ? "BYE" : `BO${match.bestOf}`}
-        </span>
-        <span className="h-px flex-1 rule" />
-      </div>
-      <Side
-        side="b"
-        match={match}
-        nameOf={nameOf}
-        indexOf={indexOf}
-        need={need}
-        isAdmin={isAdmin}
-        onScore={onScore}
-      />
-    </Panel>
-  );
-}
-
-function Side({
-  side,
-  match,
-  nameOf,
-  indexOf,
-  need,
-  isAdmin,
-  onScore,
-}: {
-  side: "a" | "b";
-  match: Match;
-  nameOf: (id: string | null) => string | null;
-  indexOf: (id: string | null) => number;
-  need: number;
-  isAdmin: boolean;
-  onScore: (matchId: string, a: number, b: number) => void;
-}) {
-  const self = match[side];
-  const name = nameOf(self.teamId);
-  const isWinner = !!match.winnerId && match.winnerId === self.teamId;
-  const isLoser = !!match.winnerId && !isWinner && !!self.teamId;
-  const idx = indexOf(self.teamId);
-  const identity = idx >= 0 ? identityFor(idx) : null;
-
-  const bump = (delta: number) => {
-    const next = Math.max(0, Math.min(need, self.score + delta));
-    const a = side === "a" ? next : match.a.score;
-    const b = side === "b" ? next : match.b.score;
-    onScore(match.id, a, b);
+  const hooks = {
+    nameOf,
+    indexOf,
+    isAdmin,
+    onScore: changeScore,
+    hoverTeamId,
+    onHoverTeam: setHoverTeamId,
   };
 
-  const canEdit = isAdmin && !!match.a.teamId && !!match.b.teamId && !match.bye;
+  // สายอาจถูกสุ่มใหม่ให้เล็กลงระหว่างที่หน้านี้ยังเปิดอยู่ ต้องหนีบไม่ให้ชี้เกินรอบสุดท้าย
+  const round = Math.min(Math.max(1, activeRound), bracket.rounds);
+  const current = rounds[round - 1] ?? [];
+  const lastRound = round === bracket.rounds;
 
   return (
-    <div
-      className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors ${
-        isLoser ? "opacity-45" : ""
-      }`}
-      style={
-        isWinner && identity
-          ? {
-              background: `rgb(${identity.rgb} / 0.10)`,
-              boxShadow: `inset 0 0 0 1px rgb(${identity.rgb} / 0.3)`,
-            }
-          : undefined
-      }
-    >
-      {identity ? (
-        <span className="text-[11px]" style={{ color: identity.hex }}>
-          {identity.glyph}
-        </span>
+    <div className="space-y-4">
+      <motion.div
+        initial={reduced ? false : { opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <RoundRail
+          bracket={bracket}
+          mode={wide ? "dots" : "chips"}
+          active={round}
+          onSelect={setActiveRound}
+        />
+      </motion.div>
+
+      {wide ? (
+        <BracketCanvas
+          bracket={bracket}
+          rounds={rounds}
+          championName={championName}
+          onChangeBo={changeRoundBo}
+          {...hooks}
+        />
       ) : (
-        <span className="text-[11px] text-muted/50">·</span>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2 border-t border-hair pt-3">
+            <h3 className="font-display text-sm text-ice">
+              {roundLabel(round, bracket.rounds)}
+              <span className="num ml-2 text-xs text-muted">
+                {current.filter((m) => !m.bye).length} แมตช์
+              </span>
+            </h3>
+            {isAdmin ? (
+              <select
+                value={current[0]?.bestOf ?? 3}
+                aria-label="จำนวนเกมของรอบนี้"
+                onChange={(e) =>
+                  changeRoundBo(round, Number(e.target.value) as BestOf)
+                }
+                className="field num cursor-pointer rounded-lg px-2 py-1 font-display text-xs text-champagne outline-none"
+              >
+                {BEST_OF_OPTIONS.map((bo) => (
+                  <option key={bo} value={bo}>
+                    BO{bo}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="num font-display text-xs text-champagne">
+                BO{current[0]?.bestOf ?? 3}
+              </span>
+            )}
+          </div>
+
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={round}
+              initial={reduced ? false : { opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduced ? undefined : { opacity: 0, y: -8 }}
+              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              className={lastRound && championName ? "space-y-3 pb-20" : "space-y-3"}
+            >
+              {current.map((match, i) => (
+                <motion.div
+                  key={match.id}
+                  initial={reduced ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.35, delay: i * 0.05 }}
+                  className={lastRound ? "pt-10" : ""}
+                >
+                  <MatchPlate
+                    match={match}
+                    variant={lastRound ? "final" : "default"}
+                    championName={lastRound ? championName : null}
+                    {...hooks}
+                  />
+                </motion.div>
+              ))}
+            </motion.div>
+          </AnimatePresence>
+        </div>
       )}
-
-      <span
-        className={`min-w-0 flex-1 truncate text-sm ${
-          name ? "text-ice" : "text-muted/60 italic"
-        }`}
-      >
-        {name ?? "รอผู้ชนะ"}
-      </span>
-
-      {canEdit && (
-        <span className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => bump(-1)}
-            className="grid h-5 w-5 cursor-pointer place-items-center rounded text-xs text-muted transition-colors hover:text-ice"
-          >
-            −
-          </button>
-          <button
-            type="button"
-            onClick={() => bump(1)}
-            className="grid h-5 w-5 cursor-pointer place-items-center rounded text-xs text-muted transition-colors hover:text-champagne"
-          >
-            +
-          </button>
-        </span>
-      )}
-
-      <motion.span
-        key={self.score}
-        initial={{ scale: 1.3, opacity: 0.5 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className={`w-5 text-right font-display text-sm tabular-nums ${
-          isWinner ? "text-champagne" : "text-muted"
-        }`}
-      >
-        {match.bye && !self.teamId ? "" : self.score}
-      </motion.span>
     </div>
   );
 }

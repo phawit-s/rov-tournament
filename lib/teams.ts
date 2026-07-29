@@ -1,6 +1,6 @@
-import { identityFor } from "./rov";
+import { identityFor } from "./game";
 import { rngFromSeed, shuffle } from "./random";
-import { LANES } from "./rov";
+import { LANES } from "./game";
 import type {
   BuiltTeam,
   Config,
@@ -156,7 +156,7 @@ export function teamsToText(
   bench: Member[],
   seed: string,
 ): string {
-  const lines: string[] = ["🏆 ผลการแบ่งทีม ROV TOURNAMENT", ""];
+  const lines: string[] = ["🏆 ผลการแบ่งทีม", ""];
   for (const team of teams) {
     lines.push(`${team.identity.glyph} TEAM ${team.identity.name} (${team.members.length} คน)`);
     team.members.forEach((m, i) => {

@@ -6,7 +6,7 @@ import { DEFAULT_PRIZE } from "./prize";
 import { defaultRoundBestOf } from "./bracket";
 import type { Tournament } from "./types";
 
-const KEY = "rov-randomizer/tournaments/v1";
+const KEY = "tourney-hub/tournaments/v1";
 
 /** ต้องเป็นตัวเดิมทุกครั้ง ไม่งั้น useSyncExternalStore จะวนไม่จบ */
 const EMPTY: Tournament[] = [];

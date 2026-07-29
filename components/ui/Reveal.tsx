@@ -1,8 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
 import RingCluster from "../fx/RingCluster";
+import SectionHead from "./SectionHead";
 
 type Props = {
   children: ReactNode;
@@ -55,72 +57,66 @@ export default function Reveal({
   );
 }
 
+/** เลขบทประจำหน้า ให้ทั้งเว็บอ่านเหมือนสูจิบัตรเล่มเดียวกัน */
+export const PAGE_NO: Record<string, string> = {
+  "/draw": "01",
+  "/wheel": "02",
+  "/tournaments": "03",
+  "/tournament": "03",
+  "/players": "04",
+  "/channel": "05",
+  "/c": "05",
+  "/widgets": "06",
+  "/activity": "07",
+};
+
 /** หัวข้อใหญ่ประจำหน้า พร้อมเส้นทองที่ค่อยๆ ลากออก */
 export function PageHeading({
+  no,
   eyebrow,
   title,
   description,
   action,
+  meta,
+  ornament = false,
 }: {
+  no?: string;
   eyebrow: string;
   title: string;
   description?: string;
   action?: ReactNode;
+  meta?: ReactNode;
+  ornament?: boolean;
 }) {
+  const pathname = usePathname();
+  const chapter = no ?? PAGE_NO[pathname?.replace(/\/$/, "") || "/"] ?? "00";
+
   return (
-    <div className="relative flex flex-wrap items-end justify-between gap-6 pb-2">
-      {/* วงแหวนตกแต่ง — ขยับตามเมาส์ */}
-      <div className="pointer-events-none absolute -top-6 right-0 hidden translate-x-1/3 opacity-40 lg:block">
-        <RingCluster size={240} />
-      </div>
+    <div className="relative pb-2">
+      {ornament && (
+        <div className="pointer-events-none absolute -top-6 right-0 hidden translate-x-1/3 opacity-40 lg:block">
+          <RingCluster size={240} />
+        </div>
+      )}
 
-      <div className="relative min-w-0">
+      <SectionHead
+        no={chapter}
+        eyebrow={eyebrow}
+        title={title}
+        meta={meta}
+        action={action}
+        className="relative border-t-0 pt-0"
+      />
+
+      {description && (
         <motion.p
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.7, delay: 0.24 }}
+          className="mt-4 max-w-xl text-sm text-muted"
         >
-          {eyebrow}
+          {description}
         </motion.p>
-
-        <motion.h2
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.75, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-2 font-display text-3xl leading-tight font-light text-ice sm:text-4xl"
-        >
-          {title}
-        </motion.h2>
-
-        <motion.span
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ duration: 0.9, delay: 0.18, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-4 block h-px w-28 origin-left bg-[linear-gradient(90deg,rgba(230,200,148,0.8),transparent)]"
-        />
-
-        {description && (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.7, delay: 0.24 }}
-            className="mt-4 max-w-xl text-sm text-muted"
-          >
-            {description}
-          </motion.p>
-        )}
-      </div>
-
-      {action && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="relative shrink-0"
-        >
-          {action}
-        </motion.div>
       )}
     </div>
   );

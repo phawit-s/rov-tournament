@@ -3,7 +3,7 @@ import AppShell from "@/components/AppShell";
 import ActivityView from "@/components/ActivityView";
 
 export const metadata: Metadata = {
-  title: "ประวัติการทำงาน — ROV Tournament Hub",
+  title: "ประวัติการทำงาน — Tourney Hub",
   description: "บันทึกกิจกรรมทั้งหมดที่เกิดขึ้นในเครื่องนี้",
 };
 

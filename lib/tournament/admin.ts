@@ -6,7 +6,7 @@
  * ถ้าต้องการแยกสิทธิ์จริงต้องมี backend
  */
 
-const KEY = "rov-randomizer/admin-unlocked";
+const KEY = "tourney-hub/admin-unlocked";
 
 let cache: Set<string> | null = null;
 const listeners = new Set<() => void>();

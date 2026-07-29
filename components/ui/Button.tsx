@@ -1,46 +1,100 @@
-﻿"use client";
+"use client";
 
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { motion } from "motion/react";
 import { sfx } from "@/lib/sound";
+import { IconCheck } from "./icons";
 
 type Variant = "primary" | "outline" | "ghost" | "danger";
+type Size = "sm" | "md" | "lg";
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: Variant;
+  size?: Size;
+  /** สปินเนอร์ทับตัวหนังสือ ความกว้างปุ่มไม่ขยับ */
+  loading?: boolean;
+  /** เปลี่ยนไส้ในเป็นเครื่องหมายถูกหนึ่งจังหวะ */
+  success?: boolean;
+  icon?: ReactNode;
   children: ReactNode;
 };
 
 const VARIANTS: Record<Variant, string> = {
   primary:
-    "text-[#1b1509] bg-[linear-gradient(180deg,#f2dcb0_0%,#d9b273_52%,#bd9350_100%)] shadow-[0_12px_34px_-18px_rgba(207,167,101,0.9)] hover:brightness-105",
+    "text-[#1b1509] bg-[linear-gradient(180deg,#f2dcb0_0%,#d9b273_52%,#bd9350_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_12px_34px_-18px_rgba(207,167,101,0.9)] hover:-translate-y-px hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_18px_44px_-18px_rgba(207,167,101,0.95)] hover:brightness-105",
   outline:
     "text-champagne border border-champagne/30 bg-champagne/5 hover:bg-champagne/15 hover:border-champagne/50",
-  ghost:
-    "text-ice/85 border border-hair tile hover-tile hover:text-ice",
+  ghost: "text-ice/85 border border-hair tile hover-tile hover:text-ice",
   danger:
     "text-[#e79a9a] border border-[#e79a9a]/25 bg-[#e79a9a]/8 hover:bg-[#e79a9a]/14",
 };
 
+const SIZES: Record<Size, string> = {
+  sm: "px-4 py-2 text-xs",
+  md: "px-6 py-3 text-sm",
+  lg: "px-7 py-3.5 text-base",
+};
+
 /** ปุ่มนิ่งๆ มีแค่แสงกวาดเบาๆ ตอน hover ไม่วิ่งตามเมาส์ */
 const Button = forwardRef<HTMLButtonElement, Props>(function Button(
-  { variant = "primary", className = "", children, onClick, ...rest },
+  {
+    variant = "primary",
+    size = "md",
+    loading = false,
+    success = false,
+    icon,
+    className = "",
+    children,
+    onClick,
+    disabled,
+    ...rest
+  },
   ref,
 ) {
   return (
     <button
       ref={ref}
+      disabled={disabled || loading}
       onClick={(e) => {
         sfx.unlock();
         sfx.play("click");
         onClick?.(e);
       }}
-      className={`group relative isolate inline-flex cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl px-6 py-3 font-display text-sm font-medium tracking-wide transition-all duration-300 outline-none select-none focus-visible:ring-2 focus-visible:ring-champagne/50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 disabled:saturate-0 ${VARIANTS[variant]} ${className}`}
+      className={`group relative isolate inline-flex cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl font-display font-medium tracking-wide transition-all duration-300 outline-none select-none focus-visible:ring-2 focus-visible:ring-champagne/50 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-none disabled:text-muted disabled:shadow-none disabled:ring-1 disabled:ring-[rgb(var(--hair)/var(--hair-a))] disabled:hover:translate-y-0 ${SIZES[size]} ${VARIANTS[variant]} ${className}`}
       {...rest}
     >
       <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
         <span className="absolute inset-y-0 left-0 w-1/4 bg-white/20 opacity-0 blur-md group-hover:animate-sheen group-hover:opacity-100" />
       </span>
-      <span className="relative z-10 inline-flex items-center gap-2">{children}</span>
+
+      <span
+        className={`relative z-10 inline-flex items-center gap-2 transition-opacity duration-200 ${
+          loading ? "opacity-0" : ""
+        }`}
+      >
+        {success ? (
+          <motion.span
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 480, damping: 18 }}
+            className="inline-flex items-center gap-2"
+          >
+            <IconCheck className="h-3.5 w-3.5" strokeWidth={2} />
+            {children}
+          </motion.span>
+        ) : (
+          <>
+            {icon}
+            {children}
+          </>
+        )}
+      </span>
+
+      {loading && (
+        <span className="absolute inset-0 z-10 grid place-items-center">
+          <span className="h-4 w-4 animate-spin rounded-full border border-current/30 border-t-current" />
+        </span>
+      )}
     </button>
   );
 });

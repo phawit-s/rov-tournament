@@ -1,14 +1,15 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { SAMPLE_NAMES, identityFor } from "@/lib/rov";
+import { SAMPLE_NAMES, identityFor } from "@/lib/game";
 import { MAX_PER_TEAM, MAX_TEAMS, MIN_PER_TEAM } from "@/lib/teams";
 import { sfx } from "@/lib/sound";
 import type { Tournament } from "@/hooks/useTournament";
 import { configSummary } from "@/hooks/useTournament";
 import Button from "./ui/Button";
 import Panel from "./ui/Panel";
+import Crest from "./team/Crest";
 
 type Props = { t: Tournament };
 
@@ -46,7 +47,7 @@ export default function SetupScreen({ t }: Props) {
     >
       {/* ---------------- รายชื่อผู้เล่น ---------------- */}
       <Panel className="p-6 sm:p-7">
-        <SectionHead step="01" title="ใส่รายชื่อผู้เล่น" count={derived.total} />
+        <StepHead step="01" title="ใส่รายชื่อผู้เล่น" count={derived.total} />
 
         {!bulk ? (
           <div className="flex gap-2.5">
@@ -193,7 +194,7 @@ export default function SetupScreen({ t }: Props) {
 
       {/* ---------------- ตั้งค่าการแบ่งทีม ---------------- */}
       <Panel className="flex flex-col p-6 sm:p-7">
-        <SectionHead step="02" title="ตั้งค่าทีม" />
+        <StepHead step="02" title="ตั้งค่าทีม" />
 
         <Segmented
           value={state.config.sizeMode}
@@ -235,52 +236,60 @@ export default function SetupScreen({ t }: Props) {
 
         <div className="my-6 h-px rule" />
 
-        {/* พรีวิว */}
+        {/* พรีวิว: บันไดที่นั่ง เห็นทั้งจำนวนทีมและความไม่เท่ากันในภาพเดียว */}
         <div>
-          <div className="mb-3 flex items-baseline justify-between">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
             <p className="text-sm font-medium text-ice/85">พรีวิวผลลัพธ์</p>
-            <p className="font-display text-sm text-champagne">
+            <p className="num font-display text-sm text-champagne">
               {summary.teams} ทีม
               {summary.bench > 0 && (
                 <span className="ml-1.5 text-muted">+ สำรอง {summary.bench}</span>
               )}
             </p>
           </div>
+
           {derived.total === 0 ? (
-            <p className="text-sm text-muted">ใส่รายชื่อก่อนถึงจะเห็นพรีวิว</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {summary.sizes.map((size, i) => {
-                const id = identityFor(i);
-                return (
-                  <motion.div
-                    key={i}
-                    layout
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5"
-                    style={{
-                      borderColor: `rgb(${id.rgb} / 0.35)`,
-                      background: `rgb(${id.rgb} / 0.08)`,
-                    }}
-                  >
-                    <span className="text-[10px]" style={{ color: id.hex }}>
-                      {id.glyph}
-                    </span>
-                    <span className="font-display text-xs" style={{ color: id.hex }}>
-                      {size}
-                    </span>
-                  </motion.div>
-                );
-              })}
-              {summary.bench > 0 && (
-                <div className="flex items-center gap-2 rounded-lg border tile-dashed px-2.5 py-1.5">
-                  <span className="font-display text-xs text-muted">
-                    ○ {summary.bench}
-                  </span>
-                </div>
-              )}
+            <div className="relative">
+              {/* บันไดตัวอย่างจางๆ ดีกว่ากล่องประว่างเปล่า — เห็นหน้าตาปลายทางก่อนพิมพ์ */}
+              <div className="pointer-events-none opacity-25" aria-hidden>
+                <SeatLadder sizes={[5, 5, 5, 5]} bench={0} />
+              </div>
+              <p className="mt-3 text-sm text-muted">
+                ใส่รายชื่อก่อนถึงจะเห็นพรีวิวจริง
+              </p>
             </div>
+          ) : (
+            <SeatLadder sizes={summary.sizes} bench={summary.bench} />
+          )}
+
+          {derived.total > 0 && !summary.even && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="tally mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl tile py-2.5 pr-3 pl-3.5"
+              style={{ ["--st" as string]: "var(--st-next)" }}
+            >
+              <span className="num text-xs text-ice/85">
+                ทีมไม่เท่ากัน · {summary.sizes.join(" / ")} คน
+              </span>
+              {state.config.sizeMode === "perTeam" && (
+                <Chip
+                  onClick={() =>
+                    dispatch({
+                      type: "setConfig",
+                      patch: {
+                        remainderMode:
+                          state.config.remainderMode === "bench" ? "balance" : "bench",
+                      },
+                    })
+                  }
+                >
+                  {state.config.remainderMode === "bench"
+                    ? "เกลี่ยลงทีมแทน"
+                    : "ดันเศษไปเป็นตัวสำรอง"}
+                </Chip>
+              )}
+            </motion.div>
           )}
         </div>
 
@@ -363,7 +372,8 @@ export default function SetupScreen({ t }: Props) {
             dispatch({ type: "start" });
           }}
           disabled={!canStart}
-          className="w-full py-4 text-base"
+          size="lg"
+          className="w-full py-4"
         >
           เริ่มจับสลาก
         </Button>
@@ -379,7 +389,7 @@ export default function SetupScreen({ t }: Props) {
 
 /* ------------------------- ชิ้นส่วนเล็กๆ ------------------------- */
 
-function SectionHead({
+function StepHead({
   step,
   title,
   count,
@@ -389,22 +399,89 @@ function SectionHead({
   count?: number;
 }) {
   return (
-    <div className="mb-6 flex items-end justify-between gap-4">
-      <div>
-        <p className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase">
-          Step {step}
-        </p>
-        <h2 className="mt-1.5 font-display text-xl font-medium text-ice sm:text-2xl">
-          {title}
-        </h2>
+    <div className="mb-6 flex items-end justify-between gap-4 border-b border-hair pb-4">
+      <div className="flex items-end gap-3">
+        <span className="fig text-outline text-[clamp(1.8rem,4vw,2.4rem)]">{step}</span>
+        <div>
+          <p className="slug">Step {step}</p>
+          <h2 className="mt-1.5 font-display text-xl font-medium text-ice sm:text-2xl">
+            {title}
+          </h2>
+        </div>
       </div>
       {count !== undefined && (
         <div className="text-right">
-          <p className="font-display text-3xl leading-none font-light text-ice tabular-nums">
-            {count}
-          </p>
-          <p className="mt-1 text-xs text-muted">คน</p>
+          <p className="fig num text-[2rem] text-ice">{count}</p>
+          <p className="slug slug-2 mt-1.5">คน</p>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * บันไดที่นั่ง: หนึ่งคอลัมน์ต่อหนึ่งทีม จุดทึบ = ที่นั่งที่จะมีคนจริง
+ * จุดโปร่ง = ที่นั่งที่ทีมนี้ไม่มี (เทียบกับทีมที่ใหญ่ที่สุด) จึงเห็นความไม่เท่ากันทันที
+ */
+function SeatLadder({ sizes, bench }: { sizes: number[]; bench: number }) {
+  const tallest = Math.max(1, ...sizes, bench);
+
+  return (
+    <div className="flex flex-wrap items-start gap-3">
+      {sizes.map((size, i) => {
+        const id = identityFor(i);
+        return (
+          <motion.div
+            key={i}
+            layout
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: Math.min(i * 0.03, 0.3) }}
+            className="grid justify-items-center gap-2"
+          >
+            <Crest identity={id} size={28} />
+            <span className="num font-display text-[11px]" style={{ color: id.hex }}>
+              {size}
+            </span>
+            <span className="grid gap-1.5">
+              {Array.from({ length: tallest }, (_, seat) => (
+                <span
+                  key={seat}
+                  className={`block h-2 w-2 rounded-full ${
+                    seat < size ? "" : "ring-1 ring-[rgb(var(--hair)/var(--hair-a))]"
+                  }`}
+                  style={
+                    seat < size ? { background: `rgb(${id.rgb} / 0.9)` } : undefined
+                  }
+                />
+              ))}
+            </span>
+          </motion.div>
+        );
+      })}
+
+      {bench > 0 && (
+        <motion.div
+          layout
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="grid justify-items-center gap-2"
+        >
+          <span className="grid h-7 w-7 place-items-center rounded-full border border-dashed border-hair text-xs text-muted">
+            ○
+          </span>
+          <span className="num font-display text-[11px] text-muted">{bench}</span>
+          <span className="grid gap-1.5">
+            {Array.from({ length: tallest }, (_, seat) => (
+              <span
+                key={seat}
+                className={`block h-2 w-2 rounded-full border border-dashed ${
+                  seat < bench ? "border-muted/70" : "border-hair opacity-40"
+                }`}
+              />
+            ))}
+          </span>
+        </motion.div>
       )}
     </div>
   );

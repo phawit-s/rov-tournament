@@ -3,7 +3,7 @@ import AppShell from "@/components/AppShell";
 import TournamentDetail from "@/components/tournament/TournamentDetail";
 
 export const metadata: Metadata = {
-  title: "รายละเอียดทัวร์นาเมนต์ — ROV Tournament Hub",
+  title: "รายละเอียดทัวร์นาเมนต์ — Tourney Hub",
 };
 
 export default function TournamentPage() {

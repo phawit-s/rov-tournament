@@ -29,12 +29,15 @@ export function identityFor(index: number): TeamIdentity {
   return TEAM_IDENTITIES[index % TEAM_IDENTITIES.length];
 }
 
-/** ตำแหน่งในเกม RoV — ใช้ตอนเปิดโหมดสุ่มเลน */
+/**
+ * ตำแหน่งในทีม — ตั้งชื่อกลางๆ ให้ใช้กับเกมไหนก็ได้
+ * ถ้าเกมที่จัดใช้คำเรียกอื่น แก้ label ที่นี่ที่เดียว ทั้งเว็บกับรูป export จะเปลี่ยนตาม
+ */
 export const LANES = [
-  { key: "dark", label: "ดาบ", en: "Dark Slayer", glyph: "🗡️" },
+  { key: "dark", label: "ดาบ", en: "Solo", glyph: "🗡️" },
   { key: "jungle", label: "ป่า", en: "Jungle", glyph: "🌿" },
   { key: "mid", label: "กลาง", en: "Mid", glyph: "✨" },
-  { key: "abyss", label: "ท้าย", en: "Abyssal", glyph: "🏹" },
+  { key: "abyss", label: "ท้าย", en: "Carry", glyph: "🏹" },
   { key: "support", label: "ซัพ", en: "Support", glyph: "🛡️" },
 ] as const;
 
@@ -44,26 +47,26 @@ export function laneByLabel(label?: string): Lane | undefined {
   return LANES.find((l) => l.label === label);
 }
 
-/** ชื่อตัวอย่างไว้กดเติมเร็วๆ ตอนลองเล่น */
+/** ชื่อตัวอย่างไว้กดเติมเร็วๆ ตอนลองเล่น — เป็นชื่อเล่นกลางๆ ไม่ผูกกับเกมไหน */
 export const SAMPLE_NAMES = [
-  "Violet",
-  "Butterfly",
-  "Murad",
-  "Airi",
-  "Nakroth",
-  "Zuka",
-  "Tel'Annas",
-  "Valhein",
-  "Capheny",
-  "Lauriel",
-  "Krixi",
-  "Ilumia",
-  "Alice",
-  "Zill",
-  "Florentino",
-  "Riktor",
-  "Omega",
-  "Arum",
-  "Yena",
-  "Elsu",
+  "Nova",
+  "Falcon",
+  "Echo",
+  "Vortex",
+  "Blaze",
+  "Cipher",
+  "Onyx",
+  "Rogue",
+  "Specter",
+  "Titan",
+  "Zephyr",
+  "Quasar",
+  "Reaper",
+  "Halo",
+  "Drift",
+  "Ember",
+  "Nomad",
+  "Pulse",
+  "Vega",
+  "Wraith",
 ];

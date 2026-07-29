@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
+import { Skeleton } from "../tournament/ui";
 import AuthPanel from "./AuthPanel";
 
 /**
@@ -28,17 +29,8 @@ export default function AuthGate({
 
   if (!hasBackend) return <>{children}</>;
 
-  // ยังไม่รู้สถานะ — กันหน้ากระพริบระหว่างเช็ค
-  if (snapshot === "loading") {
-    return (
-      <div className="grid min-h-[40vh] place-items-center">
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-9 w-9 animate-spin-slow rounded-full border border-champagne/20 border-t-champagne/80" />
-          <p className="font-display text-xs tracking-luxe text-muted">กำลังตรวจสอบ</p>
-        </div>
-      </div>
-    );
-  }
+  // ยังไม่รู้สถานะ — วาดโครงหน้าปลายทางไว้ก่อน ดีกว่าวงกลมหมุนที่ไม่บอกอะไร
+  if (snapshot === "loading") return <GateSkeleton />;
 
   if (!user || user.anonymous) {
     return (
@@ -49,4 +41,42 @@ export default function AuthGate({
   }
 
   return <>{children}</>;
+}
+
+function GateSkeleton() {
+  return (
+    <div className="space-y-6 py-2" aria-busy="true" aria-label="กำลังตรวจสอบสิทธิ์">
+      {/* หัวข้อ */}
+      <div className="border-t border-hair pt-4">
+        <div className="grid grid-cols-12 items-end gap-x-3 gap-y-4">
+          <Skeleton className="col-span-2 h-10 lg:col-span-1" />
+          <div className="col-span-10 space-y-3 lg:col-span-7">
+            <Skeleton className="h-2.5 w-24" />
+            <Skeleton className="h-8 w-2/3" />
+            <Skeleton className="h-px w-28" />
+          </div>
+        </div>
+      </div>
+
+      {/* เนื้อความ 3 แถบ */}
+      <div className="space-y-2.5">
+        <Skeleton className="h-3 w-full max-w-xl" />
+        <Skeleton className="h-3 w-4/5 max-w-lg" />
+        <Skeleton className="h-3 w-3/5 max-w-md" />
+      </div>
+
+      {/* การ์ด 2 ใบ */}
+      <div className="grid gap-5 sm:grid-cols-2">
+        {[0, 1].map((i) => (
+          <div key={i} className="surface hairline-top rounded-2xl p-6">
+            <Skeleton className="h-2.5 w-20" />
+            <Skeleton className="mt-3 h-5 w-1/2" />
+            <Skeleton className="mt-6 h-3 w-full" />
+            <Skeleton className="mt-2.5 h-3 w-5/6" />
+            <Skeleton className="mt-6 h-9 w-32 rounded-xl" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

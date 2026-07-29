@@ -1,40 +1,114 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "motion/react";
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  useScroll,
+} from "motion/react";
+import { BRAND, BRAND_MARK, BRAND_MONOGRAM } from "@/lib/brand";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { recordActivity } from "@/lib/activity";
 import { muteStore, sfx } from "@/lib/sound";
 import { themeStore } from "@/lib/theme";
+import Button from "@/components/ui/Button";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { toast } from "@/components/ui/Toast";
+import {
+  IconClock,
+  IconDice,
+  IconHeart,
+  IconMonitor,
+  IconMoon,
+  IconMute,
+  IconSun,
+  IconTrophy,
+  IconUsers,
+  IconVolume,
+  IconWheel,
+} from "@/components/ui/icons";
 
-type Item = { href: string; label: string; icon: React.ReactNode };
+type IconProps = { className?: string; strokeWidth?: number };
 
-const NAV: Item[] = [
-  { href: "/draw/", label: "สุ่มทีม", icon: <IconDice /> },
-  { href: "/wheel/", label: "วงล้อ", icon: <IconWheel /> },
-  { href: "/tournaments/", label: "ทัวร์นาเมนต์", icon: <IconTrophy /> },
-  { href: "/players/", label: "ผู้เล่น", icon: <IconUsers /> },
-  { href: "/channel/", label: "ช่อง", icon: <IconHeart /> },
-  { href: "/widgets/", label: "Widget", icon: <IconMonitor /> },
-  { href: "/activity/", label: "ประวัติ", icon: <IconClock /> },
+export type NavGroup = "tools" | "league" | "channel";
+
+export type NavItem = {
+  href: string;
+  label: string;
+  /** เลขบทชุดเดียวกับหัวหน้าเพจ เพื่อให้สารบัญท้ายเล่มอ้างเลขเดียวกัน */
+  no: string;
+  group: NavGroup;
+  Icon: ComponentType<IconProps>;
+};
+
+/**
+ * สารบัญกลางของทั้งเว็บ — Footer ใช้ตัวเดียวกันนี้
+ * ถ้าแยกสองที่ เพิ่มเมนูทีต้องไล่แก้สองไฟล์แล้วลืมทุกครั้ง
+ */
+export const NAV: NavItem[] = [
+  { href: "/draw/", label: "สุ่มทีม", no: "01", group: "tools", Icon: IconDice },
+  { href: "/wheel/", label: "วงล้อ", no: "02", group: "tools", Icon: IconWheel },
+  {
+    href: "/tournaments/",
+    label: "ทัวร์นาเมนต์",
+    no: "03",
+    group: "league",
+    Icon: IconTrophy,
+  },
+  { href: "/players/", label: "ผู้เล่น", no: "04", group: "league", Icon: IconUsers },
+  { href: "/channel/", label: "ช่อง", no: "05", group: "channel", Icon: IconHeart },
+  { href: "/widgets/", label: "Widget", no: "06", group: "tools", Icon: IconMonitor },
+  { href: "/activity/", label: "ประวัติ", no: "07", group: "channel", Icon: IconClock },
 ];
+
+export const NAV_GROUPS: { key: NavGroup; title: string }[] = [
+  { key: "tools", title: "เครื่องมือ" },
+  { key: "league", title: "ทัวร์นาเมนต์" },
+  { key: "channel", title: "ช่องและประวัติ" },
+];
+
+/** หน้าที่ไม่มีในเมนูแต่ต้องมีชื่อเวลาพลิกหน้า */
+const EXTRA_TITLE: Record<string, string> = {
+  "/": "หน้าแรก",
+  "/tournament": "ทัวร์นาเมนต์",
+  "/c": "ช่อง",
+};
+
+function cleanPath(path: string | null): string {
+  return (path ?? "/").replace(/\/+$/, "") || "/";
+}
+
+/** ชื่อหน้าปลายทาง ใช้ทั้งใน AppShell ตอนพลิกหน้าและใน Footer */
+export function navTitle(path: string | null): string {
+  const current = cleanPath(path);
+  if (EXTRA_TITLE[current]) return EXTRA_TITLE[current];
+  const hit = NAV.find((item) => current.startsWith(cleanPath(item.href)));
+  return hit?.label ?? BRAND;
+}
+
+function isActive(href: string, path: string | null) {
+  const clean = cleanPath(href);
+  const current = cleanPath(path);
+  return clean === "/" ? current === "/" : current.startsWith(clean);
+}
 
 export default function NavBar() {
   const pathname = usePathname();
+  const reduced = useReducedMotion();
   const [condensed, setCondensed] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const { scrollYProgress } = useScroll();
 
-  const muted = useSyncExternalStore(
-    muteStore.subscribe,
-    muteStore.getSnapshot,
-    muteStore.getServerSnapshot,
-  );
-  const theme = useSyncExternalStore(
-    themeStore.subscribe,
-    themeStore.getSnapshot,
-    themeStore.getServerSnapshot,
-  );
   useSyncExternalStore(
     authStore.subscribe,
     authStore.getSnapshot,
@@ -50,16 +124,10 @@ export default function NavBar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const isActive = (href: string) => {
-    const clean = href.replace(/\/$/, "") || "/";
-    const current = (pathname ?? "/").replace(/\/$/, "") || "/";
-    return clean === "/" ? current === "/" : current.startsWith(clean);
-  };
-
   return (
     <header className="sticky top-3 z-40">
       <div
-        className={`nav-shell flex items-center gap-2 rounded-full ${
+        className={`nav-shell relative flex items-center gap-2 rounded-full ${
           condensed ? "is-condensed px-2 py-1.5" : "px-2.5 py-2"
         }`}
       >
@@ -70,24 +138,28 @@ export default function NavBar() {
         >
           <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full border border-champagne/40 bg-[radial-gradient(circle_at_35%_25%,rgba(242,220,176,0.25),transparent_65%)]">
             <span className="absolute inset-0 animate-halo rounded-full" />
-            <span className="font-display text-sm font-medium text-champagne">R</span>
+            <span className="font-display text-sm font-medium text-champagne">
+              {BRAND_MONOGRAM}
+            </span>
           </span>
           <span className="hidden font-display text-sm font-medium tracking-[0.18em] lg:block">
-            <span className="text-gold-grad">ROV HUB</span>
+            <span className="text-gold-grad">{BRAND_MARK}</span>
           </span>
         </Link>
 
         <span className="hidden h-6 w-px shrink-0 bg-[rgb(var(--hair)/var(--hair-a))] lg:block" />
 
-        {/* เมนู */}
-        <nav className="no-scrollbar flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+        {/* เมนู — ขอบจางสองข้างเป็นสัญญาณว่าเลื่อนได้ เพราะ scrollbar ถูกซ่อนสนิท */}
+        <nav className="no-scrollbar flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [mask-image:linear-gradient(90deg,transparent,#000_18px,#000_calc(100%-18px),transparent)]">
           {NAV.map((item) => {
-            const active = isActive(item.href);
+            const active = isActive(item.href, pathname);
+            const Icon = item.Icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`group relative flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 font-display text-xs whitespace-nowrap transition-colors duration-300 ${
+                aria-current={active ? "page" : undefined}
+                className={`group relative flex shrink-0 items-center gap-2 rounded-full px-2.5 py-2 font-display text-xs whitespace-nowrap transition-colors duration-300 sm:px-3.5 ${
                   active ? "text-[#1b1509]" : "text-muted hover:text-ice"
                 }`}
               >
@@ -99,9 +171,29 @@ export default function NavBar() {
                   />
                 )}
                 <span className="relative z-10 grid h-4 w-4 place-items-center opacity-90">
-                  {item.icon}
+                  <Icon className="h-4 w-4" />
                 </span>
+
+                {/* จอใหญ่มีที่พอให้ทุกเมนูมีชื่อ */}
                 <span className="relative z-10 hidden sm:block">{item.label}</span>
+
+                {/* จอเล็กโชว์ชื่อเฉพาะเมนูที่เปิดอยู่ ไม่งั้นแถวยาวเกินจอ */}
+                <span className="relative z-10 sm:hidden">
+                  <AnimatePresence initial={false}>
+                    {active && (
+                      <motion.span
+                        key="label"
+                        initial={reduced ? false : { width: 0, opacity: 0 }}
+                        animate={{ width: "auto", opacity: 1 }}
+                        exit={reduced ? undefined : { width: 0, opacity: 0 }}
+                        transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+                        className="block overflow-hidden text-eyebrow tracking-luxe whitespace-nowrap"
+                      >
+                        <span className="block pl-1.5">{item.label}</span>
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </span>
               </Link>
             );
           })}
@@ -109,65 +201,159 @@ export default function NavBar() {
 
         {/* ปุ่มขวา */}
         <div className="flex shrink-0 items-center gap-1">
-          <IconButton
-            onClick={() => {
-              sfx.play("click");
-              themeStore.toggle();
-            }}
-            label={theme === "dark" ? "ธีมสว่าง" : "ธีมมืด"}
-          >
-            {theme === "dark" ? "☀" : "☾"}
-          </IconButton>
-          <IconButton
-            onClick={() => muteStore.toggle()}
-            label={muted ? "เปิดเสียง" : "ปิดเสียง"}
-          >
-            {muted ? "🔇" : "🔊"}
-          </IconButton>
+          <ThemeSoundButtons />
 
           {hasBackend &&
             (user ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (!confirm(`ออกจากระบบ (${user.name})?`)) return;
-                  recordActivity("auth.signout", `ออกจากระบบ (${user.name})`);
-                  void authStore.signOut();
-                }}
-                title={`${user.name} — กดเพื่อออกจากระบบ`}
-                className="ml-0.5 grid h-9 w-9 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-full border border-champagne/45 transition-transform hover:scale-105"
-              >
-                {user.photo ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={user.photo}
-                    alt=""
-                    referrerPolicy="no-referrer"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="font-display text-xs text-champagne">
-                    {user.name.slice(0, 1)}
-                  </span>
-                )}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setSignOutOpen(true)}
+                  title={`${user.name} — กดเพื่อออกจากระบบ`}
+                  className="relative ml-0.5 grid h-9 w-9 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-full border border-champagne/45 transition-transform hover:scale-105"
+                >
+                  <span className="pointer-events-none absolute inset-0 animate-halo rounded-full" />
+                  {user.photo ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={user.photo}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="font-display text-xs text-champagne">
+                      {user.name.slice(0, 1)}
+                    </span>
+                  )}
+                </button>
+
+                <ConfirmDialog
+                  open={signOutOpen}
+                  tone="danger"
+                  title={`ออกจากระบบ (${user.name})?`}
+                  description="ข้อมูลในเครื่องยังอยู่ครบ เข้าสู่ระบบใหม่เมื่อไหร่ก็ซิงก์ต่อได้"
+                  confirmText="ออกจากระบบ"
+                  onConfirm={() => {
+                    recordActivity("auth.signout", `ออกจากระบบ (${user.name})`);
+                    void authStore.signOut();
+                  }}
+                  onClose={() => setSignOutOpen(false)}
+                />
+              </>
             ) : (
-              <button
-                type="button"
+              <Button
+                size="sm"
+                variant="outline"
+                loading={pending}
+                aria-label="เข้าสู่ระบบ"
+                className="ml-0.5 shrink-0 rounded-full whitespace-nowrap max-sm:px-2.5"
                 onClick={() => {
-                  void authStore.signIn().then(() => {
-                    const u = authStore.user();
-                    recordActivity("auth.signin", `เข้าสู่ระบบ (${u?.name ?? "-"})`);
-                  });
+                  setPending(true);
+                  authStore
+                    .signIn()
+                    .then(() => {
+                      const u = authStore.user();
+                      recordActivity("auth.signin", `เข้าสู่ระบบ (${u?.name ?? "-"})`);
+                    })
+                    .catch(() =>
+                      toast("เข้าสู่ระบบไม่สำเร็จ ป็อปอัปอาจถูกบล็อก", "error"),
+                    )
+                    .finally(() => setPending(false));
                 }}
-                className="ml-0.5 shrink-0 cursor-pointer rounded-full border border-champagne/35 px-4 py-2 font-display text-xs whitespace-nowrap text-champagne transition-colors hover:bg-champagne/12"
               >
-                เข้าสู่ระบบ
-              </button>
+                {/* จอเล็กเหลือแค่ไอคอน เมนูจะได้มีที่เลื่อนมากขึ้น */}
+                <IconUsers className="h-4 w-4 sm:hidden" />
+                <span className="hidden sm:inline">เข้าสู่ระบบ</span>
+              </Button>
             ))}
         </div>
+
+        {/* ความคืบหน้าการอ่านหน้า — เส้นเดียวบางๆ ไม่กินพื้นที่ */}
+        <motion.span
+          aria-hidden
+          style={{ scaleX: scrollYProgress }}
+          className="pointer-events-none absolute inset-x-8 bottom-0 h-px origin-left bg-[linear-gradient(90deg,rgb(var(--accent)/.85),transparent)]"
+        />
       </div>
     </header>
+  );
+}
+
+/** ปุ่มธีมกับเสียง — NavBar กับ Footer ใช้ชุดเดียวกัน */
+export function ThemeSoundButtons({ className = "" }: { className?: string }) {
+  const reduced = useReducedMotion();
+  const muted = useSyncExternalStore(
+    muteStore.subscribe,
+    muteStore.getSnapshot,
+    muteStore.getServerSnapshot,
+  );
+  const theme = useSyncExternalStore(
+    themeStore.subscribe,
+    themeStore.getSnapshot,
+    themeStore.getServerSnapshot,
+  );
+
+  return (
+    <div className={`flex items-center gap-1 ${className}`}>
+      <IconButton
+        onClick={() => {
+          sfx.play("click");
+          themeStore.toggle();
+        }}
+        label={theme === "dark" ? "ธีมสว่าง" : "ธีมมืด"}
+      >
+        <SwapIcon swapKey={theme} reduced={reduced}>
+          {theme === "dark" ? (
+            <IconSun className="h-4 w-4" />
+          ) : (
+            <IconMoon className="h-4 w-4" />
+          )}
+        </SwapIcon>
+      </IconButton>
+
+      <IconButton
+        onClick={() => muteStore.toggle()}
+        label={muted ? "เปิดเสียง" : "ปิดเสียง"}
+      >
+        <SwapIcon swapKey={muted ? "mute" : "on"} reduced={reduced}>
+          {muted ? (
+            <IconMute className="h-4 w-4" />
+          ) : (
+            <IconVolume className="h-4 w-4" />
+          )}
+        </SwapIcon>
+      </IconButton>
+    </div>
+  );
+}
+
+/** สลับไอคอนแบบหมุนเข้า-ออก ให้การกดปุ่มมีน้ำหนักกว่าการเปลี่ยนตัวอักษรเฉยๆ */
+function SwapIcon({
+  swapKey,
+  reduced,
+  children,
+}: {
+  swapKey: string;
+  reduced: boolean | null;
+  children: ReactNode;
+}) {
+  if (reduced) {
+    return <span className="grid h-4 w-4 place-items-center">{children}</span>;
+  }
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.span
+        key={swapKey}
+        initial={{ rotate: -90, opacity: 0, scale: 0.7 }}
+        animate={{ rotate: 0, opacity: 1, scale: 1 }}
+        exit={{ rotate: 90, opacity: 0, scale: 0.7 }}
+        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        className="grid h-4 w-4 place-items-center"
+      >
+        {children}
+      </motion.span>
+    </AnimatePresence>
   );
 }
 
@@ -176,7 +362,7 @@ function IconButton({
   onClick,
   label,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   onClick: () => void;
   label: string;
 }) {
@@ -186,91 +372,9 @@ function IconButton({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full text-sm text-muted transition-all duration-300 hover:bg-champagne/12 hover:text-champagne active:scale-90"
+      className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-all duration-300 hover:bg-champagne/12 hover:text-champagne active:scale-90"
     >
       {children}
     </button>
-  );
-}
-
-/* ---------- ไอคอนเส้นบาง ---------- */
-
-function base(children: React.ReactNode) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-4 w-4"
-    >
-      {children}
-    </svg>
-  );
-}
-
-function IconDice() {
-  return base(
-    <>
-      <rect x="3" y="3" width="18" height="18" rx="4" />
-      <circle cx="8.5" cy="8.5" r="1.1" fill="currentColor" stroke="none" />
-      <circle cx="15.5" cy="15.5" r="1.1" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none" />
-    </>,
-  );
-}
-
-function IconWheel() {
-  return base(
-    <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" />
-    </>,
-  );
-}
-
-function IconTrophy() {
-  return base(
-    <>
-      <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
-      <path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3" />
-      <path d="M12 14v3M9 20h6M10 17h4" />
-    </>,
-  );
-}
-
-function IconUsers() {
-  return base(
-    <>
-      <circle cx="9" cy="8" r="3.2" />
-      <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
-      <path d="M16 5.5a3 3 0 0 1 0 5.6M17 14.2a5.3 5.3 0 0 1 3.5 4.8" />
-    </>,
-  );
-}
-
-function IconMonitor() {
-  return base(
-    <>
-      <rect x="3" y="4" width="18" height="12" rx="2.5" />
-      <path d="M9 20h6M12 16v4" />
-    </>,
-  );
-}
-
-function IconHeart() {
-  return base(
-    <path d="M12 20s-7-4.4-7-9.2A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.8C19 15.6 12 20 12 20Z" />,
-  );
-}
-
-function IconClock() {
-  return base(
-    <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7.5V12l3 1.8" />
-    </>,
   );
 }

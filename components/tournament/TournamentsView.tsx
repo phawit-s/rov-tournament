@@ -1,19 +1,21 @@
-﻿"use client";
+"use client";
 
-import { safeImageSrc } from "@/lib/safe";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useHashParam } from "@/hooks/useClient";
 import { emptyTournament, tournamentStore } from "@/lib/tournament/store";
-import { decodeTournament, formatThaiDate } from "@/lib/tournament/share";
-import { calcPrizes, formatMoney } from "@/lib/tournament/prize";
+import { decodeTournament } from "@/lib/tournament/share";
 import type { Tournament } from "@/lib/tournament/types";
 import Button from "../ui/Button";
+import ConfirmDialog from "../ui/ConfirmDialog";
 import Panel from "../ui/Panel";
-import TournamentForm from "./TournamentForm";
 import Reveal, { PageHeading } from "../ui/Reveal";
-import { EmptyNote, LiveBadge, StatusBadge } from "./ui";
+import { IconMore } from "../ui/icons";
+import { toast } from "../ui/Toast";
+import TournamentCard from "./TournamentCard";
+import TournamentForm from "./TournamentForm";
+import { ArtShield, EmptyState } from "./ui";
 
 export default function TournamentsView() {
   const all = useSyncExternalStore(
@@ -22,8 +24,8 @@ export default function TournamentsView() {
     tournamentStore.getServerSnapshot,
   );
   const [editing, setEditing] = useState<Tournament | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Tournament | null>(null);
 
   // เปิดมาจากลิงก์แชร์ -> ถามก่อนว่าจะบันทึกลงเครื่องไหม
   const sharedRaw = useHashParam("s");
@@ -33,22 +35,18 @@ export default function TournamentsView() {
   );
   const incoming = dismissed ? null : shared;
 
-  useEffect(() => {
-    if (!toast) return;
-    const id = window.setTimeout(() => setToast(null), 2400);
-    return () => window.clearTimeout(id);
-  }, [toast]);
-
   const list = all
     .slice()
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  const running = list.filter((t) => t.status === "running").length;
 
   if (editing) {
     return (
       <TournamentForm
         tournament={editing}
         onClose={() => setEditing(null)}
-        onSaved={() => setToast("บันทึกแล้ว")}
+        onSaved={() => toast("บันทึกแล้ว", "success")}
       />
     );
   }
@@ -59,6 +57,11 @@ export default function TournamentsView() {
         eyebrow="Tournaments"
         title="ทัวร์นาเมนต์ทั้งหมด"
         description="สร้างทัวร์ รับสมัครทีม จัดสายแข่ง กรอกผล และแชร์ให้คนอื่นดู"
+        meta={
+          list.length > 0
+            ? `${list.length} รายการ${running ? ` · กำลังแข่ง ${running}` : ""}`
+            : undefined
+        }
         action={
           <Button onClick={() => setEditing(emptyTournament(""))}>
             + สร้างทัวร์นาเมนต์
@@ -67,26 +70,27 @@ export default function TournamentsView() {
       />
 
       {incoming && (
-        <Panel accent="109 146 219" className="p-5">
-          <p className="text-sm text-ice/90">
-            มีทัวร์นาเมนต์ที่ถูกแชร์มา:{" "}
-            <span className="font-display text-champagne">{incoming.name}</span> (
-            {incoming.teams.length} ทีม)
+        <Panel accent="109 146 219" state="next" className="p-5">
+          <p className="slug">มีทัวร์ที่ถูกแชร์มา</p>
+          <p className="mt-2 text-sm text-ice/90">
+            <span className="font-display text-champagne">{incoming.name}</span>{" "}
+            <span className="num text-muted">({incoming.teams.length} ทีม)</span>
           </p>
           <p className="mt-1.5 text-xs text-muted">
             บันทึกลงเครื่องนี้เพื่อดูสายและประวัติ หรือปิดไปเฉยๆ ก็ได้
           </p>
           <div className="mt-4 flex flex-wrap gap-2.5">
             <Button
+              size="sm"
               onClick={() => {
                 tournamentStore.upsert(incoming);
                 setDismissed(true);
-                setToast("บันทึกทัวร์ที่แชร์มาแล้ว");
+                toast("บันทึกทัวร์ที่แชร์มาแล้ว", "success");
               }}
             >
               บันทึกลงเครื่อง
             </Button>
-            <Button variant="ghost" onClick={() => setDismissed(true)}>
+            <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>
               ไม่ต้อง
             </Button>
           </div>
@@ -94,26 +98,36 @@ export default function TournamentsView() {
       )}
 
       {list.length === 0 ? (
-        <EmptyNote>
-          ยังไม่มีทัวร์นาเมนต์ — กด &ldquo;สร้างทัวร์นาเมนต์&rdquo; เพื่อเริ่ม
-        </EmptyNote>
+        <EmptyState
+          no="03"
+          art={<ArtShield />}
+          title="ยังไม่มีทัวร์นาเมนต์"
+          description="สร้างทัวร์แรกเพื่อเปิดรับสมัครทีม จัดสายแข่ง และแชร์ลิงก์ให้คนอื่นตามผล — ข้อมูลทั้งหมดเก็บอยู่ในเบราว์เซอร์เครื่องนี้"
+          action={
+            <Button onClick={() => setEditing(emptyTournament(""))}>
+              + สร้างทัวร์นาเมนต์
+            </Button>
+          }
+        />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <AnimatePresence initial={false}>
             {list.map((t, i) => (
               <Reveal key={t.id} index={i} from="scale">
-                <Card
+                <TournamentCard
                   tournament={t}
-                  onEdit={() => setEditing(t)}
-                  onDuplicate={() => {
-                    tournamentStore.duplicate(t.id);
-                    setToast("ทำสำเนาแล้ว");
-                  }}
-                  onDelete={() => {
-                    if (!confirm(`ลบ "${t.name}" ทิ้ง?`)) return;
-                    tournamentStore.remove(t.id);
-                    setToast("ลบแล้ว");
-                  }}
+                  href={`/tournament/#t=${t.id}`}
+                  actions={
+                    <CardActions
+                      href={`/tournament/#t=${t.id}`}
+                      onEdit={() => setEditing(t)}
+                      onDuplicate={() => {
+                        tournamentStore.duplicate(t.id);
+                        toast("ทำสำเนาแล้ว", "success");
+                      }}
+                      onDelete={() => setPendingDelete(t)}
+                    />
+                  }
                 />
               </Reveal>
             ))}
@@ -121,15 +135,86 @@ export default function TournamentsView() {
         </div>
       )}
 
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 16 }}
-            className="fixed inset-x-0 bottom-[calc(1.75rem+var(--sab))] z-50 mx-auto w-fit rounded-xl border border-champagne/25 bg-ink-2/95 px-6 py-3 text-sm text-ice backdrop-blur"
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        tone="danger"
+        title={`ลบ "${pendingDelete?.name ?? ""}" ทิ้ง?`}
+        description="ทีม สายแข่ง และผลที่กรอกไว้ทั้งหมดจะหายจากเครื่องนี้ กู้คืนไม่ได้"
+        confirmText="ลบทิ้ง"
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          tournamentStore.remove(pendingDelete.id);
+          toast("ลบแล้ว", "success");
+        }}
+        onClose={() => setPendingDelete(null)}
+      />
+    </div>
+  );
+}
+
+/**
+ * แถวปุ่มท้ายการ์ด — "เปิดดู" เป็นตัวเอกเดียว
+ * ที่เหลือยุบไว้หลัง ⋯ แล้วกางลงในตัวการ์ด (ไม่ใช่ dropdown ลอย
+ * เพราะการ์ดอยู่ใน TiltCard ที่มี transform ป๊อปอัปตำแหน่ง fixed จะเพี้ยน)
+ */
+function CardActions({
+  href,
+  onEdit,
+  onDuplicate,
+  onDelete,
+}: {
+  href: string;
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const reduced = useReducedMotion();
+
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <Link
+          href={href}
+          className="inline-flex min-h-10 flex-1 items-center justify-center rounded-xl bg-[linear-gradient(180deg,#f2dcb0_0%,#d9b273_52%,#bd9350_100%)] px-4 py-2 font-display text-xs font-medium tracking-wide text-[#1b1509] shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_12px_34px_-18px_rgba(207,167,101,0.9)] transition-all duration-300 hover:-translate-y-px hover:brightness-105"
+        >
+          เปิดดู
+        </Link>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label="ตัวเลือกอื่น"
+          className={`tile hover-tile grid h-10 w-10 shrink-0 cursor-pointer place-items-center rounded-xl transition-colors ${
+            open ? "text-champagne" : "text-muted hover:text-ice"
+          }`}
+        >
+          <motion.span
+            className="inline-flex"
+            animate={reduced ? undefined : { rotate: open ? 90 : 0 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
           >
-            {toast}
+            <IconMore className="h-4 w-4" />
+          </motion.span>
+        </button>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2.5 grid grid-cols-3 gap-1 border-t border-hair pt-2.5">
+              <MoreItem onClick={onEdit}>แก้ไข</MoreItem>
+              <MoreItem onClick={onDuplicate}>ทำสำเนา</MoreItem>
+              <MoreItem onClick={onDelete} danger>
+                ลบ
+              </MoreItem>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -137,103 +222,7 @@ export default function TournamentsView() {
   );
 }
 
-function Card({
-  tournament,
-  onEdit,
-  onDuplicate,
-  onDelete,
-}: {
-  tournament: Tournament;
-  onEdit: () => void;
-  onDuplicate: () => void;
-  onDelete: () => void;
-}) {
-  const prize = calcPrizes(tournament.prize);
-  const top = prize.breakdown[0];
-
-  return (
-    <Panel className="flex h-full flex-col overflow-hidden p-0">
-      <Link href={`/tournament/#t=${tournament.id}`} className="block">
-        {tournament.cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={safeImageSrc(tournament.cover) ?? ""}
-            alt=""
-            className="h-32 w-full object-cover opacity-90"
-          />
-        ) : (
-          <div className="h-20 w-full bg-[linear-gradient(120deg,rgba(207,167,101,0.16),transparent_70%)]" />
-        )}
-      </Link>
-
-      <div className="flex flex-1 flex-col p-5">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <StatusBadge status={tournament.status} />
-          {tournament.live.isLive && tournament.live.url && (
-            <LiveBadge url={tournament.live.url} />
-          )}
-        </div>
-
-        <Link href={`/tournament/#t=${tournament.id}`}>
-          <h3 className="font-display text-lg font-medium text-ice transition-colors hover:text-champagne">
-            {tournament.name}
-          </h3>
-        </Link>
-        {tournament.tagline && (
-          <p className="mt-1 line-clamp-2 text-sm text-muted">{tournament.tagline}</p>
-        )}
-
-        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-          <div>
-            <dt className="text-xs text-muted">ทีม</dt>
-            <dd className="font-display text-ice">
-              {tournament.teams.length}
-              {tournament.maxTeams > 0 && (
-                <span className="text-muted">/{tournament.maxTeams}</span>
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted">เงินรางวัล</dt>
-            <dd className="font-display text-champagne">
-              {tournament.prize.total > 0
-                ? formatMoney(tournament.prize.total, tournament.prize.currency)
-                : "—"}
-            </dd>
-          </div>
-          <div className="col-span-2">
-            <dt className="text-xs text-muted">วันแข่ง</dt>
-            <dd className="text-ice/85">{formatThaiDate(tournament.startAt)}</dd>
-          </div>
-          {top && tournament.prize.total > 0 && (
-            <div className="col-span-2">
-              <dt className="text-xs text-muted">รางวัลชนะเลิศ</dt>
-              <dd className="font-display text-champagne">
-                {formatMoney(top.amount, tournament.prize.currency)}
-              </dd>
-            </div>
-          )}
-        </dl>
-
-        <div className="mt-auto flex flex-wrap items-center gap-1 pt-5">
-          <Link
-            href={`/tournament/#t=${tournament.id}`}
-            className="rounded-lg bg-[linear-gradient(180deg,#f2dcb0_0%,#d9b273_52%,#bd9350_100%)] px-4 py-2 font-display text-xs text-[#1b1509] transition-all hover:brightness-105"
-          >
-            เปิดดู
-          </Link>
-          <TextAction onClick={onEdit}>แก้ไข</TextAction>
-          <TextAction onClick={onDuplicate}>ทำสำเนา</TextAction>
-          <TextAction onClick={onDelete} danger>
-            ลบ
-          </TextAction>
-        </div>
-      </div>
-    </Panel>
-  );
-}
-
-function TextAction({
+function MoreItem({
   children,
   onClick,
   danger,
@@ -246,8 +235,10 @@ function TextAction({
     <button
       type="button"
       onClick={onClick}
-      className={`cursor-pointer rounded-lg px-2.5 py-2 text-xs transition-colors ${
-        danger ? "text-muted hover:text-[#e79a9a]" : "text-muted hover:text-ice"
+      className={`min-h-10 cursor-pointer rounded-lg px-2 text-xs transition-colors ${
+        danger
+          ? "text-muted hover:bg-[#e79a9a]/10 hover:text-[#e79a9a]"
+          : "hover-tile text-ice/80 hover:text-ice"
       }`}
     >
       {children}

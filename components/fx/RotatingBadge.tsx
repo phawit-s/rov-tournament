@@ -5,7 +5,7 @@
  * ชี้เมาส์แล้วหมุนเร็วขึ้น กดแล้วเลื่อนลงไปเนื้อหาถัดไป
  */
 export default function RotatingBadge({
-  text = "ROV TOURNAMENT HUB · จัดสาย · สุ่มทีม · โดเนท · ",
+  text = "TOURNEY HUB · จัดสาย · สุ่มทีม · โดเนท · วงล้อ · ",
   size = 132,
   className = "",
 }: {

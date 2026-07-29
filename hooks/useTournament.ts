@@ -7,7 +7,7 @@ import { readShareFromHash } from "@/lib/share";
 import { useHydrated } from "./useClient";
 import type { Config, Phase, Player } from "@/lib/types";
 
-const STORAGE_KEY = "rov-randomizer/v1";
+const STORAGE_KEY = "tourney-hub/v1";
 
 export const DEFAULT_CONFIG: Config = {
   sizeMode: "perTeam",

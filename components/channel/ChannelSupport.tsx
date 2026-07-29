@@ -18,9 +18,19 @@ import { formatMoney } from "@/lib/tournament/prize";
 import { safeImageSrc, safeUrl } from "@/lib/safe";
 import type { MemberTier } from "@/lib/tournament/types";
 import Button from "../ui/Button";
+import Corners from "../ui/Corners";
 import Panel from "../ui/Panel";
 import GoldDust from "../fx/GoldDust";
-import { EmptyNote, Input, Label, Textarea } from "../tournament/ui";
+import { IconCheck } from "../ui/icons";
+import {
+  ArtShield,
+  EmptyNote,
+  EmptyState,
+  Input,
+  Label,
+  Skeleton,
+  Textarea,
+} from "../tournament/ui";
 
 type Mode = "tip" | "member";
 const MONTHS = [1, 3, 6, 12];
@@ -137,6 +147,12 @@ export default function ChannelSupport() {
     ? channel.donate.quickAmounts
     : [20, 50, 100, 300, 500];
 
+  // แพ็กเกจแพงสุดได้เป็นตัวเอกของหน้า (Panel feature ใบเดียวในหน้านี้)
+  const topTierId = channel.member.tiers.reduce<MemberTier | null>(
+    (best, t) => (!best || t.pricePerMonth > best.pricePerMonth ? t : best),
+    null,
+  )?.id;
+
   const canSubmit =
     !!name.trim() && finalAmount > 0 && (mode === "tip" || !!tier) && !busy;
 
@@ -169,13 +185,19 @@ export default function ChannelSupport() {
     return (
       <>
         <GoldDust count={22} />
-        <Panel accent="207 167 101" className="mx-auto max-w-lg p-9 text-center">
-          <p className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase">
-            Thank you
-          </p>
+        <Panel
+          variant="feature"
+          accent="207 167 101"
+          className="relative mx-auto max-w-lg p-9 text-center"
+        >
+          <Corners len={20} o={0.45} />
+          <p className="slug">Thank you</p>
           <h2 className="mt-3 font-display text-3xl font-light">
             <span className="text-gold-grad">ส่งสลิปเรียบร้อย</span>
           </h2>
+          <p className="num mt-4 font-display text-2xl text-champagne">
+            {formatMoney(finalAmount)}
+          </p>
           <p className="mt-4 text-sm text-muted">
             รอเจ้าของช่องกดยืนยัน พอยืนยันแล้วชื่อจะเด้งขึ้นหน้าจอสตรีมทันที
           </p>
@@ -222,7 +244,8 @@ export default function ChannelSupport() {
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <h2 className="truncate font-display text-2xl font-light text-ice">
+            <p className="slug">Support</p>
+            <h2 className="mt-1 truncate font-display text-2xl font-light text-ice">
               {channel.name || channel.handle}
             </h2>
             {channel.tagline && (
@@ -234,9 +257,14 @@ export default function ChannelSupport() {
               href={safeUrl(channel.live.url) ?? undefined}
               target="_blank"
               rel="noreferrer noopener"
-              className="shrink-0 rounded-full bg-[#e0566b]/15 px-4 py-2 font-display text-xs text-[#e0566b]"
+              className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#e0566b]/15 px-4 py-2 font-display text-xs text-[#e0566b]"
             >
-              ● LIVE
+              <motion.span
+                className="h-1.5 w-1.5 rounded-full bg-[#e0566b]"
+                animate={{ opacity: [1, 0.25, 1] }}
+                transition={{ duration: 1.6, repeat: Infinity }}
+              />
+              LIVE
             </a>
           )}
         </div>
@@ -255,7 +283,7 @@ export default function ChannelSupport() {
               key={m.key}
               type="button"
               onClick={() => setMode(m.key)}
-              className={`relative flex-1 cursor-pointer rounded-lg px-3 py-2.5 font-display text-xs transition-colors sm:text-sm ${
+              className={`relative min-h-11 flex-1 cursor-pointer rounded-lg px-3 py-2.5 font-display text-xs transition-colors sm:text-sm ${
                 mode === m.key ? "text-[#1b1509]" : "text-muted hover:text-ice"
               }`}
             >
@@ -274,107 +302,122 @@ export default function ChannelSupport() {
 
       <div className="grid gap-5 lg:grid-cols-[1fr_minmax(320px,380px)]">
         <div className="space-y-5">
-          {mode === "member" ? (
-            <Panel className="p-6">
-              <Label>เลือกแพ็กเกจ</Label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {channel.member.tiers.map((t) => {
-                  const active = tier?.id === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setTier(t)}
-                      className="cursor-pointer rounded-xl p-4 text-left transition-all"
-                      style={{
-                        background: active ? `rgb(${t.rgb} / 0.14)` : "transparent",
-                        boxShadow: `inset 0 0 0 1px rgb(${t.rgb} / ${active ? 0.55 : 0.2})`,
-                      }}
-                    >
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span
-                          className="font-display text-base"
-                          style={{ color: `rgb(${t.rgb})` }}
-                        >
-                          {t.badge ? `${t.badge} ` : ""}
-                          {t.name}
-                        </span>
-                        <span className="font-display text-lg text-ice tabular-nums">
-                          ฿{t.pricePerMonth.toLocaleString("th-TH")}
-                          <span className="text-xs text-muted">/เดือน</span>
-                        </span>
-                      </div>
-                      {t.perks.length > 0 && (
-                        <ul className="mt-2.5 space-y-1">
-                          {t.perks.map((perk, i) => (
-                            <li key={i} className="text-xs text-muted">
-                              · {perk}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+          {/* ไส้ในของแท็บสลับพร้อมกับ pill ที่วิ่งอยู่ด้านบน */}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={mode}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {mode === "member" ? (
+                <div className="space-y-5">
+                  <div>
+                    <Label hint="เลือกแพ็กเกจที่ชอบ แล้วเลือกจำนวนเดือน">
+                      เลือกแพ็กเกจ
+                    </Label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {channel.member.tiers.map((t) => (
+                        <TierCard
+                          key={t.id}
+                          tier={t}
+                          active={tier?.id === t.id}
+                          best={t.id === topTierId && channel.member.tiers.length > 1}
+                          onSelect={() => setTier(t)}
+                        />
+                      ))}
+                    </div>
+                  </div>
 
-              {tier && (
-                <div className="mt-5">
-                  <Label>สมัครกี่เดือน</Label>
+                  {tier && (
+                    <Panel className="p-6">
+                      <Label>สมัครกี่เดือน</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {MONTHS.map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setMonths(m)}
+                            className={`num min-h-11 cursor-pointer rounded-lg px-4 py-2 font-display text-sm transition-colors ${
+                              months === m
+                                ? "bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)] text-[#1b1509]"
+                                : "tile text-muted hover:text-ice"
+                            }`}
+                          >
+                            {m} เดือน
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* ใบเสร็จย่อ — ให้เห็นยอดรวมก่อนถึงปุ่มส่ง */}
+                      <div className="sunken hairline-top mt-5 rounded-xl p-4">
+                        <p className="slug slug-2">Summary</p>
+                        <div className="mt-3">
+                          <ReceiptLine
+                            label="ราคาต่อเดือน"
+                            value={formatMoney(tier.pricePerMonth)}
+                          />
+                          <span className="rule my-2.5 block h-px" />
+                          <ReceiptLine label="จำนวนเดือน" value={`${months} เดือน`} />
+                          <span className="rule my-2.5 block h-px" />
+                          <div className="flex items-baseline justify-between gap-3">
+                            <span className="text-sm text-ice/85">รวมทั้งหมด</span>
+                            <AnimatePresence mode="wait" initial={false}>
+                              <motion.span
+                                key={finalAmount}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                                className="num font-display text-2xl text-champagne"
+                              >
+                                {formatMoney(finalAmount)}
+                              </motion.span>
+                            </AnimatePresence>
+                          </div>
+                        </div>
+                      </div>
+                    </Panel>
+                  )}
+                </div>
+              ) : (
+                <Panel className="p-6">
+                  <Label>ยอดที่ต้องการสนับสนุน</Label>
                   <div className="flex flex-wrap gap-2">
-                    {MONTHS.map((m) => (
+                    {quick.map((q) => (
                       <button
-                        key={m}
+                        key={q}
                         type="button"
-                        onClick={() => setMonths(m)}
-                        className={`cursor-pointer rounded-lg px-4 py-2 font-display text-sm transition-colors ${
-                          months === m
+                        onClick={() => setAmount(q)}
+                        className={`num min-h-11 cursor-pointer rounded-lg px-4 py-2 font-display text-sm transition-colors ${
+                          amount === q
                             ? "bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)] text-[#1b1509]"
                             : "tile text-muted hover:text-ice"
                         }`}
                       >
-                        {m} เดือน
+                        ฿{q}
                       </button>
                     ))}
                   </div>
-                </div>
+                  <div className="mt-3">
+                    <Input
+                      type="number"
+                      min={1}
+                      value={amount || ""}
+                      onChange={(e) => setAmount(Number(e.target.value) || 0)}
+                      placeholder="หรือกรอกยอดเอง"
+                    />
+                  </div>
+                  {tournamentId && (
+                    <p className="mt-3 rounded-xl tile px-4 py-3 text-xs text-champagne">
+                      ยอดนี้จะนับเป็นการสมทบทุนเงินรางวัลของทัวร์ที่คุณเปิดมา
+                    </p>
+                  )}
+                </Panel>
               )}
-            </Panel>
-          ) : (
-            <Panel className="p-6">
-              <Label>ยอดที่ต้องการสนับสนุน</Label>
-              <div className="flex flex-wrap gap-2">
-                {quick.map((q) => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={() => setAmount(q)}
-                    className={`cursor-pointer rounded-lg px-4 py-2 font-display text-sm transition-colors ${
-                      amount === q
-                        ? "bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)] text-[#1b1509]"
-                        : "tile text-muted hover:text-ice"
-                    }`}
-                  >
-                    ฿{q}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-3">
-                <Input
-                  type="number"
-                  min={1}
-                  value={amount || ""}
-                  onChange={(e) => setAmount(Number(e.target.value) || 0)}
-                  placeholder="หรือกรอกยอดเอง"
-                />
-              </div>
-              {tournamentId && (
-                <p className="mt-3 rounded-xl tile px-4 py-3 text-xs text-champagne">
-                  ยอดนี้จะนับเป็นการสมทบทุนเงินรางวัลของทัวร์ที่คุณเปิดมา
-                </p>
-              )}
-            </Panel>
-          )}
+            </motion.div>
+          </AnimatePresence>
 
           <Panel className="space-y-4 p-6">
             <div>
@@ -411,7 +454,7 @@ export default function ChannelSupport() {
                     ยังไม่มี
                   </div>
                 )}
-                <label className="inline-block cursor-pointer rounded-lg tile px-3 py-2 text-xs text-ice/80 transition-colors hover-tile">
+                <label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg tile px-3 py-2 text-xs text-ice/80 transition-colors hover-tile">
                   เลือกรูปสลิป
                   <input
                     type="file"
@@ -433,12 +476,14 @@ export default function ChannelSupport() {
 
             {error && <p className="text-xs text-[#e79a9a]">{error}</p>}
 
-            <Button onClick={submit} disabled={!canSubmit} className="w-full py-3.5">
-              {busy
-                ? "กำลังส่ง…"
-                : finalAmount > 0
-                  ? `ส่งสลิป ${formatMoney(finalAmount)}`
-                  : "ส่งสลิป"}
+            <Button
+              size="lg"
+              loading={busy}
+              onClick={submit}
+              disabled={!canSubmit}
+              className="w-full"
+            >
+              {finalAmount > 0 ? `ส่งสลิป ${formatMoney(finalAmount)}` : "ส่งสลิป"}
             </Button>
             <p className="text-xs text-muted">
               เจ้าของช่องจะตรวจสลิปเองก่อนอนุมัติ ระบบไม่ได้เช็คยอดกับธนาคารอัตโนมัติ
@@ -447,39 +492,62 @@ export default function ChannelSupport() {
         </div>
 
         <div className="space-y-5">
-          <Panel accent="207 167 101" className="p-6 text-center">
-            <p className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase">
-              PromptPay
-            </p>
-            {qr ? (
-              <>
-                <motion.img
-                  key={qr}
-                  initial={{ opacity: 0, scale: 0.96 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  src={qr}
-                  alt="QR พร้อมเพย์"
-                  className="mx-auto mt-4 w-56 rounded-xl bg-white p-2"
+          <Panel accent="207 167 101" className="relative p-6 text-center">
+            <p className="slug">PromptPay</p>
+
+            {!promptPayId ? (
+              // ยังไม่ได้ตั้งเลข = ปัญหาของเจ้าของช่อง ไม่ใช่ของคนโอน ต้องบอกให้ตรง
+              <div className="mt-4">
+                <EmptyState
+                  art={<ArtShield />}
+                  title="ช่องนี้ยังไม่ได้ใส่เลขพร้อมเพย์"
+                  description="โอนเองตามช่องทางที่เจ้าของแจ้งไว้ แล้วแนบสลิปมาได้เลย"
                 />
-                <p className="mt-4 font-display text-2xl text-champagne">
+              </div>
+            ) : !qr ? (
+              // มี payload แล้วแต่ยังวาด QR ไม่เสร็จ — โชว์โครงตารางให้เห็นรูปร่างปลายทาง
+              <div
+                className="mx-auto mt-4 grid w-56 grid-cols-8 gap-1 rounded-xl bg-white/5 p-3"
+                aria-label="กำลังสร้าง QR"
+              >
+                {Array.from({ length: 64 }, (_, i) => (
+                  <Skeleton key={i} className="aspect-square rounded-sm" />
+                ))}
+              </div>
+            ) : (
+              <>
+                <span className="relative mx-auto mt-4 block w-60 p-2">
+                  <Corners len={20} o={0.5} />
+                  <motion.img
+                    key={qr}
+                    initial={{ opacity: 0, scale: 0.96 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    src={qr}
+                    alt="QR พร้อมเพย์"
+                    className="mx-auto w-52 rounded-lg bg-white p-2"
+                  />
+                </span>
+                <p className="num mt-4 font-display text-2xl text-champagne">
                   {finalAmount > 0 ? formatMoney(finalAmount) : "ระบุยอดเอง"}
                 </p>
                 <p className="mt-1.5 text-sm text-ice/85">
                   {channel.donate.displayName || channel.name}
                 </p>
-                <p className="text-xs text-muted">{formatPromptPayId(promptPayId)}</p>
+                <p className="num text-xs text-muted">
+                  {formatPromptPayId(promptPayId)}
+                </p>
               </>
-            ) : (
-              <p className="mt-4 text-sm text-muted">ยังไม่ได้ใส่เลขพร้อมเพย์</p>
             )}
           </Panel>
 
           {mode === "member" && channel.member.showMemberList && members.length > 0 && (
             <Panel className="p-6">
-              <h3 className="font-display text-base text-ice">
-                สมาชิกปัจจุบัน <span className="text-muted">({members.length})</span>
-              </h3>
-              <ul className="mt-4 flex flex-wrap gap-2">
+              <Panel.Header
+                eyebrow="Members"
+                title="สมาชิกปัจจุบัน"
+                count={members.length}
+              />
+              <ul className="flex flex-wrap gap-2">
                 <AnimatePresence initial={false}>
                   {members.map((m) => {
                     const t = channel.member.tiers.find((x) => x.id === m.tierId);
@@ -510,5 +578,121 @@ export default function ChannelSupport() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ReceiptLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="text-sm text-muted">{label}</span>
+      <span className="num font-display text-sm text-ice">{value}</span>
+    </div>
+  );
+}
+
+/**
+ * การ์ดแพ็กเกจสมาชิก — แถบสีของ tier พาดหัวการ์ด เหรียญกลม และสิทธิ์เป็นแถวติ๊กถูก
+ * แพ็กเกจแพงสุดยกเป็นการ์ดตัวเอกพร้อมริบบิ้นมุมขวาบน
+ */
+function TierCard({
+  tier,
+  active,
+  best,
+  onSelect,
+}: {
+  tier: MemberTier;
+  active: boolean;
+  best: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={active}
+      className="group block cursor-pointer text-left"
+    >
+      <Panel
+        variant={best ? "feature" : "plain"}
+        accent={tier.rgb}
+        interactive={false}
+        className="relative h-full overflow-hidden p-5 transition-transform duration-300 group-hover:-translate-y-0.5"
+        style={{
+          background: active ? `rgb(${tier.rgb} / 0.12)` : undefined,
+          boxShadow: active ? `inset 0 0 0 1px rgb(${tier.rgb} / 0.55)` : undefined,
+        }}
+      >
+        {/* แถบสีประจำ tier พาดเต็มความกว้างหัวการ์ด */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-0.75"
+          style={{
+            background: `linear-gradient(90deg, rgb(${tier.rgb}), rgb(${tier.rgb} / 0.2))`,
+          }}
+        />
+
+        {best && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute top-0 right-0 h-24 w-24 overflow-hidden"
+            style={{ clipPath: "polygon(100% 0, 100% 100%, 0 0)" }}
+          >
+            <span className="absolute top-4 -right-6 w-32 rotate-45 bg-[linear-gradient(90deg,#bd9350,#f0d8ab)] py-1 text-center font-display text-eyebrow font-semibold tracking-luxe text-[#1b1509]">
+              คุ้มที่สุด
+            </span>
+          </span>
+        )}
+
+        <div className="flex items-start gap-3">
+          <span
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full font-display text-sm"
+            style={{
+              color: `rgb(${tier.rgb})`,
+              background: `rgb(${tier.rgb} / 0.15)`,
+              boxShadow: `inset 0 0 0 1px rgb(${tier.rgb} / 0.45)`,
+            }}
+            aria-hidden
+          >
+            {tier.badge || "★"}
+          </span>
+
+          <div className="min-w-0 flex-1">
+            <p
+              className="truncate font-display text-base"
+              style={{ color: `rgb(${tier.rgb})` }}
+            >
+              {tier.name}
+            </p>
+            <p className="num mt-0.5 font-display text-lg text-ice">
+              ฿{tier.pricePerMonth.toLocaleString("th-TH")}
+              <span className="ml-0.5 text-xs text-muted">/เดือน</span>
+            </p>
+          </div>
+        </div>
+
+        {tier.perks.length > 0 && (
+          <ul className="mt-3.5 space-y-1.5 border-t border-hair pt-3.5">
+            {tier.perks.map((perk, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-muted">
+                <span
+                  className="mt-0.5 shrink-0"
+                  style={{ color: `rgb(${tier.rgb})` }}
+                  aria-hidden
+                >
+                  <IconCheck className="h-3 w-3" strokeWidth={2} />
+                </span>
+                <span className="min-w-0">{perk}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {active && (
+          <p className="slug mt-3.5" style={{ color: `rgb(${tier.rgb})` }}>
+            เลือกอยู่
+          </p>
+        )}
+      </Panel>
+    </button>
   );
 }

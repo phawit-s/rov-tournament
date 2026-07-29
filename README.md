@@ -1,6 +1,6 @@
-# ROV Tournament Hub 🎲
+# Tourney Hub 🎲
 
-เครื่องมือจัดทัวร์นาเมนต์ RoV ครบวงจร — สุ่มแบ่งทีม หมุนวงล้อ จัดสายแข่ง กรอกผล คำนวณเงินรางวัล
+เครื่องมือจัดทัวร์นาเมนต์ครบวงจร ใช้ได้กับทุกเกม — สุ่มแบ่งทีม หมุนวงล้อ จัดสายแข่ง กรอกผล คำนวณเงินรางวัล
 และเก็บประวัติผู้เล่น ทำงานในเบราว์เซอร์ล้วน ไม่มีเซิร์ฟเวอร์ deploy เป็น static site บน GitHub Pages
 
 **เว็บจริง:** [phawit-s.github.io/rov-tournament](https://phawit-s.github.io/rov-tournament/)
@@ -183,7 +183,7 @@ components/
   ui/           Panel, Button
   fx/           BackgroundFX, GoldDust
 hooks/          useTournament (reducer + persist), useClient
-lib/            random, teams, rov, sound, theme, share, exportImage, wheel
+lib/            random, teams, game, brand, sound, theme, share, exportImage, wheel
   tournament/   types, store, bracket, prize, players, admin, share
 ```
 

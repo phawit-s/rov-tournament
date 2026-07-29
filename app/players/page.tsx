@@ -3,7 +3,7 @@ import AppShell from "@/components/AppShell";
 import PlayersView from "@/components/tournament/PlayersView";
 
 export const metadata: Metadata = {
-  title: "ผู้เล่น — ROV Tournament Hub",
+  title: "ผู้เล่น — Tourney Hub",
   description: "ประวัติการแข่งขันของผู้เล่นแต่ละคน",
 };
 

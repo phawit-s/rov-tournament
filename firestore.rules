@@ -1,6 +1,6 @@
-﻿rules_version = '2';
+rules_version = '2';
 
-// กติกาความปลอดภัยของ ROV Tournament Hub
+// กติกาความปลอดภัยของ Tourney Hub
 // เอาไปวางที่ Firebase Console → Firestore Database → Rules → Publish
 //
 // หลักคิด:

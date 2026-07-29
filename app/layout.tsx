@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans_Thai, Prompt } from "next/font/google";
+import { BRAND } from "@/lib/brand";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme-script";
 import "./globals.css";
 
@@ -17,15 +18,16 @@ const plexThai = IBM_Plex_Sans_Thai({
   display: "swap",
 });
 
+// ชื่อแบรนด์ต้องเป็นชุดเดียวทั้งเว็บ ไม่งั้นแท็บ/ลิงก์แชร์/หน้าปกเรียกคนละชื่อ
 export const metadata: Metadata = {
-  title: "ROV TEAM RANDOMIZER — สุ่มทีมทัวร์นาเมนต์",
+  title: `${BRAND} — สุ่มทีม จัดสาย และกราฟิกสำหรับสตรีม`,
   description:
-    "เว็บสุ่มแบ่งทีมสำหรับทัวร์นาเมนต์ RoV ใส่รายชื่อ กำหนดจำนวนคนต่อทีม แล้วกดสุ่มทีละคนพร้อมเอฟเฟกต์สุดมันส์",
-  applicationName: "ROV Team Randomizer",
+    "ชุดเครื่องมือจัดทัวร์นาเมนต์ครบในหน้าเดียว ใช้ได้กับทุกเกม — สุ่มแบ่งทีม จัดสายแข่ง วงล้อสุ่ม และ widget สำหรับ OBS",
+  applicationName: BRAND,
   openGraph: {
-    title: "ROV TEAM RANDOMIZER",
+    title: BRAND,
     description:
-      "สุ่มแบ่งทีมทัวร์นาเมนต์ RoV แบบยุติธรรม ตรวจสอบย้อนหลังได้ด้วย seed",
+      "สุ่มแบ่งทีมแบบยุติธรรม ตรวจสอบย้อนหลังได้ด้วย seed พร้อมสายแข่งและกราฟิกสำหรับสตรีม",
     type: "website",
   },
 };

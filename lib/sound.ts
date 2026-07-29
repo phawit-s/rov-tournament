@@ -13,7 +13,7 @@ type Voice =
   | "undo"
   | "donate";
 
-const MUTE_KEY = "rov-randomizer/muted";
+const MUTE_KEY = "tourney-hub/muted";
 const VOLUME = 0.28;
 
 let ctx: AudioContext | null = null;

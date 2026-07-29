@@ -7,6 +7,7 @@ import { authErrorMessage } from "@/lib/backend/authErrors";
 import { authStore } from "@/lib/backend/firebase";
 import Button from "../ui/Button";
 import Panel from "../ui/Panel";
+import { toast } from "../ui/Toast";
 import { Input, Label } from "../tournament/ui";
 
 type Mode = "signin" | "signup";
@@ -22,14 +23,15 @@ export default function AuthPanel({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  // แยกว่ากำลังทำอะไรอยู่ เพื่อให้สปินเนอร์ขึ้นเฉพาะปุ่มที่ถูกกด
+  const [busy, setBusy] = useState<"form" | "google" | "reset" | null>(null);
 
-  const run = async (fn: () => Promise<void>, activity?: string) => {
-    setBusy(true);
-    setError(null);
-    setNote(null);
+  const run = async (
+    kind: "form" | "google" | "reset",
+    fn: () => Promise<void>,
+    activity?: string,
+  ) => {
+    setBusy(kind);
     try {
       await fn();
       if (activity) {
@@ -37,24 +39,27 @@ export default function AuthPanel({
         recordActivity("auth.signin", `${activity} (${u?.email ?? u?.name ?? "-"})`);
       }
     } catch (err) {
-      setError(authErrorMessage(err));
+      // ข้อความผิดพลาดเด้งเป็น toast จะได้ไม่ดันฟอร์มให้กระโดด
+      toast(authErrorMessage(err), "error");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   const submit = () => {
     if (!email.trim() || password.length < 6) {
-      setError("กรอกอีเมลและรหัสผ่านอย่างน้อย 6 ตัว");
+      toast("กรอกอีเมลและรหัสผ่านอย่างน้อย 6 ตัว", "error");
       return;
     }
     if (mode === "signin") {
       void run(
+        "form",
         () => authStore.signInWithPassword(email, password),
         "เข้าสู่ระบบด้วยอีเมล",
       );
     } else {
       void run(
+        "form",
         () => authStore.registerWithPassword(email, password, name),
         "สมัครบัญชีใหม่",
       );
@@ -68,12 +73,10 @@ export default function AuthPanel({
       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
       className="mx-auto w-full max-w-md"
     >
-      <Panel className="p-7 sm:p-8">
-        <p className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase">
-          Account
-        </p>
+      <Panel variant="feature" className="p-7 sm:p-8">
+        <p className="slug">Account</p>
         <h2 className="mt-2 font-display text-2xl font-light text-ice">{title}</h2>
-        <p className="mt-2 text-sm text-muted">{description}</p>
+        <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
 
         {/* สลับโหมด */}
         <div className="mt-6 flex gap-1 rounded-xl tile p-1">
@@ -86,12 +89,8 @@ export default function AuthPanel({
             <button
               key={m.key}
               type="button"
-              onClick={() => {
-                setMode(m.key);
-                setError(null);
-                setNote(null);
-              }}
-              className={`relative flex-1 cursor-pointer rounded-lg px-3 py-2.5 font-display text-xs transition-colors ${
+              onClick={() => setMode(m.key)}
+              className={`relative min-h-11 flex-1 cursor-pointer rounded-lg px-3 py-2.5 font-display text-xs transition-colors ${
                 mode === m.key ? "text-[#1b1509]" : "text-muted hover:text-ice"
               }`}
             >
@@ -145,15 +144,14 @@ export default function AuthPanel({
             />
           </div>
 
-          {error && <p className="text-xs text-[#e79a9a]">{error}</p>}
-          {note && <p className="text-xs text-champagne">{note}</p>}
-
-          <Button onClick={submit} disabled={busy} className="w-full py-3.5">
-            {busy
-              ? "กำลังดำเนินการ…"
-              : mode === "signin"
-                ? "เข้าสู่ระบบ"
-                : "สมัครบัญชี"}
+          <Button
+            size="lg"
+            onClick={submit}
+            loading={busy === "form"}
+            disabled={busy !== null}
+            className="w-full"
+          >
+            {mode === "signin" ? "เข้าสู่ระบบ" : "สมัครบัญชี"}
           </Button>
 
           {mode === "signin" && (
@@ -161,15 +159,15 @@ export default function AuthPanel({
               type="button"
               onClick={() => {
                 if (!email.trim()) {
-                  setError("ใส่อีเมลก่อน แล้วกดลืมรหัสผ่านอีกที");
+                  toast("ใส่อีเมลก่อน แล้วกดลืมรหัสผ่านอีกที", "error");
                   return;
                 }
-                void run(async () => {
+                void run("reset", async () => {
                   await authStore.resetPassword(email);
-                  setNote("ส่งลิงก์ตั้งรหัสผ่านใหม่ไปที่อีเมลแล้ว");
+                  toast("ส่งลิงก์ตั้งรหัสผ่านใหม่ไปที่อีเมลแล้ว", "success");
                 });
               }}
-              className="w-full cursor-pointer text-center text-xs text-muted transition-colors hover:text-champagne"
+              className="min-h-11 w-full cursor-pointer text-center text-xs text-muted transition-colors hover:text-champagne"
             >
               ลืมรหัสผ่าน?
             </button>
@@ -177,18 +175,20 @@ export default function AuthPanel({
         </div>
 
         <div className="my-6 flex items-center gap-3">
-          <span className="h-px flex-1 rule" />
-          <span className="font-display text-[10px] tracking-luxe text-muted uppercase">
-            หรือ
-          </span>
-          <span className="h-px flex-1 rule" />
+          <span className="rule h-px flex-1" />
+          <span className="slug slug-2">หรือ</span>
+          <span className="rule h-px flex-1" />
         </div>
 
         <Button
           variant="outline"
-          className="w-full py-3.5"
-          disabled={busy}
-          onClick={() => void run(() => authStore.signIn(), "เข้าสู่ระบบด้วย Google")}
+          size="lg"
+          className="w-full"
+          loading={busy === "google"}
+          disabled={busy !== null}
+          onClick={() =>
+            void run("google", () => authStore.signIn(), "เข้าสู่ระบบด้วย Google")
+          }
         >
           เข้าสู่ระบบด้วย Google
         </Button>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
+import { animate, motion, useMotionValue, useReducedMotion } from "motion/react";
 import { exportTeamsPng } from "@/lib/exportImage";
 import { clearShareHash, shareUrl } from "@/lib/share";
 import { sfx } from "@/lib/sound";
@@ -9,31 +9,33 @@ import { teamsToText } from "@/lib/teams";
 import type { Tournament } from "@/hooks/useTournament";
 import Button from "./ui/Button";
 import Panel from "./ui/Panel";
+import Corners from "./ui/Corners";
+import { FigureRow } from "./ui/Figure";
+import { toast } from "./ui/Toast";
 import TeamBoard from "./TeamBoard";
 import GoldDust from "./fx/GoldDust";
 
 export default function ResultScreen({ t }: { t: Tournament }) {
   const { state, dispatch, derived, sharedView } = t;
-  const [toast, setToast] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // ตราเวลาต้องตรงกับที่ exportImage เขียนลงรูป และต้องไม่เปลี่ยนทุกรีเรนเดอร์
+  const [stamp] = useState(() =>
+    new Date().toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }),
+  );
 
   useEffect(() => {
     sfx.play("finish");
   }, []);
-
-  useEffect(() => {
-    if (!toast) return;
-    const id = window.setTimeout(() => setToast(null), 2400);
-    return () => window.clearTimeout(id);
-  }, [toast]);
 
   const teamName = (index: number) => state.teamNames[index] ?? "";
 
   const copy = async (text: string, message: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      setToast(message);
+      toast(message, "success");
     } catch {
-      setToast("คัดลอกไม่สำเร็จ ลองเลือกข้อความเอง");
+      toast("คัดลอกไม่สำเร็จ ลองเลือกข้อความเอง", "error");
     }
   };
 
@@ -47,12 +49,14 @@ export default function ResultScreen({ t }: { t: Tournament }) {
     >
       <GoldDust />
 
-      <Panel tag="Result" className="p-7 text-center sm:p-9">
+      <Panel variant="feature" tag="Result" className="p-7 text-center sm:p-9">
+        <Corners len={20} o={0.4} />
+
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.8 }}
-          className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase"
+          className="slug"
         >
           Tournament Ready
         </motion.p>
@@ -61,22 +65,30 @@ export default function ResultScreen({ t }: { t: Tournament }) {
           initial={{ y: 14, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.1, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-3 font-display text-3xl font-light sm:text-5xl"
+          className="mt-3 font-display text-h2 font-light"
         >
           <span className="text-gold-grad">แบ่งทีมเรียบร้อย</span>
         </motion.h2>
 
-        <p className="mt-3.5 text-sm text-muted">
-          ผู้เล่น {derived.total} คน · {derived.teamCount} ทีม
-          {derived.benchCount > 0 && ` · สำรอง ${derived.benchCount} คน`} · seed{" "}
-          <span className="font-display tracking-[0.16em] text-champagne">
-            {state.seed}
-          </span>
-        </p>
+        <p className="num mt-3 text-xs text-muted">{stamp}</p>
 
         <div className="mx-auto mt-6 h-px w-24 bg-[linear-gradient(90deg,transparent,rgba(230,200,148,0.45),transparent)]" />
 
-        <div className="mt-6 flex flex-wrap justify-center gap-2.5">
+        {/* สถิติของชุดนี้ — เลขจริงขนาดพาดหัวแทนประโยคยัดเดียว */}
+        <FigureRow className="mt-7 text-left">
+          <GoldFigure value={derived.total} label="ผู้เล่น" />
+          <GoldFigure value={derived.teamCount} label="ทีม" className="sm:pl-6" />
+          <GoldFigure value={derived.benchCount} label="สำรอง" className="sm:pl-6" />
+          <div className="sm:pl-6">
+            {/* seed เป็นตัวอักษรผสม จึงใช้ .num อย่างเดียว ไม่ใช้ .fig ที่บีบระยะไว้สำหรับตัวเลขล้วน */}
+            <span className="num text-gold-grad block truncate font-display text-[clamp(1.5rem,3.4vw,2.2rem)] leading-tight font-light tracking-[0.08em]">
+              {state.seed || "—"}
+            </span>
+            <p className="slug slug-2 mt-2">Seed</p>
+          </div>
+        </FigureRow>
+
+        <div className="mt-8 flex flex-wrap justify-center gap-2.5">
           <Button
             onClick={() =>
               copy(
@@ -105,14 +117,18 @@ export default function ResultScreen({ t }: { t: Tournament }) {
           </Button>
           <Button
             variant="ghost"
+            loading={saving}
             onClick={() => {
-              setToast("กำลังสร้างรูป…");
+              setSaving(true);
               void exportTeamsPng(
                 derived.teams,
                 derived.bench,
                 state.seed,
                 teamName,
-              ).then(() => setToast("บันทึกรูปแล้ว"));
+              )
+                .then(() => toast("บันทึกรูปแล้ว", "success"))
+                .catch(() => toast("สร้างรูปไม่สำเร็จ", "error"))
+                .finally(() => setSaving(false));
             }}
           >
             บันทึกเป็นรูป
@@ -126,6 +142,7 @@ export default function ResultScreen({ t }: { t: Tournament }) {
         benchCount={derived.benchCount}
         activeTeamIndex={null}
         teamName={teamName}
+        stagger={0.08}
         // เปิดจากลิงก์แชร์ = ดูอย่างเดียว แก้ชื่อทีมไม่ได้
         onRenameTeam={
           sharedView
@@ -138,7 +155,7 @@ export default function ResultScreen({ t }: { t: Tournament }) {
         <div className="flex flex-col items-center gap-4 pt-2">
           <p className="max-w-xl text-center text-sm text-muted">
             ผลชุดนี้ถูกล็อกไว้กับ seed{" "}
-            <span className="font-display tracking-[0.16em] text-champagne">
+            <span className="num font-display tracking-[0.16em] text-champagne">
               {state.seed}
             </span>{" "}
             แก้ไขจากลิงก์นี้ไม่ได้ ใครเปิดก็เห็นเหมือนกันทุกคน
@@ -162,19 +179,60 @@ export default function ResultScreen({ t }: { t: Tournament }) {
           </Button>
         </div>
       )}
+    </motion.div>
+  );
+}
 
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 16 }}
-            className="fixed inset-x-0 bottom-[calc(1.75rem+var(--sab))] z-50 mx-auto w-fit rounded-xl border border-champagne/25 bg-ink-2/95 px-6 py-3 text-sm text-ice shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)] backdrop-blur"
-          >
-            {toast}
-          </motion.div>
-        )}
-      </AnimatePresence>
+/**
+ * ตัวเลขพาดหัวทาไล่สีทอง นับขึ้นตอนโผล่เข้าจอ
+ * เขียนค่าลง textContent ผ่าน ref เพื่อไม่ให้รีเรนเดอร์ทุกเฟรม
+ */
+function GoldFigure({
+  value,
+  label,
+  className = "",
+}: {
+  value: number;
+  label: string;
+  className?: string;
+}) {
+  const mv = useMotionValue(0);
+  const el = useRef<HTMLSpanElement>(null);
+  const reduced = useReducedMotion();
+
+  useEffect(
+    () =>
+      mv.on("change", (v) => {
+        if (el.current) el.current.textContent = Math.round(v).toLocaleString("th-TH");
+      }),
+    [mv],
+  );
+
+  const onEnter = () => {
+    if (reduced) {
+      mv.set(value);
+      return;
+    }
+    animate(mv, value, { duration: 1.1, ease: [0.16, 1, 0.3, 1] });
+  };
+
+  return (
+    <motion.div
+      viewport={{ once: true, amount: 0.6 }}
+      onViewportEnter={onEnter}
+      className={className}
+    >
+      {value === 0 ? (
+        <span className="fig block text-[clamp(2rem,4.5vw,3.4rem)] text-muted/50">—</span>
+      ) : (
+        <span
+          ref={el}
+          className="fig num text-gold-grad block text-[clamp(2rem,4.5vw,3.4rem)]"
+        >
+          0
+        </span>
+      )}
+      <p className="slug mt-2">{label}</p>
     </motion.div>
   );
 }

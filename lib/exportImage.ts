@@ -1,15 +1,35 @@
 "use client";
 
+import { BRAND_MARK } from "./brand";
+import { drawCrest } from "./crest";
 import type { BuiltTeam, Member } from "./types";
 
-const W = 1240;
 const PAD = 64;
 const GAP = 20;
+/** ความสูงหัวการ์ดก่อนถึงรายชื่อคนแรก */
+const CARD_HEAD = 100;
+const ROW_H = 42;
 
 const DISPLAY = "'Prompt', 'Segoe UI', sans-serif";
 const BODY = "'IBM Plex Sans Thai', 'Segoe UI', sans-serif";
 
-const PALETTES = {
+type Palette = {
+  bg: string;
+  text: string;
+  muted: string;
+  hair: string;
+  hairSoft: string;
+  cardBg: string;
+  glow: string;
+  goldLine: string;
+  title: readonly [string, string, string];
+  label: string;
+  footer: string;
+  /** 255 = ธีมมืด (เกรนเป็นแสง), 0 = ธีมสว่าง (เกรนเป็นเงา) */
+  noise: number;
+};
+
+const PALETTES: Record<"dark" | "light", Palette> = {
   dark: {
     bg: "#0a0a0e",
     text: "#ffffff",
@@ -22,6 +42,7 @@ const PALETTES = {
     title: ["#b98f4e", "#f2dcb0", "#cfa765"] as const,
     label: "rgba(230,200,148,0.75)",
     footer: "rgba(155,160,179,0.7)",
+    noise: 255,
   },
   light: {
     bg: "#f4f1ea",
@@ -35,10 +56,11 @@ const PALETTES = {
     title: ["#6c521f", "#b18e42", "#8a6a2c"] as const,
     label: "rgba(138,106,44,0.9)",
     footer: "rgba(109,103,93,0.85)",
+    noise: 0,
   },
 };
 
-function palette() {
+function palette(): Palette {
   const theme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
   return PALETTES[theme];
 }
@@ -57,13 +79,24 @@ export async function exportTeamsPng(
     /* ไม่มี font API ก็ใช้ฟอนต์ระบบไป */
   }
 
-  const cols = teams.length <= 2 ? teams.length || 1 : teams.length <= 6 ? 3 : 4;
+  // ทีมน้อยให้เป็นแนวตั้งขนาดสตอรี่ ลงมือถือแล้วเต็มจอพอดี ทีมเยอะค่อยกางเป็นแนวนอน
+  const portrait = teams.length <= 3;
+  const W = portrait ? 1080 : 1240;
+  const cols = portrait
+    ? 1
+    : teams.length <= 2
+      ? teams.length || 1
+      : teams.length <= 6
+        ? 3
+        : 4;
+
   const cardW = Math.floor((W - PAD * 2 - GAP * (cols - 1)) / cols);
   const maxRows = teams.reduce((max, t) => Math.max(max, t.size), 0);
-  const cardH = 92 + maxRows * 42;
+  const cardH = CARD_HEAD + maxRows * ROW_H;
   const rows = Math.ceil(teams.length / cols);
   const benchH = bench.length ? 104 : 0;
-  const H = PAD + 150 + rows * (cardH + GAP) + benchH + 84;
+  const contentH = PAD + 150 + rows * (cardH + GAP) + benchH + 84;
+  const H = Math.max(contentH, portrait ? 1350 : 0);
 
   const canvas = document.createElement("canvas");
   const scale = 2;
@@ -90,9 +123,9 @@ export async function exportTeamsPng(
 
   // หัวเรื่อง
   ctx.fillStyle = c.label;
-  ctx.font = `500 13px ${DISPLAY}`;
+  ctx.font = `600 13px ${DISPLAY}`;
   ctx.letterSpacing = "6px";
-  ctx.fillText("ROV TEAM RANDOMIZER", PAD, PAD + 16);
+  ctx.fillText(BRAND_MARK, PAD, PAD + 16);
   ctx.letterSpacing = "0px";
 
   const title = ctx.createLinearGradient(PAD, 0, PAD + 520, 0);
@@ -109,11 +142,7 @@ export async function exportTeamsPng(
     dateStyle: "medium",
     timeStyle: "short",
   });
-  ctx.fillText(
-    `${teams.length} ทีม · ${stamp} · seed ${seed}`,
-    PAD,
-    PAD + 108,
-  );
+  ctx.fillText(`${teams.length} ทีม · ${stamp} · seed ${seed}`, PAD, PAD + 108);
 
   hairline(ctx, PAD, PAD + 132, W - PAD, c.hair);
 
@@ -123,12 +152,13 @@ export async function exportTeamsPng(
     const row = Math.floor(i / cols);
     const x = PAD + col * (cardW + GAP);
     const y = PAD + 150 + row * (cardH + GAP);
-    drawTeamCard(ctx, team, teamName(team.index), x, y, cardW, cardH);
+    drawTeamCard(ctx, team, teamName(team.index), x, y, cardW, cardH, c);
   });
 
   // ตัวสำรอง
+  let bottomOfContent = PAD + 150 + rows * (cardH + GAP);
   if (bench.length) {
-    const y = PAD + 150 + rows * (cardH + GAP);
+    const y = bottomOfContent;
     roundRect(ctx, PAD, y, W - PAD * 2, 80, 14);
     ctx.fillStyle = c.cardBg;
     ctx.fill();
@@ -137,7 +167,7 @@ export async function exportTeamsPng(
     ctx.stroke();
 
     ctx.fillStyle = c.muted;
-    ctx.font = `500 12px ${DISPLAY}`;
+    ctx.font = `600 12px ${DISPLAY}`;
     ctx.letterSpacing = "4px";
     ctx.fillText("SUBSTITUTE", PAD + 24, y + 30);
     ctx.letterSpacing = "0px";
@@ -145,6 +175,13 @@ export async function exportTeamsPng(
     ctx.fillStyle = c.text;
     ctx.font = `400 19px ${BODY}`;
     ctx.fillText(bench.map((m) => m.player.name).join("   ·   "), PAD + 24, y + 60);
+    bottomOfContent += benchH;
+  }
+
+  // ช่องว่างที่เหลือของภาพแนวตั้ง เติมด้วยวงแหวนจางแทนที่จะปล่อยโล่ง
+  const spare = H - PAD - 40 - bottomOfContent;
+  if (spare > 140) {
+    drawRings(ctx, W / 2, bottomOfContent + spare / 2, Math.min(spare, 320) / 2, c);
   }
 
   hairline(ctx, PAD, H - PAD - 26, W - PAD, c.hairSoft);
@@ -156,6 +193,9 @@ export async function exportTeamsPng(
     H - PAD + 4,
   );
 
+  // เกรนบางๆ ชั้นเดียว ให้ภาพไม่แบนเหมือนภาพเวกเตอร์
+  drawNoise(ctx, W, H, c);
+
   const blob: Blob | null = await new Promise((resolve) =>
     canvas.toBlob(resolve, "image/png"),
   );
@@ -163,7 +203,7 @@ export async function exportTeamsPng(
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `rov-teams-${seed || "result"}.png`;
+  a.download = `teams-${seed || "result"}.png`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -178,10 +218,10 @@ function drawTeamCard(
   y: number,
   w: number,
   h: number,
+  c: Palette,
 ) {
   const { identity } = team;
   const rgb = identity.rgb.split(" ").join(",");
-  const c = palette();
 
   roundRect(ctx, x, y, w, h, 16);
   ctx.fillStyle = c.cardBg;
@@ -190,28 +230,47 @@ function drawTeamCard(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // เส้นทองบางบนหัวการ์ด
-  const cap = ctx.createLinearGradient(x + w * 0.15, 0, x + w * 0.85, 0);
-  cap.addColorStop(0, "rgba(255,255,255,0)");
-  cap.addColorStop(0.5, `rgba(${rgb},0.7)`);
-  cap.addColorStop(1, "rgba(255,255,255,0)");
+  // แถบสีประจำทีมหนา 4px คาดหัวการ์ด ตัดตามมุมโค้งของการ์ด
+  ctx.save();
+  roundRect(ctx, x, y, w, h, 16);
+  ctx.clip();
+  const cap = ctx.createLinearGradient(x, 0, x + w, 0);
+  cap.addColorStop(0, `rgba(${rgb},0)`);
+  cap.addColorStop(0.35, `rgba(${rgb},0.9)`);
+  cap.addColorStop(1, `rgba(${rgb},0.25)`);
   ctx.fillStyle = cap;
-  ctx.fillRect(x + 1, y, w - 2, 1);
+  ctx.fillRect(x, y, w, 4);
+  ctx.restore();
+
+  // ตราทีม — สูตรเดียวกับ Crest บนเว็บ ไม่ใช่อีโมจิที่เรนเดอร์ไม่เท่ากันทุกเครื่อง
+  drawCrest(ctx, x + 40, y + 42, 18, identity);
 
   ctx.fillStyle = identity.hex;
-  ctx.font = `500 15px ${DISPLAY}`;
-  ctx.fillText(identity.glyph, x + 22, y + 40);
   ctx.font = `500 22px ${DISPLAY}`;
-  ctx.fillText(customName || identity.name, x + 44, y + 40);
+  ctx.fillText(fit(ctx, customName || identity.name, w - 92), x + 66, y + 42);
 
   ctx.fillStyle = c.muted;
-  ctx.font = `400 13px ${DISPLAY}`;
+  ctx.font = `500 13px ${DISPLAY}`;
   ctx.letterSpacing = "3px";
-  ctx.fillText(`TEAM ${team.index + 1}`, x + 22, y + 62);
+  ctx.fillText(`TEAM ${String(team.index + 1).padStart(2, "0")}`, x + 66, y + 66);
   ctx.letterSpacing = "0px";
 
+  ctx.fillStyle = `rgba(${rgb},0.85)`;
+  ctx.font = `400 13px ${DISPLAY}`;
+  const cnt = `${team.members.length}/${team.size}`;
+  ctx.fillText(cnt, x + w - 22 - ctx.measureText(cnt).width, y + 42);
+
+  // ล็อกคอลัมน์เลนให้ตรงกันทุกแถว ไม่ปล่อยให้ชิดขวาแล้วเยื้องกันไปมา
+  ctx.font = `400 15px ${BODY}`;
+  const laneW = team.members.reduce(
+    (max, m) => (m.lane ? Math.max(max, ctx.measureText(m.lane).width) : max),
+    0,
+  );
+  const laneX = laneW ? x + w - 22 - laneW : x + w - 22;
+  const nameMax = laneX - (x + 52) - 16;
+
   team.members.forEach((member, index) => {
-    const my = y + 96 + index * 42;
+    const my = y + CARD_HEAD + index * ROW_H - 4;
 
     ctx.fillStyle = c.muted;
     ctx.font = `400 13px ${DISPLAY}`;
@@ -219,19 +278,80 @@ function drawTeamCard(
 
     ctx.fillStyle = c.text;
     ctx.font = `400 19px ${BODY}`;
-    ctx.fillText(fit(ctx, member.player.name, w - 130), x + 52, my);
+    ctx.fillText(fit(ctx, member.player.name, nameMax), x + 52, my);
 
     if (member.lane) {
       ctx.fillStyle = `rgba(${rgb},0.9)`;
       ctx.font = `400 15px ${BODY}`;
-      const lw = ctx.measureText(member.lane).width;
-      ctx.fillText(member.lane, x + w - 22 - lw, my);
+      ctx.fillText(member.lane, laneX, my);
     }
 
     if (index < team.members.length - 1) {
       hairline(ctx, x + 22, my + 14, x + w - 22, c.hairSoft);
     }
   });
+}
+
+/** วงแหวนซ้อนจางๆ ใช้เติมช่องว่างของภาพแนวตั้ง */
+function drawRings(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  c: Palette,
+) {
+  ctx.save();
+  ctx.strokeStyle = c.goldLine;
+  ctx.globalAlpha = 0.18;
+  [1, 0.72, 0.44].forEach((k, i) => {
+    ctx.lineWidth = i === 0 ? 1.4 : 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * k, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+  // ขีดบอกองศาแบบเดียวกับตราทีม
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 24; i++) {
+    const a = (Math.PI * 2 * i) / 24;
+    const r1 = r * (i % 3 === 0 ? 1.06 : 1.03);
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** เกรนหนึ่งชั้น globalAlpha ต่ำ ไม่ให้กินเวลาเรนเดอร์ */
+function drawNoise(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  c: Palette,
+) {
+  const tile = document.createElement("canvas");
+  tile.width = 64;
+  tile.height = 64;
+  const tctx = tile.getContext("2d");
+  if (!tctx) return;
+  const img = tctx.createImageData(64, 64);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = Math.random() * 255;
+    img.data[i] = v;
+    img.data[i + 1] = v;
+    img.data[i + 2] = v;
+    img.data[i + 3] = 255;
+  }
+  tctx.putImageData(img, 0, 0);
+
+  const pattern = ctx.createPattern(tile, "repeat");
+  if (!pattern) return;
+  ctx.save();
+  ctx.globalAlpha = 0.04;
+  ctx.globalCompositeOperation = c.noise ? "lighter" : "multiply";
+  ctx.fillStyle = pattern;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
 }
 
 function hairline(
