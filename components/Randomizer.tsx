@@ -21,7 +21,13 @@ const STEPS = [
 export default function Randomizer() {
   const t = useTournament();
   const [askReset, setAskReset] = useState(false);
-  const phaseIndex = STEPS.findIndex((s) => s.key === t.state.phase);
+  /*
+    ขั้นตอนปัจจุบันอ่านมาจาก localStorage ฝั่งเซิร์ฟเวอร์จึงไม่มีทางรู้
+    ต้องยึดขั้นแรกไว้ก่อนจนกว่าจะ hydrate เสร็จ ไม่งั้น HTML สองฝั่งไม่ตรงกัน
+  */
+  const phaseIndex = t.hydrated
+    ? STEPS.findIndex((s) => s.key === t.state.phase)
+    : 0;
 
   return (
     <div className="space-y-5">

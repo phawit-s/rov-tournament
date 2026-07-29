@@ -10,6 +10,30 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ---------- ผู้ดูแลระบบ ----------
+    // มีเอกสาร admins/{uid} = บัญชีนั้นเป็นผู้ดูแล
+    // นี่คือคำตอบที่เชื่อได้จริงว่า "ใครเป็นแอดมิน" เพราะกติกาถูกบังคับที่ฝั่ง Google
+    // ต่อให้แก้ localStorage หรือตัวแปรใน devtools ก็อ่านเอกสารของคนอื่นไม่ได้
+    // และสร้างเอกสารให้ตัวเองไม่ได้ถ้ายังไม่ได้เป็นผู้ดูแลอยู่ก่อน
+    //
+    // คนแรกต้องเพิ่มด้วยมือที่ Firebase Console (Console ไม่ผ่านกติกานี้)
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    match /admins/{uid} {
+      // อ่านได้เฉพาะเอกสารของตัวเอง เว็บใช้เช็คว่าตัวเองมีสิทธิ์ไหม
+      allow get: if request.auth != null && request.auth.uid == uid;
+      // ผู้ดูแลด้วยกันเห็นรายชื่อทั้งหมดได้
+      allow list: if isAdmin();
+      // เพิ่มผู้ดูแลใหม่ได้เฉพาะผู้ดูแลที่มีอยู่แล้ว
+      allow create, update: if isAdmin();
+      // ถอดสิทธิ์คนอื่นได้ แต่ถอดตัวเองไม่ได้ กันล็อกตัวเองออกจนไม่เหลือใคร
+      allow delete: if isAdmin() && request.auth.uid != uid;
+    }
+
     // ---------- ช่อง (โปรไฟล์ผู้จัด + ระบบโดเนท/สมาชิก) ----------
     match /channels/{channelId} {
       function isChannelOwner() {

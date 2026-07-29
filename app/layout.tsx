@@ -52,7 +52,14 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        {/* ตั้งธีมก่อนเบราว์เซอร์วาดหน้าจอ ไม่งั้นจะเห็นจอกระพริบตอนโหลด */}
+        {/*
+          ตั้งธีมก่อนเบราว์เซอร์วาดหน้าจอ ไม่งั้นจะเห็นจอกระพริบตอนโหลด
+          ต้องเป็น <script> ธรรมดาใน <head> เพราะต้องรันตอนแปลง HTML
+          next/script strategy="beforeInteractive" การันตีแค่ว่ามาก่อนโค้ดของ Next
+          ไม่ได้การันตีว่ามาก่อนการวาดจอ จึงยังกันจอกระพริบไม่ได้
+          (React จะเตือนใน dev ว่าสคริปต์ไม่ทำงานตอนเรนเดอร์ฝั่งไคลเอนต์ — ถูกแล้ว
+           เพราะธีมถูกตั้งไปตั้งแต่โหลดครั้งแรก หลังจากนั้น themeStore ดูแลต่อ)
+        */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body className="antialiased">{children}</body>

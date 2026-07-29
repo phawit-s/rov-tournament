@@ -4,32 +4,65 @@ import { useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { gateStore } from "@/lib/gate";
+import { useAccess } from "@/hooks/useAdmin";
+import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { recordActivity } from "@/lib/activity";
 import Button from "@/components/ui/Button";
 import Panel from "@/components/ui/Panel";
 import Corners from "@/components/ui/Corners";
 import { toast } from "@/components/ui/Toast";
-import { Input, Label } from "@/components/tournament/ui";
+import { IconCheck, IconCopy, IconLock } from "@/components/ui/icons";
+import { Input, Label, Skeleton } from "@/components/tournament/ui";
 
 /**
- * ล็อกหน้าหลังบ้านไว้หลังรหัสผู้จัด
- * ผู้ชมทั่วไปจะเห็นแค่หน้านี้แทนเนื้อหา พร้อมทางกลับไปเครื่องมือที่เปิดให้ใช้ฟรี
+ * ล็อกหน้าหลังบ้าน
+ *
+ * ทางหลักคือล็อกอินด้วยบัญชีที่มีเอกสาร admins/{uid} ใน Firestore
+ * ซึ่งเป็นคำตอบที่ปลอมไม่ได้เพราะกติกาบังคับอยู่ฝั่งเซิร์ฟเวอร์
+ * ทางรองคือรหัสผู้จัดในเครื่อง ไว้ใช้เครื่องมือที่ทำงานในเบราว์เซอร์ล้วน
  */
 export default function AdminGate({ children }: { children: ReactNode }) {
-  const admin = useSyncExternalStore(
-    gateStore.subscribe,
-    gateStore.getSnapshot,
-    gateStore.getServerSnapshot,
-  );
+  const access = useAccess();
 
-  if (admin) return <>{children}</>;
+  if (access !== "none") {
+    return (
+      <>
+        {access === "local" && hasBackend && <LocalModeNotice />}
+        {children}
+      </>
+    );
+  }
   return <AdminLocked />;
 }
 
+/** โหมดเครื่องนี้ทำงานได้เฉพาะของที่อยู่ในเบราว์เซอร์ ต้องบอกให้ชัด */
+function LocalModeNotice() {
+  return (
+    <div className="tally sunken mb-6 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl py-3 pr-4 pl-5 text-xs">
+      <span className="slug">โหมดเครื่องนี้</span>
+      <span className="text-muted">
+        ปลดด้วยรหัสผู้จัด ใช้ได้เฉพาะข้อมูลในเบราว์เซอร์เครื่องนี้ —
+        ถ้าจะเผยแพร่ทัวร์หรือรับใบสมัครข้ามเครื่อง ต้องล็อกอินบัญชีผู้ดูแล
+      </span>
+    </div>
+  );
+}
+
 function AdminLocked() {
+  const snapshot = useSyncExternalStore(
+    authStore.subscribe,
+    authStore.getSnapshot,
+    authStore.getServerSnapshot,
+  );
+  const user = authStore.user();
+  const claim = gateStore.claim();
+
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [wrong, setWrong] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showPin, setShowPin] = useState(!hasBackend);
 
   const submit = async () => {
     setBusy(true);
@@ -38,13 +71,15 @@ function AdminLocked() {
     if (ok) {
       setPin("");
       setWrong(false);
-      recordActivity("auth.signin", "ปลดล็อกโหมดผู้จัด");
+      recordActivity("auth.signin", "ปลดล็อกโหมดผู้จัดในเครื่อง");
       toast("ปลดล็อกโหมดผู้จัดแล้ว", "success");
       return;
     }
     setWrong(true);
     toast("รหัสไม่ถูกต้อง", "error");
   };
+
+  const signedIn = !!user && !user.anonymous;
 
   return (
     <div className="grid place-items-center py-10">
@@ -65,43 +100,153 @@ function AdminLocked() {
           <h2 className="mt-2 font-display text-2xl font-light text-ice">
             หน้านี้สำหรับผู้จัดแข่ง
           </h2>
-          <p className="mt-3 text-sm leading-relaxed text-muted">
-            ใส่รหัสผู้จัดเพื่อเปิดเมนูจัดทัวร์นาเมนต์ ผู้เล่น ช่อง widget
-            และประวัติ
-          </p>
 
-          <div className="mt-7">
-            <Label hint="ถามจากคนที่ดูแลเว็บนี้">รหัสผู้จัด</Label>
-            <Input
-              type="password"
-              autoFocus
-              autoComplete="off"
-              value={pin}
-              placeholder="••••••••"
-              onChange={(e) => {
-                setPin(e.target.value);
-                setWrong(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void submit();
-              }}
-              className={wrong ? "border-[#e79a9a]/60" : ""}
-            />
-            {wrong && (
-              <p className="mt-2 text-xs text-[#e79a9a]">
-                รหัสไม่ถูกต้อง ลองใหม่อีกครั้ง
+          {hasBackend ? (
+            <>
+              <p className="mt-3 text-sm leading-relaxed text-muted">
+                ล็อกอินด้วยบัญชีที่ได้รับสิทธิ์ผู้ดูแล
+                สิทธิ์ถูกตรวจที่ฝั่งเซิร์ฟเวอร์ ไม่ใช่ในเบราว์เซอร์
               </p>
-            )}
-          </div>
 
-          <Button
-            size="lg"
-            loading={busy}
-            className="mt-5 w-full"
-            onClick={() => void submit()}
-          >
-            ปลดล็อก
-          </Button>
+              {snapshot === "loading" || claim === "loading" ? (
+                <div className="mt-7 space-y-3">
+                  <Skeleton className="h-3 w-32" />
+                  <Skeleton className="h-11 w-full rounded-xl" />
+                </div>
+              ) : signedIn ? (
+                <div className="mt-7">
+                  {/* ล็อกอินแล้วแต่ยังไม่มีสิทธิ์ — บอกวิธีขอให้ชัด */}
+                  <div className="tile rounded-xl p-4">
+                    <p className="slug slug-2">ล็อกอินอยู่</p>
+                    <p className="mt-1.5 truncate text-sm text-ice">
+                      {user.email ?? user.name}
+                    </p>
+                  </div>
+
+                  <p className="mt-4 text-sm leading-relaxed text-muted">
+                    บัญชีนี้ยังไม่มีสิทธิ์ผู้ดูแล
+                    ส่งรหัสผู้ใช้ด้านล่างให้คนที่ดูแลเว็บ
+                    เพื่อเพิ่มเข้ารายชื่อผู้ดูแล
+                  </p>
+
+                  <div className="field mt-3 flex items-center gap-2 rounded-xl px-3 py-2.5">
+                    <code className="num min-w-0 flex-1 truncate text-xs text-ice">
+                      {user.uid}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard
+                          .writeText(user.uid)
+                          .then(() => {
+                            setCopied(true);
+                            toast("คัดลอกรหัสผู้ใช้แล้ว", "success");
+                          })
+                          .catch(() => toast("คัดลอกไม่สำเร็จ", "error"));
+                      }}
+                      aria-label="คัดลอกรหัสผู้ใช้"
+                      className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-lg text-champagne transition-colors hover:bg-champagne/10"
+                    >
+                      {copied ? (
+                        <IconCheck className="h-4 w-4" strokeWidth={2} />
+                      ) : (
+                        <IconCopy className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="mt-4"
+                    onClick={() => void authStore.signOut()}
+                  >
+                    เปลี่ยนบัญชี
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  size="lg"
+                  loading={pending}
+                  className="mt-7 w-full"
+                  onClick={() => {
+                    setPending(true);
+                    authStore
+                      .signIn()
+                      .catch(() =>
+                        toast("เข้าสู่ระบบไม่สำเร็จ ป็อปอัปอาจถูกบล็อก", "error"),
+                      )
+                      .finally(() => setPending(false));
+                  }}
+                >
+                  เข้าสู่ระบบด้วย Google
+                </Button>
+              )}
+            </>
+          ) : (
+            <p className="mt-3 text-sm leading-relaxed text-muted">
+              ใส่รหัสผู้จัดเพื่อเปิดเมนูจัดทัวร์นาเมนต์ ผู้เล่น widget และประวัติ
+            </p>
+          )}
+
+          {/* ---- รหัสในเครื่อง ---- */}
+          {hasBackend && (
+            <>
+              <span className="rule my-7 block h-px" />
+              {!showPin && (
+                <button
+                  type="button"
+                  onClick={() => setShowPin(true)}
+                  className="flex cursor-pointer items-center gap-2 font-display text-xs text-muted transition-colors hover:text-champagne"
+                >
+                  <IconLock className="h-3.5 w-3.5" />
+                  ใช้รหัสผู้จัดสำหรับเครื่องนี้แทน
+                </button>
+              )}
+            </>
+          )}
+
+          {showPin && (
+            <div className={hasBackend ? "" : "mt-7"}>
+              <Label
+                hint={
+                  hasBackend
+                    ? "เปิดได้เฉพาะเครื่องมือที่ทำงานในเบราว์เซอร์ ข้อมูลบนคลาวด์ยังต้องล็อกอิน"
+                    : "ถามจากคนที่ดูแลเว็บนี้"
+                }
+              >
+                รหัสผู้จัด
+              </Label>
+              <Input
+                type="password"
+                autoComplete="off"
+                value={pin}
+                placeholder="••••••••"
+                onChange={(e) => {
+                  setPin(e.target.value);
+                  setWrong(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void submit();
+                }}
+                className={wrong ? "border-[#e79a9a]/60" : ""}
+              />
+              {wrong && (
+                <p className="mt-2 text-xs text-[#e79a9a]">
+                  รหัสไม่ถูกต้อง ลองใหม่อีกครั้ง
+                </p>
+              )}
+              <Button
+                size="lg"
+                variant={hasBackend ? "outline" : "primary"}
+                loading={busy}
+                className="mt-4 w-full"
+                onClick={() => void submit()}
+              >
+                ปลดล็อกเครื่องนี้
+              </Button>
+            </div>
+          )}
 
           <span className="rule my-7 block h-px" />
 

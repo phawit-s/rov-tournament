@@ -1,16 +1,25 @@
 "use client";
 
+import { adminClaimStore, type AdminState } from "./backend/admin";
+import { hasBackend } from "./backend/config";
+
 /**
- * โหมดผู้จัด — ล็อกเมนูและหน้าหลังบ้านไว้ด้วยรหัสผ่านหนึ่งชุด
+ * สิทธิ์ผู้จัด — มีสองระดับ ต่างกันตรงที่ "ใครเป็นคนตัดสิน"
  *
- * ข้อจำกัดที่ต้องรู้: เว็บนี้เป็น static ล้วน ไม่มีเซิร์ฟเวอร์ตรวจรหัสให้
- * รหัสจึงถูกเทียบด้วย SHA-256 ฝั่งเบราว์เซอร์ ตัวรหัสจริงไม่ได้อยู่ในไฟล์ JS
- * แต่คนที่รู้วิธีก็ยังตั้ง localStorage เองเพื่อข้ามได้
+ *  verified : Firestore ยืนยันว่ามีเอกสาร admins/{uid} อยู่จริง
+ *             กติกาถูกบังคับบนเครื่อง Google ปลอมไม่ได้ และคำสั่งที่แตะข้อมูล
+ *             บนคลาวด์จะผ่านจริงเฉพาะระดับนี้
  *
- * ของจริงที่กันข้อมูลคือ Firebase Auth กับ firestore.rules ที่บังคับว่า
- * ต้องเป็นเจ้าของหรือทีมงานถึงจะเขียนข้อมูลทัวร์บนคลาวด์ได้
- * ชั้นนี้มีไว้เพื่อ "ผู้ชมทั่วไปเห็นแค่ที่ควรเห็น" ไม่ใช่กันคนตั้งใจเจาะ
+ *  local    : ใส่รหัสผู้จัดถูกในเครื่องนี้ เปิดได้แค่หน้าจอกับเครื่องมือที่ทำงาน
+ *             ในเบราว์เซอร์ล้วน (สุ่มทีม วงล้อ widget ประวัติ ทัวร์ที่ยังไม่เผยแพร่)
+ *             ข้อมูลบนคลาวด์ยังถูกปฏิเสธเหมือนเดิม
+ *
+ * ที่ต้องยอมรับ: หน้าเว็บเป็นไฟล์ static คนที่เปิด devtools เป็นก็บังคับให้เมนู
+ * โผล่ได้เสมอ ไม่ว่าจะล็อกยังไง สิ่งที่กันได้จริงคือ "ข้อมูล" ซึ่งอยู่ใต้
+ * firestore.rules ไม่ใช่ "หน้าจอ"
  */
+
+export type Access = "none" | "local" | "verified";
 
 const KEY = "tourney-hub/admin";
 
@@ -24,7 +33,7 @@ const HASH = (
 let cache: boolean | null = null;
 const listeners = new Set<() => void>();
 
-function read(): boolean {
+function readLocal(): boolean {
   if (cache !== null) return cache;
   if (typeof window === "undefined") return false;
   try {
@@ -35,7 +44,7 @@ function read(): boolean {
   return cache;
 }
 
-function write(value: boolean) {
+function writeLocal(value: boolean) {
   cache = value;
   try {
     if (value) localStorage.setItem(KEY, "1");
@@ -43,6 +52,10 @@ function write(value: boolean) {
   } catch {
     /* โหมดส่วนตัวของเบราว์เซอร์เขียนไม่ได้ ก็ปล่อยให้ปลดล็อกแค่รอบนี้ */
   }
+  emit();
+}
+
+function emit() {
   listeners.forEach((l) => l());
 }
 
@@ -54,18 +67,47 @@ async function sha256(text: string): Promise<string> {
     .join("");
 }
 
+/* ---------- สถานะรวมของทั้งสองแหล่ง ---------- */
+
+let claim: AdminState = hasBackend ? "loading" : "no-backend";
+let access: Access = "none";
+
+function recompute() {
+  const next: Access =
+    claim === "admin" ? "verified" : readLocal() ? "local" : "none";
+  if (next !== access) {
+    access = next;
+    return true;
+  }
+  return false;
+}
+
 export const gateStore = {
   subscribe(onChange: () => void) {
     listeners.add(onChange);
+    const stopClaim = adminClaimStore.subscribe(() => {
+      claim = adminClaimStore.getSnapshot();
+      recompute();
+      emit();
+    });
+    claim = adminClaimStore.getSnapshot();
+    recompute();
     return () => {
       listeners.delete(onChange);
+      stopClaim();
     };
   },
-  // ต้องคืน boolean ตัวเดิมเสมอ ไม่งั้น useSyncExternalStore จะวนไม่จบ
-  getSnapshot: () => read(),
-  getServerSnapshot: () => false,
+  // ต้องคืนค่าเดิมเสมอถ้าไม่มีอะไรเปลี่ยน ไม่งั้น useSyncExternalStore วนไม่จบ
+  getSnapshot: (): Access => {
+    recompute();
+    return access;
+  },
+  getServerSnapshot: (): Access => "none",
 
-  isAdmin: () => read(),
+  /** สถานะดิบของฝั่ง Firebase เอาไว้เลือกข้อความในหน้าล็อก */
+  claim: () => claim,
+
+  isAdmin: () => gateStore.getSnapshot() !== "none",
 
   /** เทียบรหัสแบบ hash — เรียกจาก event handler เท่านั้นเพราะเป็น async */
   async tryUnlock(input: string): Promise<boolean> {
@@ -73,7 +115,7 @@ export const gateStore = {
     if (!trimmed) return false;
     try {
       const ok = (await sha256(trimmed)) === HASH;
-      if (ok) write(true);
+      if (ok) writeLocal(true);
       return ok;
     } catch {
       // crypto.subtle ใช้ได้เฉพาะ https กับ localhost
@@ -81,8 +123,9 @@ export const gateStore = {
     }
   },
 
+  /** ปลดเฉพาะรหัสในเครื่อง สิทธิ์ที่ Firestore ยืนยันต้องออกด้วยการล็อกเอาต์ */
   lock() {
-    write(false);
+    writeLocal(false);
   },
 };
 

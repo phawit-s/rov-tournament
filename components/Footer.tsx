@@ -1,9 +1,9 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { BRAND_MARK } from "@/lib/brand";
 import { gateStore } from "@/lib/gate";
+import { useAccess } from "@/hooks/useAdmin";
 import { IconLock, IconUnlock } from "./ui/icons";
 import { NAV_GROUPS, ThemeSoundButtons, visibleNav } from "./NavBar";
 
@@ -19,11 +19,8 @@ const COLOPHON = [
  * ปีที่แสดงเป็นค่าคงที่ ไม่ใช้ new Date() เพราะ static export จะ prerender ค่าไว้ตอน build
  */
 export default function Footer() {
-  const admin = useSyncExternalStore(
-    gateStore.subscribe,
-    gateStore.getSnapshot,
-    gateStore.getServerSnapshot,
-  );
+  const access = useAccess();
+  const admin = access !== "none";
   const nav = visibleNav(admin);
   const groups = NAV_GROUPS.filter((g) =>
     nav.some((item) => item.group === g.key),
@@ -102,7 +99,12 @@ export default function Footer() {
           </p>
           <div className="flex items-center gap-1">
             {/* ทางเข้าโหมดผู้จัด — วางท้ายเล่มไว้ ผู้ชมทั่วไปไม่ต้องสนใจ */}
-            {admin ? (
+            {access === "verified" ? (
+              <span className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-champagne">
+                <IconUnlock className="h-3.5 w-3.5" />
+                ผู้ดูแลระบบ
+              </span>
+            ) : access === "local" ? (
               <button
                 type="button"
                 onClick={() => gateStore.lock()}

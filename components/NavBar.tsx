@@ -17,6 +17,7 @@ import {
 } from "motion/react";
 import { BRAND, BRAND_MARK, BRAND_MONOGRAM } from "@/lib/brand";
 import { gateStore } from "@/lib/gate";
+import { useAccess } from "@/hooks/useAdmin";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { recordActivity } from "@/lib/activity";
 import { muteStore, sfx } from "@/lib/sound";
@@ -165,11 +166,8 @@ export default function NavBar() {
     authStore.getServerSnapshot,
   );
   const user = authStore.user();
-  const admin = useSyncExternalStore(
-    gateStore.subscribe,
-    gateStore.getSnapshot,
-    gateStore.getServerSnapshot,
-  );
+  const access = useAccess();
+  const admin = access !== "none";
 
   // ย่อแถบลงเมื่อเลื่อนหน้าลง
   useEffect(() => {
@@ -258,8 +256,11 @@ export default function NavBar() {
 
         {/* ปุ่มขวา */}
         <div className="flex shrink-0 items-center gap-1">
-          {/* ออกจากโหมดผู้จัด — โชว์เฉพาะตอนปลดล็อกแล้ว จะได้รู้ว่ากำลังอยู่โหมดไหน */}
-          {admin && (
+          {/*
+            ปุ่มนี้ปลดได้แค่รหัสในเครื่อง สิทธิ์ที่ Firestore ยืนยันต้องออกด้วยการ
+            ล็อกเอาต์ ซึ่งมีปุ่มรูปโปรไฟล์อยู่แล้ว จึงโชว์เฉพาะโหมดเครื่องนี้
+          */}
+          {access === "local" && (
             <button
               type="button"
               onClick={() => {

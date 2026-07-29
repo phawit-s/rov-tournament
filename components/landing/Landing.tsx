@@ -6,7 +6,7 @@ import Link from "next/link";
 import { motion, useReducedMotion, useScroll } from "motion/react";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { BRAND } from "@/lib/brand";
-import { gateStore } from "@/lib/gate";
+import { useIsAdmin } from "@/hooks/useAdmin";
 import { heroDelay } from "@/lib/intro";
 import Button from "../ui/Button";
 import Panel, { PanelHeader } from "../ui/Panel";
@@ -209,11 +209,7 @@ export default function Landing() {
   });
 
   /* ---- ผู้ชมทั่วไปเห็นแค่เครื่องมือที่เปิดให้ใช้ฟรี ---- */
-  const admin = useSyncExternalStore(
-    gateStore.subscribe,
-    gateStore.getSnapshot,
-    gateStore.getServerSnapshot,
-  );
+  const admin = useIsAdmin();
   const features = admin ? FEATURES : FEATURES.filter((f) => !f.admin);
   const big = features[0];
   const rest = features.slice(1);

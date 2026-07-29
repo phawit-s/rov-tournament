@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useSyncExternalStore, type ComponentType } from "react";
-import { gateStore } from "@/lib/gate";
+import type { ComponentType } from "react";
+import { useIsAdmin } from "@/hooks/useAdmin";
 import { IconDice, IconMonitor, IconTrophy, IconWheel } from "../ui/icons";
 
 type IconType = ComponentType<{ className?: string; strokeWidth?: number }>;
@@ -81,11 +81,7 @@ function IndexNo({ no }: { no: string }) {
  * เส้นจุดนำสายตาแบบสูจิบัตร: ชื่อบท … เลขหน้า
  */
 export default function HeroIndex({ className = "" }: { className?: string }) {
-  const admin = useSyncExternalStore(
-    gateStore.subscribe,
-    gateStore.getSnapshot,
-    gateStore.getServerSnapshot,
-  );
+  const admin = useIsAdmin();
   const entries = admin ? INDEX : INDEX.filter((e) => !e.admin);
 
   return (
