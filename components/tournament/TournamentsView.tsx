@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import { safeImageSrc } from "@/lib/safe";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
@@ -168,7 +169,7 @@ function Card({
         {tournament.cover ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={tournament.cover}
+            src={safeImageSrc(tournament.cover) ?? ""}
             alt=""
             className="h-32 w-full object-cover opacity-90"
           />

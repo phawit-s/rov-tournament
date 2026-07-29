@@ -4,6 +4,8 @@ import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
+import { authStore, hasBackend } from "@/lib/backend/firebase";
+import { recordActivity } from "@/lib/activity";
 import { muteStore, sfx } from "@/lib/sound";
 import { themeStore } from "@/lib/theme";
 import BackgroundFX from "./fx/BackgroundFX";
@@ -13,6 +15,8 @@ const NAV = [
   { href: "/wheel/", label: "วงล้อ" },
   { href: "/tournaments/", label: "ทัวร์นาเมนต์" },
   { href: "/players/", label: "ผู้เล่น" },
+  { href: "/widgets/", label: "Widget" },
+  { href: "/activity/", label: "ประวัติ" },
 ] as const;
 
 export default function AppShell({
@@ -33,6 +37,12 @@ export default function AppShell({
     themeStore.getSnapshot,
     themeStore.getServerSnapshot,
   );
+  useSyncExternalStore(
+    authStore.subscribe,
+    authStore.getSnapshot,
+    authStore.getServerSnapshot,
+  );
+  const user = authStore.user();
 
   const isActive = (href: string) => {
     const clean = href.replace(/\/$/, "") || "/";
@@ -53,11 +63,13 @@ export default function AppShell({
         <header className="flex flex-wrap items-center justify-between gap-4">
           <Link href="/" className="flex min-w-0 items-center gap-3.5">
             <motion.span
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0, scale: 0.8, rotate: -12 }}
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              whileHover={{ scale: 1.06 }}
               transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-champagne/35 bg-[radial-gradient(circle_at_35%_25%,rgba(242,220,176,0.22),transparent_65%)]"
+              className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-champagne/35 bg-[radial-gradient(circle_at_35%_25%,rgba(242,220,176,0.22),transparent_65%)]"
             >
+              <span className="absolute inset-0 animate-halo rounded-full" />
               <span className="font-display text-base font-medium text-champagne">R</span>
             </motion.span>
             <div className="min-w-0">
@@ -65,21 +77,19 @@ export default function AppShell({
                 <span className="text-gold-grad">ROV TOURNAMENT HUB</span>
               </h1>
               <p className="mt-0.5 hidden truncate text-xs text-muted sm:block">
-                สุ่มทีม · จัดสาย · เก็บประวัติ — ทำงานในเครื่องล้วน
+                สุ่มทีม · จัดสาย · โดเนท · widget สำหรับสตรีม
               </p>
             </div>
           </Link>
 
           <div className="flex shrink-0 items-center gap-2">
-            <nav className="mr-1 flex items-center gap-1 rounded-full tile p-1">
+            <nav className="no-scrollbar flex max-w-[62vw] items-center gap-1 overflow-x-auto rounded-full tile p-1 sm:max-w-none">
               {NAV.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`relative rounded-full px-3.5 py-1.5 font-display text-xs transition-colors duration-300 sm:px-4 ${
-                    isActive(item.href)
-                      ? "text-[#1b1509]"
-                      : "text-muted hover:text-ice"
+                  className={`relative shrink-0 rounded-full px-3.5 py-1.5 font-display text-xs transition-colors duration-300 ${
+                    isActive(item.href) ? "text-[#1b1509]" : "text-muted hover:text-ice"
                   }`}
                 >
                   {isActive(item.href) && (
@@ -109,6 +119,46 @@ export default function AppShell({
             >
               {muted ? "🔇" : "🔊"}
             </IconButton>
+
+            {hasBackend &&
+              (user ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!confirm(`ออกจากระบบ (${user.name})?`)) return;
+                    recordActivity("auth.signout", `ออกจากระบบ (${user.name})`);
+                    void authStore.signOut();
+                  }}
+                  title={`${user.name} — กดเพื่อออกจากระบบ`}
+                  className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-champagne/40 transition-transform hover:scale-105"
+                >
+                  {user.photo ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={user.photo}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="font-display text-sm text-champagne">
+                      {user.name.slice(0, 1)}
+                    </span>
+                  )}
+                </button>
+              ) : (
+                <IconButton
+                  onClick={() => {
+                    void authStore.signIn().then(() => {
+                      const u = authStore.user();
+                      recordActivity("auth.signin", `เข้าสู่ระบบ (${u?.name ?? "-"})`);
+                    });
+                  }}
+                  label="เข้าสู่ระบบด้วย Google"
+                >
+                  ↪
+                </IconButton>
+              ))}
           </div>
         </header>
 
@@ -117,7 +167,7 @@ export default function AppShell({
         <div className="flex-1">{children}</div>
 
         <footer className="border-t border-hair pt-5 text-center text-xs text-muted">
-          ข้อมูลทั้งหมดเก็บอยู่ในเบราว์เซอร์ของคุณเครื่องเดียว · แชร์ให้คนอื่นดูผ่านลิงก์ได้
+          ข้อมูลเก็บในเบราว์เซอร์ของคุณ · เผยแพร่ขึ้นคลาวด์เมื่อกดเองเท่านั้น
         </footer>
       </main>
     </>
@@ -139,7 +189,7 @@ function IconButton({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="grid h-10 w-10 cursor-pointer place-items-center tile rounded-full text-sm text-ice/80 transition-all duration-300 hover:border-champagne/40 hover:bg-champagne/15 hover:text-champagne active:scale-95"
+      className="grid h-10 w-10 shrink-0 cursor-pointer place-items-center tile rounded-full text-sm text-ice/80 transition-all duration-300 hover:border-champagne/40 hover:bg-champagne/15 hover:text-champagne active:scale-95"
     >
       {children}
     </button>

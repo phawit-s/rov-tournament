@@ -78,6 +78,62 @@ export type LiveInfo = {
   title?: string;
 };
 
+export type DonateConfig = {
+  enabled: boolean;
+  /** เบอร์พร้อมเพย์ / เลขบัตรประชาชน / e-wallet id */
+  promptPayId?: string;
+  /** ชื่อบัญชีที่จะโชว์ให้ผู้โอนเห็น */
+  displayName?: string;
+  note?: string;
+  minAmount?: number;
+  /** ยอดที่กดเลือกได้เร็วๆ */
+  quickAmounts?: number[];
+};
+
+/** แพ็กเกจสมาชิกรายเดือน */
+export type MemberTier = {
+  id: string;
+  name: string;
+  pricePerMonth: number;
+  /** "R G B" ใช้ทำสีป้าย */
+  rgb: string;
+  perks: string[];
+  /** ป้ายสั้นๆ ที่โชว์หน้าชื่อ */
+  badge?: string;
+};
+
+export type MemberConfig = {
+  enabled: boolean;
+  headline?: string;
+  description?: string;
+  tiers: MemberTier[];
+  /** โชว์รายชื่อสมาชิกให้คนทั่วไปเห็นไหม */
+  showMemberList: boolean;
+};
+
+/**
+ * ใบสนับสนุน — ใช้ร่วมกันทั้งโดเนทครั้งเดียวและสมัครสมาชิกรายเดือน
+ * จะได้อนุมัติที่เดียวและใช้ widget แจ้งเตือนตัวเดียวกัน
+ */
+export type Donation = {
+  id: string;
+  tournamentId: string;
+  kind: "tip" | "member";
+  name: string;
+  amount: number;
+  message?: string;
+  /** รูปสลิปย่อแล้ว เก็บเป็น data URL */
+  slip?: string;
+  createdAt: string;
+  status: "pending" | "approved" | "rejected";
+  /** เฉพาะ kind = member */
+  tierId?: string;
+  tierName?: string;
+  months?: number;
+  /** วันหมดอายุสมาชิก (ISO) ผู้จัดเซ็ตตอนอนุมัติ */
+  expiresAt?: string;
+};
+
 export type TournamentStatus =
   | "draft"
   | "registration"
@@ -112,6 +168,8 @@ export type Tournament = {
 
   prize: PrizeConfig;
   live: LiveInfo;
+  donate?: DonateConfig;
+  member?: MemberConfig;
 
   /** PIN โหมดผู้จัด (ทำงานฝั่ง client เท่านั้น กันมือลั่น ไม่ใช่ระบบความปลอดภัยจริง) */
   adminPin?: string;

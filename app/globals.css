@@ -25,6 +25,35 @@
   --animate-rise: rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-spin-slow: spin 16s linear infinite;
   --animate-breathe: breathe 4.5s ease-in-out infinite;
+  --animate-halo: halo 6s linear infinite;
+  --animate-shimmer-slow: shimmer-slow 6s ease-in-out infinite;
+  --animate-float-soft: float-soft 9s ease-in-out infinite;
+}
+
+@keyframes halo {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer-slow {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
 }
 
 @keyframes drift {
@@ -117,6 +146,13 @@
 
 * {
   min-width: 0;
+}
+
+/* เส้นโฟกัสของเบราว์เซอร์เป็นสีดำ ทับด้วยวงแหวนสีทองให้เข้าธีม */
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, rgb(var(--accent)) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: 10px;
 }
 
 /* พื้นหลังต้องอยู่ที่ html เท่านั้น ถ้าใส่ที่ body ด้วย body จะทับ layer ที่อยู่ล่างสุด */
@@ -278,10 +314,36 @@ body {
 }
 
 .text-gold-grad {
-  background: linear-gradient(100deg, #b98f4e 0%, #f2dcb0 42%, #cfa765 68%, #8f7038 100%);
+  background: linear-gradient(
+    100deg,
+    #8f7038 0%,
+    #cfa765 22%,
+    #f7e6c4 42%,
+    #cfa765 62%,
+    #8f7038 100%
+  );
+  background-size: 220% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  animation: var(--animate-shimmer-slow);
+}
+
+/* วงแหวนทองหมุนรอบโลโก้ */
+.animate-halo {
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, var(--color-champagne) 55%, transparent) 40deg,
+    transparent 90deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  animation: var(--animate-halo);
+  opacity: 0.75;
+  pointer-events: none;
 }
 
 :root[data-theme="light"] .text-gold-grad {
@@ -339,6 +401,75 @@ body {
 }
 
 /* ---------- ฟอร์ม ---------- */
+
+/*
+  ช่องวันที่/เวลา/ตัวเลข ใช้ UI ของเบราว์เซอร์ ปรับได้เท่าที่สเปกเปิดให้
+  - accent-color เปลี่ยนสีไฮไลต์ในปฏิทินจากน้ำเงินระบบเป็นสีทอง
+  - color-scheme คุมว่าป็อปอัปปฏิทินเป็นธีมสว่างหรือมืด
+*/
+input,
+textarea,
+select {
+  accent-color: var(--color-gold);
+  font-family: inherit;
+}
+
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
+input[type="number"] {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+  padding: 2px;
+  border-radius: 6px;
+  transition:
+    opacity 0.2s ease,
+    background-color 0.2s ease;
+  /* ไอคอนเดิมเป็นสีดำ ธีมมืดต้องกลับสีถึงจะเห็น */
+  filter: invert(1) sepia(1) saturate(2.2) hue-rotate(5deg) brightness(0.95);
+}
+input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  background-color: color-mix(in srgb, rgb(var(--accent)) 18%, transparent);
+}
+
+:root[data-theme="light"] input::-webkit-calendar-picker-indicator {
+  filter: sepia(1) saturate(2.4) hue-rotate(3deg) brightness(0.72);
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  opacity: 0.45;
+  height: 1.4rem;
+  cursor: pointer;
+}
+input[type="number"]::-webkit-inner-spin-button:hover {
+  opacity: 0.9;
+}
+
+/* เมนู select ให้เข้าชุดกับ .field */
+select.field,
+select {
+  cursor: pointer;
+}
+
+/* ปิด autofill สีเหลืองของ Chrome ที่ทำให้ธีมเพี้ยน */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-ice);
+  -webkit-box-shadow: 0 0 0 1000px rgb(var(--field) / var(--field-a)) inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+input[type="file"] {
+  cursor: pointer;
+}
 
 input[type="range"] {
   -webkit-appearance: none;

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { recordActivity } from "@/lib/activity";
 import { sfx } from "@/lib/sound";
 import { pickWinnerIndex, segments, wheelStore } from "@/lib/wheel";
 import Button from "../ui/Button";
@@ -70,6 +71,10 @@ export default function WheelView() {
         setShowWinner(true);
         sfx.play("reveal");
         wheelStore.pushHistory(entries[index].name);
+        recordActivity(
+          "wheel.spin",
+          `ได้ "${entries[index].name}" จาก ${entries.length} ชื่อ`,
+        );
         if (state.removeWinner) {
           window.setTimeout(() => wheelStore.remove(entries[index].id), 1400);
         }

@@ -1,5 +1,6 @@
 "use client";
 
+import { recordActivity } from "@/lib/activity";
 import { makeSeed, uid } from "@/lib/random";
 import { DEFAULT_PRIZE } from "./prize";
 import { defaultRoundBestOf } from "./bracket";
@@ -85,6 +86,10 @@ export const tournamentStore = {
   create(partial?: Partial<Tournament>): Tournament {
     const created = { ...emptyTournament(), ...partial };
     commit([...readAll(), created]);
+    recordActivity("tournament.create", `สร้าง "${created.name}"`, {
+      tournamentId: created.id,
+      tournamentName: created.name,
+    });
     return created;
   },
 
@@ -106,7 +111,13 @@ export const tournamentStore = {
   },
 
   remove(id: string) {
+    const target = readAll().find((t) => t.id === id);
     commit(readAll().filter((t) => t.id !== id));
+    if (target) {
+      recordActivity("tournament.delete", `ลบ "${target.name}"`, {
+        tournamentName: target.name,
+      });
+    }
   },
 
   duplicate(id: string): Tournament | null {

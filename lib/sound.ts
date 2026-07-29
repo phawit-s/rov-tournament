@@ -3,7 +3,15 @@
  * (เว็บ static บน GitHub Pages จะได้ไม่ต้องแบกไฟล์ mp3)
  */
 
-type Voice = "tick" | "roll" | "reveal" | "teamComplete" | "finish" | "click" | "undo";
+type Voice =
+  | "tick"
+  | "roll"
+  | "reveal"
+  | "teamComplete"
+  | "finish"
+  | "click"
+  | "undo"
+  | "donate";
 
 const MUTE_KEY = "rov-randomizer/muted";
 const VOLUME = 0.28;
@@ -139,6 +147,14 @@ const RECIPES: Record<Voice, () => void> = {
       tone({ freq: f, duration: 0.5, type: "sine", gain: 0.3, delay: i * 0.08 }),
     );
     noiseBurst(0.5, 0.1);
+  },
+  // เสียงเหรียญตอนมีคนโดเนท
+  donate: () => {
+    [1046.5, 1396.9, 1760, 2093].forEach((f, i) =>
+      tone({ freq: f, duration: 0.4, type: "triangle", gain: 0.34, delay: i * 0.07 }),
+    );
+    tone({ freq: 523.25, duration: 0.7, type: "sine", gain: 0.22, delay: 0.1 });
+    noiseBurst(0.3, 0.08);
   },
   finish: () => {
     [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) =>

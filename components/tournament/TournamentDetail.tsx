@@ -1,10 +1,12 @@
-"use client";
+﻿"use client";
 
+import { safeImageSrc } from "@/lib/safe";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { useHashParam, useHydrated } from "@/hooks/useClient";
 import { adminStore } from "@/lib/tournament/admin";
+import { cloudReady, watchTournament } from "@/lib/tournament/cloud";
 import { championId, standings } from "@/lib/tournament/bracket";
 import { calcPrizes, formatMoney } from "@/lib/tournament/prize";
 import { tournamentStore } from "@/lib/tournament/store";
@@ -20,6 +22,7 @@ import Panel from "../ui/Panel";
 import BracketPanel from "./BracketPanel";
 import PrizePanel from "./PrizePanel";
 import SchedulePanel from "./SchedulePanel";
+import SupportersPanel from "./SupportersPanel";
 import TeamsPanel from "./TeamsPanel";
 import TournamentForm from "./TournamentForm";
 import { EmptyNote, Input, LiveBadge, Stat, StatusBadge } from "./ui";
@@ -30,6 +33,7 @@ const TABS = [
   { key: "bracket", label: "สายแข่ง" },
   { key: "schedule", label: "ตารางแข่ง" },
   { key: "prize", label: "เงินรางวัล" },
+  { key: "support", label: "โดเนท / สมาชิก" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -56,16 +60,25 @@ export default function TournamentDetail() {
   const hydrated = useHydrated();
   const sharedRaw = useHashParam("s");
   const hashId = useHashParam("t");
+  const cloudId = useHashParam("c");
   const shared = useMemo(
     () => (sharedRaw ? decodeTournament(sharedRaw) : null),
     [sharedRaw],
   );
-  const id = shared?.id ?? hashId;
+  const id = shared?.id ?? cloudId ?? hashId;
 
   // เปิดจากลิงก์แชร์ = บันทึกลงเครื่องให้เลย จะได้ดูสายและกรอกผลต่อได้
   useEffect(() => {
     if (shared) tournamentStore.upsert(shared);
   }, [shared]);
+
+  // เปิดจากคลาวด์ = ฟังสด ผลอัปเดตเองไม่ต้องรีเฟรช
+  useEffect(() => {
+    if (!cloudId || !cloudReady()) return;
+    return watchTournament(cloudId, (data) => {
+      if (data) tournamentStore.upsert(data);
+    });
+  }, [cloudId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -122,7 +135,7 @@ export default function TournamentDetail() {
         {tournament.cover && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={tournament.cover}
+            src={safeImageSrc(tournament.cover) ?? ""}
             alt=""
             className="h-40 w-full object-cover opacity-90 sm:h-52"
           />
@@ -289,6 +302,9 @@ export default function TournamentDetail() {
         <SchedulePanel tournament={tournament} isAdmin={isAdmin} />
       )}
       {tab === "prize" && <PrizePanel tournament={tournament} isAdmin={isAdmin} />}
+      {tab === "support" && (
+        <SupportersPanel tournament={tournament} isAdmin={isAdmin} />
+      )}
 
       <AnimatePresence>
         {toast && (

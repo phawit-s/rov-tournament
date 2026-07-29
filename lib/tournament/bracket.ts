@@ -211,6 +211,34 @@ function clampScore(value: number, max: number): number {
   return Math.min(Math.floor(value), max);
 }
 
+/**
+ * แมตช์ที่ควรโชว์บนสตรีมตอนนี้
+ * เอาแมตช์แรกที่มีทั้งสองทีมและยังไม่จบ ถ้าจบหมดแล้วเอาแมตช์สุดท้ายที่เพิ่งจบ
+ */
+export function currentMatch(bracket: Bracket | null): Match | null {
+  if (!bracket) return null;
+  const playable = bracket.matches
+    .filter((m) => !m.bye && m.a.teamId && m.b.teamId)
+    .sort((a, b) => a.round - b.round || a.order - b.order);
+  return playable.find((m) => !m.winnerId) ?? playable.at(-1) ?? null;
+}
+
+/** แมตช์ที่ยังไม่ได้แข่ง เรียงตามเวลาที่ตั้งไว้ (ถ้าไม่ตั้งก็ตามลำดับสาย) */
+export function upcomingMatches(bracket: Bracket | null, limit = 4): Match[] {
+  if (!bracket) return [];
+  return bracket.matches
+    .filter((m) => !m.bye && !m.winnerId && m.a.teamId && m.b.teamId)
+    .sort((a, b) => {
+      if (a.scheduledAt && b.scheduledAt) {
+        return a.scheduledAt.localeCompare(b.scheduledAt);
+      }
+      if (a.scheduledAt) return -1;
+      if (b.scheduledAt) return 1;
+      return a.round - b.round || a.order - b.order;
+    })
+    .slice(0, limit);
+}
+
 export function matchesByRound(bracket: Bracket): Match[][] {
   return Array.from({ length: bracket.rounds }, (_, i) =>
     bracket.matches

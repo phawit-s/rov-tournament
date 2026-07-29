@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import { safeImageSrc } from "@/lib/safe";
 import { useState } from "react";
 import { PRIZE_PRESETS } from "@/lib/tournament/prize";
 import { tournamentStore } from "@/lib/tournament/store";
@@ -112,7 +113,7 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
               {draft.cover ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={draft.cover}
+                  src={safeImageSrc(draft.cover) ?? ""}
                   alt="รูปปก"
                   className="h-16 w-28 rounded-lg object-cover"
                 />

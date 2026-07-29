@@ -1,5 +1,6 @@
 "use client";
 
+import { stripContacts } from "@/lib/safe";
 import type { Tournament } from "./types";
 
 function toBase64Url(input: string): string {
@@ -20,11 +21,11 @@ function fromBase64Url(input: string): string {
  * ตัดรูปปกกับ PIN ออก เพราะรูปทำให้ลิงก์ยาวมากและ PIN ไม่ควรติดไปกับลิงก์
  */
 export function encodeTournament(tournament: Tournament): string {
-  const slim: Tournament = {
+  const slim: Tournament = stripContacts({
     ...tournament,
     cover: undefined,
     adminPin: undefined,
-  };
+  });
   return toBase64Url(JSON.stringify(slim));
 }
 

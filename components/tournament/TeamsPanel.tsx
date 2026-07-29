@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { recordActivity } from "@/lib/activity";
 import { uid } from "@/lib/random";
 import { createBracket, defaultRoundBestOf, roundCount } from "@/lib/tournament/bracket";
 import { tournamentStore } from "@/lib/tournament/store";
@@ -67,6 +68,10 @@ export default function TeamsPanel({ tournament, isAdmin }: Props) {
       teams: [...t.teams, entry],
       status: t.status === "draft" ? "registration" : t.status,
     }));
+    recordActivity("team.add", `เพิ่มทีม "${teamName}"`, {
+      tournamentId: tournament.id,
+      tournamentName: tournament.name,
+    });
     setName("");
     setContact("");
     setMembers("");
@@ -105,6 +110,11 @@ export default function TeamsPanel({ tournament, isAdmin }: Props) {
       bracket: createBracket(approved, seed, bestOf),
       status: "running",
     }));
+    recordActivity(
+      "bracket.generate",
+      `สุ่มสายจาก ${approved.length} ทีม (seed ${seed})`,
+      { tournamentId: tournament.id, tournamentName: tournament.name },
+    );
   };
 
   return (

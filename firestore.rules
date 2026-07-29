@@ -1,0 +1,93 @@
+rules_version = '2';
+
+// กติกาความปลอดภัยของ ROV Tournament Hub
+// เอาไปวางที่ Firebase Console → Firestore Database → Rules → Publish
+//
+// หลักคิด:
+// - ทัวร์ที่ตั้ง isPublic = true ใครก็อ่านได้ (widget ใน OBS ไม่ได้ล็อกอิน)
+// - เขียนได้เฉพาะเจ้าของทัวร์เท่านั้น คนอื่นแก้ผลไม่ได้แม้เปิด devtools
+// - ใบสมัครใครก็ส่งได้ถ้าล็อกอินแล้ว แต่แก้ได้เฉพาะเจ้าของทัวร์
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /tournaments/{tournamentId} {
+      function isOwner() {
+        return request.auth != null
+          && resource.data.ownerUid == request.auth.uid;
+      }
+      function claimsOwnership() {
+        return request.auth != null
+          && request.resource.data.ownerUid == request.auth.uid;
+      }
+
+      allow read: if resource.data.isPublic == true || isOwner();
+
+      // สร้างใหม่ได้ถ้าใส่ ownerUid เป็นตัวเอง
+      allow create: if claimsOwnership();
+
+      // แก้/ลบได้เฉพาะเจ้าของ และห้ามโอนเจ้าของให้คนอื่น
+      allow update: if isOwner() && claimsOwnership();
+      allow delete: if isOwner();
+
+      match /registrations/{registrationId} {
+        function tournament() {
+          return get(/databases/$(database)/documents/tournaments/$(tournamentId)).data;
+        }
+        function isTournamentOwner() {
+          return request.auth != null
+            && tournament().ownerUid == request.auth.uid;
+        }
+
+        // เจ้าของเห็นทุกใบ ผู้สมัครเห็นใบตัวเอง
+        allow read: if isTournamentOwner()
+          || (request.auth != null && resource.data.byUid == request.auth.uid);
+
+        // ล็อกอินแล้วสมัครได้ ต้องส่งชื่อทีมมาด้วย และสถานะเริ่มต้นต้องเป็น pending
+        allow create: if request.auth != null
+          && request.resource.data.byUid == request.auth.uid
+          && request.resource.data.status == 'pending'
+          && request.resource.data.teamName is string
+          && request.resource.data.teamName.size() > 0
+          && request.resource.data.teamName.size() <= 40
+          && request.resource.data.members.size() <= 12;
+
+        // อนุมัติ/ปฏิเสธ ทำได้เฉพาะเจ้าของทัวร์
+        allow update, delete: if isTournamentOwner();
+      }
+
+      match /donations/{donationId} {
+        function tournament() {
+          return get(/databases/$(database)/documents/tournaments/$(tournamentId)).data;
+        }
+        function isTournamentOwner() {
+          return request.auth != null
+            && tournament().ownerUid == request.auth.uid;
+        }
+
+        // widget แจ้งเตือนใน OBS ไม่ได้ล็อกอิน เลยต้องอ่านใบที่อนุมัติแล้วได้
+        allow read: if isTournamentOwner()
+          || resource.data.status == 'approved';
+
+        // ต้องล็อกอินก่อน (หน้าโดเนทล็อกอินแบบไม่ระบุตัวตนให้อัตโนมัติ)
+        // มี uid ติดมาด้วยจะได้ตามรอยและกันสแปมได้
+        // และเปิดรับเฉพาะตอนผู้จัดเปิดระบบโดเนทหรือสมาชิกไว้เท่านั้น
+        allow create: if request.auth != null
+          && (tournament().donate.enabled == true
+              || tournament().member.enabled == true)
+          && request.resource.data.status == 'pending'
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 40
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && request.resource.data.amount <= 1000000
+          && request.resource.data.message.size() <= 140
+          && (request.resource.data.slip == null
+              || request.resource.data.slip.size() <= 400000);
+
+        // อนุมัติ/ลบ ได้เฉพาะเจ้าของทัวร์
+        allow update, delete: if isTournamentOwner();
+      }
+    }
+  }
+}

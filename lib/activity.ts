@@ -1,0 +1,116 @@
+"use client";
+
+import { uid } from "./random";
+
+export type ActivityType =
+  | "tournament.create"
+  | "tournament.update"
+  | "tournament.delete"
+  | "tournament.publish"
+  | "bracket.generate"
+  | "match.score"
+  | "team.add"
+  | "team.remove"
+  | "registration.approve"
+  | "registration.reject"
+  | "donation.approve"
+  | "donation.reject"
+  | "member.approve"
+  | "draw.finish"
+  | "wheel.spin"
+  | "auth.signin"
+  | "auth.signout";
+
+export type ActivityEntry = {
+  id: string;
+  at: string;
+  type: ActivityType;
+  message: string;
+  tournamentId?: string;
+  tournamentName?: string;
+  actor?: string;
+};
+
+const KEY = "rov-randomizer/activity/v1";
+const MAX = 300;
+
+let cache: ActivityEntry[] | null = null;
+const EMPTY: ActivityEntry[] = [];
+const listeners = new Set<() => void>();
+
+function read(): ActivityEntry[] {
+  if (cache) return cache;
+  if (typeof window === "undefined") return EMPTY;
+  try {
+    const raw = localStorage.getItem(KEY);
+    cache = raw ? (JSON.parse(raw) as ActivityEntry[]) : [];
+  } catch {
+    cache = [];
+  }
+  return cache;
+}
+
+function commit(next: ActivityEntry[]) {
+  cache = next;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(next));
+  } catch {
+    /* เต็มก็ปล่อย ไม่ใช่ข้อมูลสำคัญ */
+  }
+  listeners.forEach((l) => l());
+}
+
+/**
+ * บันทึกกิจกรรม — เก็บในเครื่องนี้เท่านั้น
+ * ถ้าอยากให้แอดมินหลายคนเห็น log ร่วมกันต้องย้ายขึ้นคลาวด์
+ */
+export function recordActivity(
+  type: ActivityType,
+  message: string,
+  meta?: { tournamentId?: string; tournamentName?: string; actor?: string },
+) {
+  if (typeof window === "undefined") return;
+  const entry: ActivityEntry = {
+    id: uid(),
+    at: new Date().toISOString(),
+    type,
+    message,
+    ...meta,
+  };
+  commit([entry, ...read()].slice(0, MAX));
+}
+
+export const activityStore = {
+  subscribe(onChange: () => void) {
+    listeners.add(onChange);
+    return () => {
+      listeners.delete(onChange);
+    };
+  },
+  getSnapshot: () => read(),
+  getServerSnapshot: () => EMPTY,
+  clear: () => commit([]),
+};
+
+export const ACTIVITY_META: Record<
+  ActivityType,
+  { label: string; glyph: string; rgb: string }
+> = {
+  "tournament.create": { label: "สร้างทัวร์", glyph: "◆", rgb: "109 146 219" },
+  "tournament.update": { label: "แก้ข้อมูลทัวร์", glyph: "◇", rgb: "155 160 179" },
+  "tournament.delete": { label: "ลบทัวร์", glyph: "✕", rgb: "224 96 112" },
+  "tournament.publish": { label: "เผยแพร่ขึ้นคลาวด์", glyph: "▲", rgb: "77 181 145" },
+  "bracket.generate": { label: "สุ่มสายแข่ง", glyph: "❖", rgb: "160 121 216" },
+  "match.score": { label: "กรอกผลแมตช์", glyph: "●", rgb: "221 175 100" },
+  "team.add": { label: "เพิ่มทีม", glyph: "＋", rgb: "77 181 145" },
+  "team.remove": { label: "ลบทีม", glyph: "－", rgb: "224 96 112" },
+  "registration.approve": { label: "อนุมัติใบสมัคร", glyph: "✓", rgb: "77 181 145" },
+  "registration.reject": { label: "ปฏิเสธใบสมัคร", glyph: "✕", rgb: "224 96 112" },
+  "donation.approve": { label: "อนุมัติโดเนท", glyph: "★", rgb: "221 175 100" },
+  "donation.reject": { label: "ปฏิเสธโดเนท", glyph: "✕", rgb: "224 96 112" },
+  "member.approve": { label: "รับสมาชิกใหม่", glyph: "✦", rgb: "160 121 216" },
+  "draw.finish": { label: "สุ่มแบ่งทีมเสร็จ", glyph: "◈", rgb: "109 146 219" },
+  "wheel.spin": { label: "หมุนวงล้อ", glyph: "◐", rgb: "104 184 197" },
+  "auth.signin": { label: "เข้าสู่ระบบ", glyph: "→", rgb: "155 160 179" },
+  "auth.signout": { label: "ออกจากระบบ", glyph: "←", rgb: "155 160 179" },
+};

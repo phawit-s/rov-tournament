@@ -3,6 +3,7 @@
 import { matchesByRound, roundLabel, updateMatch } from "@/lib/tournament/bracket";
 import { tournamentStore } from "@/lib/tournament/store";
 import { formatThaiDate } from "@/lib/tournament/share";
+import { safeUrl } from "@/lib/safe";
 import type { Tournament } from "@/lib/tournament/types";
 import Panel from "../ui/Panel";
 import { EmptyNote, Input, fromLocalInput, toLocalInput } from "./ui";
@@ -112,11 +113,11 @@ export default function SchedulePanel({ tournament, isAdmin }: Props) {
                   ) : (
                     <div className="text-right text-xs text-muted">
                       {match.scheduledAt ? formatThaiDate(match.scheduledAt) : "ยังไม่กำหนดเวลา"}
-                      {match.streamUrl && (
+                      {safeUrl(match.streamUrl) && (
                         <>
                           {" · "}
                           <a
-                            href={match.streamUrl}
+                            href={safeUrl(match.streamUrl) ?? undefined}
                             target="_blank"
                             rel="noreferrer noopener"
                             className="text-champagne underline-offset-2 hover:underline"

@@ -2,6 +2,7 @@
 
 import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
 import { motion } from "motion/react";
+import { safeUrl } from "@/lib/safe";
 import type { TournamentStatus } from "@/lib/tournament/types";
 
 export const STATUS_META: Record<
@@ -32,9 +33,11 @@ export function StatusBadge({ status }: { status: TournamentStatus }) {
 }
 
 export function LiveBadge({ url, title }: { url: string; title?: string }) {
+  const href = safeUrl(url);
+  if (!href) return null;
   return (
     <a
-      href={url}
+      href={href}
       target="_blank"
       rel="noreferrer noopener"
       className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#e0566b]/15 px-3 py-1 font-display text-[11px] text-[#e0566b] transition-colors hover:bg-[#e0566b]/25"
@@ -65,12 +68,22 @@ export function Label({
   );
 }
 
+/**
+ * ถ้าผู้เรียกกำหนดความกว้างมาเอง ต้องไม่ใส่ w-full ให้
+ * ไม่งั้นสองคลาสจะชนกันแล้วผลลัพธ์ขึ้นกับลำดับใน stylesheet ไม่ใช่ลำดับที่เขียน
+ */
+function widthClass(className: string): string {
+  return /(^|\s)(w-|min-w-|max-w-|flex-1|shrink|grow)/.test(className)
+    ? ""
+    : "w-full";
+}
+
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   const { className = "", ...rest } = props;
   return (
     <input
       {...rest}
-      className={`field w-full rounded-xl px-3.5 py-2.5 text-sm text-ice outline-none placeholder:text-muted/80 ${className}`}
+      className={`field ${widthClass(className)} rounded-xl px-3.5 py-2.5 text-sm text-ice outline-none placeholder:text-muted/80 ${className}`}
     />
   );
 }
@@ -80,7 +93,7 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
       {...rest}
-      className={`field w-full resize-y rounded-xl px-3.5 py-2.5 text-sm text-ice outline-none placeholder:text-muted/80 ${className}`}
+      className={`field ${widthClass(className)} resize-y rounded-xl px-3.5 py-2.5 text-sm text-ice outline-none placeholder:text-muted/80 ${className}`}
     />
   );
 }
