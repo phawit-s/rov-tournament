@@ -375,8 +375,10 @@ function accountMatches(expect, actual) {
 /** เก็บ token ไว้ใช้ซ้ำ ไม่ต้องล็อกอินใหม่ทุกใบ (idToken ของ Firebase อยู่ได้ 1 ชม.) */
 let botToken = null;
 let botExpiry = 0;
+/** uid ของบัญชีบอท เอาไว้โชว์ในหน้า health จะได้เอาไปใส่ admins ได้เลย */
+let lastBotUid = null;
 
-async function botLogin(env) {
+async function botLogin_(env) {
   const now = Date.now();
   if (botToken && now < botExpiry) return botToken;
 
@@ -394,8 +396,17 @@ async function botLogin(env) {
     },
   );
   const j = await r.json();
-  if (!j.idToken) throw new Error("bot-login-failed");
+  if (!j.idToken) {
+    // ส่งรหัสเหตุของ Google ต่อออกไป จะได้รู้ว่าต้องแก้อะไร
+    // (EMAIL_NOT_FOUND = ยังไม่ได้สร้างบัญชี, INVALID_LOGIN_CREDENTIALS = อีเมล
+    //  หรือรหัสผ่านผิด, API key not valid = FIREBASE_API_KEY ผิด)
+    // ไม่มีความลับอยู่ในข้อความพวกนี้ มีแต่บอกว่าเราตั้งค่าพลาดตรงไหน
+    const why =
+      j?.error?.message ?? (r.status === 400 ? "BAD_REQUEST" : `HTTP_${r.status}`);
+    throw new Error(`bot-login-failed: ${why}`);
+  }
 
+  lastBotUid = j.localId ?? null;
   botToken = j.idToken;
   // เผื่อเวลาไว้ 5 นาที กันหมดอายุกลางคัน
   botExpiry = now + (Number(j.expiresIn || 3600) - 300) * 1000;
@@ -418,7 +429,7 @@ async function approveDonation(env, channelId, donationId, verified) {
   }
   if (!channelId || !donationId) return "no-target";
 
-  const token = await botLogin(env);
+  const token = await botLogin_(env);
   const auth = { Authorization: `Bearer ${token}` };
   const path = `channels/${encodeURIComponent(channelId)}/donations/${encodeURIComponent(donationId)}`;
 
@@ -586,6 +597,48 @@ const handler = {
       if (request.method === "OPTIONS") {
         // preflight — ไม่มี body
         return new Response(null, { status: 204, headers: cors });
+      }
+
+      /*
+        เช็คสถานะการตั้งค่า — เปิดด้วย GET ?health=1
+        มีไว้เพราะถ้าไม่มีทางนี้ จะรู้ว่าตั้งค่าครบไหมก็ต่อเมื่อมีคนโอนจริง
+        คืนแค่ว่า "ตั้งแล้วหรือยัง" กับ "ล็อกอินบอทผ่านไหม" ไม่คืนค่าความลับใดๆ
+      */
+      if (new URL(request.url).searchParams.get("health") === "1") {
+        const botVars = {
+          BOT_EMAIL: !!env.BOT_EMAIL,
+          BOT_PASSWORD: !!env.BOT_PASSWORD,
+          FIREBASE_API_KEY: !!env.FIREBASE_API_KEY,
+          FIREBASE_PROJECT: env.FIREBASE_PROJECT || null,
+        };
+        const complete =
+          botVars.BOT_EMAIL &&
+          botVars.BOT_PASSWORD &&
+          botVars.FIREBASE_API_KEY &&
+          !!botVars.FIREBASE_PROJECT;
+
+        let botLogin = "ไม่ได้ตั้งค่า";
+        let botUid = null;
+        if (complete) {
+          try {
+            await botLogin_(env);
+            botLogin = "ผ่าน";
+            botUid = lastBotUid;
+          } catch (e) {
+            botLogin = `ไม่ผ่าน: ${e && e.message ? e.message : "unknown"}`;
+          }
+        }
+
+        return reply(
+          {
+            ok: true,
+            provider: String(env.PROVIDER || "(ไม่ได้ตั้ง)"),
+            hasApiKey: !!env.API_KEY,
+            allowedOrigin: env.ALLOWED_ORIGIN || "*",
+            autoApprove: { ...botVars, พร้อมใช้งาน: complete, botLogin, botUid },
+          },
+          cors,
+        );
       }
 
       if (request.method !== "POST") {

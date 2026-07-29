@@ -15,6 +15,10 @@ compatibility_date = "2026-07-01"
 # ผู้ให้บริการที่จะใช้ — ตอนนี้รองรับ "easyslip" | "slipok" | "thunder"
 PROVIDER = "thunder"
 
+# โปรเจกต์ Firebase ที่ Worker จะเขียนสถานะใบลงไป (ไม่ใช่ความลับ)
+# ต้องมีคู่กับ BOT_EMAIL / BOT_PASSWORD / FIREBASE_API_KEY ถึงจะอนุมัติเองได้
+FIREBASE_PROJECT = "rov-tournament"
+
 # โดเมนที่อนุญาตให้เรียก Worker นี้ ใส่หลายอันได้คั่นด้วยจุลภาค
 #
 # !! ห้ามปล่อยเป็น "*" ตอนใช้จริง !!
@@ -54,8 +58,8 @@ MAX_PER_MIN = "30"
 #        wrangler secret put BOT_EMAIL
 #        wrangler secret put BOT_PASSWORD
 #        wrangler secret put FIREBASE_API_KEY
-#   4. ใส่ชื่อโปรเจกต์ Firebase ตรงนี้ (ไม่ใช่ความลับ)
-# FIREBASE_PROJECT = "rov-tournament"
+#   4. ใส่ชื่อโปรเจกต์ Firebase ที่ [vars] ด้านบน (ไม่ใช่ความลับ)
+#      ขาดตัวนี้ตัวเดียว Worker จะข้ามการอนุมัติทั้งหมดโดยไม่มีอะไรฟ้อง
 #
 # ระวัง: บัญชีบอทมีสิทธิ์ผู้ดูแล ใครได้รหัสผ่านไปก็ได้สิทธิ์ตามไปด้วย
 # ตั้งรหัสยาวๆ และอย่าเอาไปใช้ล็อกอินเว็บเอง

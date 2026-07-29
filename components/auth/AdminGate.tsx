@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
@@ -10,6 +10,7 @@ import { recordActivity } from "@/lib/activity";
 import Button from "@/components/ui/Button";
 import Panel from "@/components/ui/Panel";
 import Corners from "@/components/ui/Corners";
+import AuthPanel from "./AuthPanel";
 import { toast } from "@/components/ui/Toast";
 import { IconCheck, IconCopy, IconLock } from "@/components/ui/icons";
 import { Input, Label, Skeleton } from "@/components/tournament/ui";
@@ -60,7 +61,6 @@ function AdminLocked() {
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [wrong, setWrong] = useState(false);
-  const [pending, setPending] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showPin, setShowPin] = useState(!hasBackend);
 
@@ -80,6 +80,67 @@ function AdminLocked() {
   };
 
   const signedIn = !!user && !user.anonymous;
+
+  /*
+    ยังไม่ล็อกอิน — ยก AuthPanel มาทั้งตัว ไม่ทำปุ่มเองแล้วเหลือแต่ Google
+    เพราะบัญชีบอทของ Worker ต้องสมัครด้วยอีเมล/รหัสผ่านเท่านั้น
+    ถ้าหน้านี้มีแต่ปุ่ม Google ก็จะไม่มีทางสมัครบัญชีแบบนั้นได้เลยทั้งเว็บ
+    (AuthPanel มีกรอบ Panel ในตัวแล้ว จึงไม่ครอบซ้ำ)
+  */
+  if (hasBackend && snapshot !== "loading" && !signedIn) {
+    return (
+      <div className="py-6">
+        <AuthPanel
+          title="หน้านี้สำหรับผู้จัดแข่ง"
+          description="ล็อกอินด้วยบัญชีที่ได้รับสิทธิ์ผู้ดูแล · สมัครบัญชีใหม่ได้ที่แท็บด้านบน"
+        />
+
+        <div className="mx-auto mt-6 max-w-lg text-center">
+          {showPin ? (
+            <div className="tile rounded-2xl p-5 text-left">
+              <Label hint="เปิดได้เฉพาะเครื่องมือที่ทำงานในเบราว์เซอร์ ข้อมูลบนคลาวด์ยังต้องล็อกอิน">
+                รหัสผู้จัดสำหรับเครื่องนี้
+              </Label>
+              <Input
+                type="password"
+                autoComplete="off"
+                value={pin}
+                placeholder="••••••••"
+                onChange={(e) => {
+                  setPin(e.target.value);
+                  setWrong(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void submit();
+                }}
+                className={wrong ? "border-[#e79a9a]/60" : ""}
+              />
+              {wrong && (
+                <p className="mt-2 text-xs text-[#e79a9a]">รหัสไม่ถูกต้อง</p>
+              )}
+              <Button
+                variant="outline"
+                loading={busy}
+                className="mt-3 w-full"
+                onClick={() => void submit()}
+              >
+                ปลดล็อกเครื่องนี้
+              </Button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowPin(true)}
+              className="inline-flex cursor-pointer items-center gap-2 font-display text-xs text-muted transition-colors hover:text-champagne"
+            >
+              <IconLock className="h-3.5 w-3.5" />
+              ใช้รหัสผู้จัดสำหรับเครื่องนี้แทน
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid place-items-center py-10">
@@ -164,24 +225,7 @@ function AdminLocked() {
                     เปลี่ยนบัญชี
                   </Button>
                 </div>
-              ) : (
-                <Button
-                  size="lg"
-                  loading={pending}
-                  className="mt-7 w-full"
-                  onClick={() => {
-                    setPending(true);
-                    authStore
-                      .signIn()
-                      .catch(() =>
-                        toast("เข้าสู่ระบบไม่สำเร็จ ป็อปอัปอาจถูกบล็อก", "error"),
-                      )
-                      .finally(() => setPending(false));
-                  }}
-                >
-                  เข้าสู่ระบบด้วย Google
-                </Button>
-              )}
+              ) : null}
             </>
           ) : (
             <p className="mt-3 text-sm leading-relaxed text-muted">
