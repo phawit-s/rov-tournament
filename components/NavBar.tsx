@@ -16,6 +16,7 @@ import {
   useScroll,
 } from "motion/react";
 import { BRAND, BRAND_MARK, BRAND_MONOGRAM } from "@/lib/brand";
+import { gateStore } from "@/lib/gate";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { recordActivity } from "@/lib/activity";
 import { muteStore, sfx } from "@/lib/sound";
@@ -32,6 +33,7 @@ import {
   IconMute,
   IconSun,
   IconTrophy,
+  IconUnlock,
   IconUsers,
   IconVolume,
   IconWheel,
@@ -48,6 +50,8 @@ export type NavItem = {
   no: string;
   group: NavGroup;
   Icon: ComponentType<IconProps>;
+  /** ต้องปลดล็อกโหมดผู้จัดก่อนถึงจะเห็นในเมนู */
+  admin?: boolean;
 };
 
 /**
@@ -55,20 +59,66 @@ export type NavItem = {
  * ถ้าแยกสองที่ เพิ่มเมนูทีต้องไล่แก้สองไฟล์แล้วลืมทุกครั้ง
  */
 export const NAV: NavItem[] = [
-  { href: "/draw/", label: "สุ่มทีม", no: "01", group: "tools", Icon: IconDice },
-  { href: "/wheel/", label: "วงล้อ", no: "02", group: "tools", Icon: IconWheel },
+  {
+    href: "/draw/",
+    label: "สุ่มทีม",
+    no: "01",
+    group: "tools",
+    Icon: IconDice,
+  },
+  {
+    href: "/wheel/",
+    label: "วงล้อ",
+    no: "02",
+    group: "tools",
+    Icon: IconWheel,
+  },
   {
     href: "/tournaments/",
     label: "ทัวร์นาเมนต์",
     no: "03",
     group: "league",
     Icon: IconTrophy,
+    admin: true,
   },
-  { href: "/players/", label: "ผู้เล่น", no: "04", group: "league", Icon: IconUsers },
-  { href: "/channel/", label: "ช่อง", no: "05", group: "channel", Icon: IconHeart },
-  { href: "/widgets/", label: "Widget", no: "06", group: "tools", Icon: IconMonitor },
-  { href: "/activity/", label: "ประวัติ", no: "07", group: "channel", Icon: IconClock },
+  {
+    href: "/players/",
+    label: "ผู้เล่น",
+    no: "04",
+    group: "league",
+    Icon: IconUsers,
+    admin: true,
+  },
+  {
+    href: "/channel/",
+    label: "ช่อง",
+    no: "05",
+    group: "channel",
+    Icon: IconHeart,
+    admin: true,
+  },
+  {
+    href: "/widgets/",
+    label: "Widget",
+    no: "06",
+    group: "tools",
+    Icon: IconMonitor,
+    admin: true,
+  },
+  {
+    href: "/activity/",
+    label: "ประวัติ",
+    no: "07",
+    group: "channel",
+    Icon: IconClock,
+    admin: true,
+  },
 ];
+
+/** เมนูที่ควรเห็น — ผู้ชมทั่วไปเหลือแค่เครื่องมือที่เปิดให้ใช้ฟรี */
+export function visibleNav(admin: boolean): NavItem[] {
+  return admin ? NAV : NAV.filter((item) => !item.admin);
+}
 
 export const NAV_GROUPS: { key: NavGroup; title: string }[] = [
   { key: "tools", title: "เครื่องมือ" },
@@ -115,6 +165,11 @@ export default function NavBar() {
     authStore.getServerSnapshot,
   );
   const user = authStore.user();
+  const admin = useSyncExternalStore(
+    gateStore.subscribe,
+    gateStore.getSnapshot,
+    gateStore.getServerSnapshot,
+  );
 
   // ย่อแถบลงเมื่อเลื่อนหน้าลง
   useEffect(() => {
@@ -150,8 +205,8 @@ export default function NavBar() {
         <span className="hidden h-6 w-px shrink-0 bg-[rgb(var(--hair)/var(--hair-a))] lg:block" />
 
         {/* เมนู — ขอบจางสองข้างเป็นสัญญาณว่าเลื่อนได้ เพราะ scrollbar ถูกซ่อนสนิท */}
-        <nav className="no-scrollbar flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [mask-image:linear-gradient(90deg,transparent,#000_18px,#000_calc(100%-18px),transparent)]">
-          {NAV.map((item) => {
+        <nav className="no-scrollbar flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto mask-[linear-gradient(90deg,transparent,#000_18px,#000_calc(100%-18px),transparent)]">
+          {visibleNav(admin).map((item) => {
             const active = isActive(item.href, pathname);
             const Icon = item.Icon;
             return (
@@ -175,7 +230,9 @@ export default function NavBar() {
                 </span>
 
                 {/* จอใหญ่มีที่พอให้ทุกเมนูมีชื่อ */}
-                <span className="relative z-10 hidden sm:block">{item.label}</span>
+                <span className="relative z-10 hidden sm:block">
+                  {item.label}
+                </span>
 
                 {/* จอเล็กโชว์ชื่อเฉพาะเมนูที่เปิดอยู่ ไม่งั้นแถวยาวเกินจอ */}
                 <span className="relative z-10 sm:hidden">
@@ -201,6 +258,22 @@ export default function NavBar() {
 
         {/* ปุ่มขวา */}
         <div className="flex shrink-0 items-center gap-1">
+          {/* ออกจากโหมดผู้จัด — โชว์เฉพาะตอนปลดล็อกแล้ว จะได้รู้ว่ากำลังอยู่โหมดไหน */}
+          {admin && (
+            <button
+              type="button"
+              onClick={() => {
+                gateStore.lock();
+                toast("ออกจากโหมดผู้จัดแล้ว");
+              }}
+              title="ออกจากโหมดผู้จัด"
+              aria-label="ออกจากโหมดผู้จัด"
+              className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full text-champagne transition-colors hover:bg-champagne/10"
+            >
+              <IconUnlock className="h-4 w-4" />
+            </button>
+          )}
+
           <ThemeSoundButtons />
 
           {hasBackend &&
@@ -254,7 +327,10 @@ export default function NavBar() {
                     .signIn()
                     .then(() => {
                       const u = authStore.user();
-                      recordActivity("auth.signin", `เข้าสู่ระบบ (${u?.name ?? "-"})`);
+                      recordActivity(
+                        "auth.signin",
+                        `เข้าสู่ระบบ (${u?.name ?? "-"})`,
+                      );
                     })
                     .catch(() =>
                       toast("เข้าสู่ระบบไม่สำเร็จ ป็อปอัปอาจถูกบล็อก", "error"),

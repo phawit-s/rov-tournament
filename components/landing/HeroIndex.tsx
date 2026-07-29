@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import type { ComponentType } from "react";
+import { useSyncExternalStore, type ComponentType } from "react";
+import { gateStore } from "@/lib/gate";
 import { IconDice, IconMonitor, IconTrophy, IconWheel } from "../ui/icons";
 
 type IconType = ComponentType<{ className?: string; strokeWidth?: number }>;
@@ -14,6 +15,8 @@ type Entry = {
   /** ปลายทางแบบอ่านได้ ใช้เป็นเลขหน้าในสารบัญ */
   slug: string;
   Icon: IconType;
+  /** บทที่เปิดเฉพาะโหมดผู้จัด */
+  admin?: boolean;
 };
 
 const INDEX: Entry[] = [
@@ -40,6 +43,7 @@ const INDEX: Entry[] = [
     href: "/tournaments/",
     slug: "/tournaments",
     Icon: IconTrophy,
+    admin: true,
   },
   {
     no: "04",
@@ -48,6 +52,7 @@ const INDEX: Entry[] = [
     href: "/widgets/",
     slug: "/widgets",
     Icon: IconMonitor,
+    admin: true,
   },
 ];
 
@@ -76,15 +81,24 @@ function IndexNo({ no }: { no: string }) {
  * เส้นจุดนำสายตาแบบสูจิบัตร: ชื่อบท … เลขหน้า
  */
 export default function HeroIndex({ className = "" }: { className?: string }) {
+  const admin = useSyncExternalStore(
+    gateStore.subscribe,
+    gateStore.getSnapshot,
+    gateStore.getServerSnapshot,
+  );
+  const entries = admin ? INDEX : INDEX.filter((e) => !e.admin);
+
   return (
     <nav aria-label="สารบัญเครื่องมือ" className={className}>
       <div className="flex items-baseline justify-between gap-4 border-b border-hair pb-2">
         <p className="slug">สารบัญ</p>
-        <p className="slug slug-2 num">04 บท</p>
+        <p className="slug slug-2 num">
+          {String(entries.length).padStart(2, "0")} บท
+        </p>
       </div>
 
       <ul>
-        {INDEX.map((e) => (
+        {entries.map((e) => (
           <li key={e.no}>
             <Link
               href={e.href}

@@ -171,6 +171,28 @@ export const IconMore = ({ className, strokeWidth }: IconProps) =>
     strokeWidth,
   );
 
+export const IconLock = ({ className, strokeWidth }: IconProps) =>
+  base(
+    <>
+      <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.4" />
+      <path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7" />
+      <circle cx="12" cy="15.2" r="1.1" fill="currentColor" stroke="none" />
+    </>,
+    className,
+    strokeWidth,
+  );
+
+export const IconUnlock = ({ className, strokeWidth }: IconProps) =>
+  base(
+    <>
+      <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.4" />
+      <path d="M8 10.5V7.8a4 4 0 0 1 7.7-1.5" />
+      <circle cx="12" cy="15.2" r="1.1" fill="currentColor" stroke="none" />
+    </>,
+    className,
+    strokeWidth,
+  );
+
 /* ---------- ไอคอนตำแหน่งในทีม ---------- */
 
 export const LaneDark = ({ className, strokeWidth }: IconProps) =>

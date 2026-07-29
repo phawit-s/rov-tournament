@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import AppShell from "@/components/AppShell";
+import AdminGate from "@/components/auth/AdminGate";
 import PlayersView from "@/components/tournament/PlayersView";
 
 export const metadata: Metadata = {
@@ -10,7 +11,9 @@ export const metadata: Metadata = {
 export default function PlayersPage() {
   return (
     <AppShell wide>
-      <PlayersView />
+      <AdminGate>
+        <PlayersView />
+      </AdminGate>
     </AppShell>
   );
 }

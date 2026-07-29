@@ -6,6 +6,7 @@ import Link from "next/link";
 import { motion, useReducedMotion, useScroll } from "motion/react";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { BRAND } from "@/lib/brand";
+import { gateStore } from "@/lib/gate";
 import { heroDelay } from "@/lib/intro";
 import Button from "../ui/Button";
 import Panel, { PanelHeader } from "../ui/Panel";
@@ -31,6 +32,8 @@ const FEATURES: {
   href: string;
   tag: string;
   Icon: IconType;
+  /** เครื่องมือที่เปิดเฉพาะโหมดผู้จัด */
+  admin?: boolean;
 }[] = [
   {
     no: "01",
@@ -58,6 +61,7 @@ const FEATURES: {
     href: "/tournaments/",
     tag: "Cup",
     Icon: IconTrophy,
+    admin: true,
   },
   {
     no: "04",
@@ -67,11 +71,16 @@ const FEATURES: {
     href: "/widgets/",
     tag: "OBS",
     Icon: IconMonitor,
+    admin: true,
   },
 ];
 
 const STEPS = [
-  { no: "01", title: "สร้างทัวร์", detail: "ตั้งชื่อ ใส่รูป กำหนดวันรับสมัครและเงินรางวัล" },
+  {
+    no: "01",
+    title: "สร้างทัวร์",
+    detail: "ตั้งชื่อ ใส่รูป กำหนดวันรับสมัครและเงินรางวัล",
+  },
   {
     no: "02",
     title: "เปิดรับสมัคร",
@@ -82,7 +91,11 @@ const STEPS = [
     title: "จัดสายและแข่ง",
     detail: "สุ่มคู่จาก seed กรอกผล ผู้ชนะเข้ารอบถัดไปเอง",
   },
-  { no: "04", title: "ขึ้นจอสตรีม", detail: "ก๊อป widget ไปวางใน OBS ผลอัปเดตสดไม่ต้องรีเฟรช" },
+  {
+    no: "04",
+    title: "ขึ้นจอสตรีม",
+    detail: "ก๊อป widget ไปวางใน OBS ผลอัปเดตสดไม่ต้องรีเฟรช",
+  },
 ];
 
 const HERO_LINES = ["จัดทัวร์นาเมนต์", "ให้ดูเป็นมืออาชีพ"];
@@ -101,7 +114,10 @@ function StepNo({ no }: { no: string }) {
     <span className="relative block">
       <span className={`fig text-outline block ${size}`}>{no}</span>
       {reduced ? (
-        <span aria-hidden className={`fig absolute inset-0 block ${size} text-champagne/60`}>
+        <span
+          aria-hidden
+          className={`fig absolute inset-0 block ${size} text-champagne/60`}
+        >
           {no}
         </span>
       ) : (
@@ -121,7 +137,15 @@ function StepNo({ no }: { no: string }) {
 }
 
 /** หัวการ์ดฟีเจอร์ — เลขบท ไอคอนเล็ก และป้ายภาษาอังกฤษสั้นๆ */
-function FeatureHead({ no, tag, Icon }: { no: string; tag: string; Icon: IconType }) {
+function FeatureHead({
+  no,
+  tag,
+  Icon,
+}: {
+  no: string;
+  tag: string;
+  Icon: IconType;
+}) {
   return (
     <div className="flex items-center gap-2.5">
       <Icon className="h-4 w-4 text-champagne/80" strokeWidth={1.5} />
@@ -154,9 +178,10 @@ export default function Landing() {
 
   /* ---- ขนาดของงานอาร์ตฮีโร่ วัดจากความกว้างจริงของ section ---- */
   const heroRef = useRef<HTMLElement | null>(null);
-  const [orbit, setOrbit] = useState<{ size: number; interactive: boolean } | null>(
-    null,
-  );
+  const [orbit, setOrbit] = useState<{
+    size: number;
+    interactive: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const el = heroRef.current;
@@ -183,8 +208,18 @@ export default function Landing() {
     offset: ["start 70%", "end 60%"],
   });
 
-  const big = FEATURES[0];
-  const rest = FEATURES.slice(1);
+  /* ---- ผู้ชมทั่วไปเห็นแค่เครื่องมือที่เปิดให้ใช้ฟรี ---- */
+  const admin = useSyncExternalStore(
+    gateStore.subscribe,
+    gateStore.getSnapshot,
+    gateStore.getServerSnapshot,
+  );
+  const features = admin ? FEATURES : FEATURES.filter((f) => !f.admin);
+  const big = features[0];
+  const rest = features.slice(1);
+  // เหลือสองใบแล้วยังใช้ผังใบใหญ่กินสองแถวจะเหลือช่องโหว่ ให้แบ่งครึ่งแทน
+  const bigSpan = admin ? "sm:col-span-4 sm:row-span-2" : "sm:col-span-3";
+  const restSpan = admin ? "sm:col-span-2" : "sm:col-span-3";
 
   return (
     <div className="space-y-24 pb-16 sm:space-y-32">
@@ -250,7 +285,11 @@ export default function Landing() {
                   ease: [0.16, 1, 0.3, 1],
                 }}
               >
-                {i === 1 ? <span className="text-gold-grad">{line}</span> : line}
+                {i === 1 ? (
+                  <span className="text-gold-grad">{line}</span>
+                ) : (
+                  line
+                )}
               </motion.span>
             </span>
           ))}
@@ -268,7 +307,8 @@ export default function Landing() {
             className="max-w-xl text-deck text-muted"
           >
             สุ่มทีม จัดสายแข่ง กรอกผล คิดเงินรางวัล รับโดเนท
-            และส่งทุกอย่างขึ้นจอสตรีมได้ในที่เดียว — ทำงานในเบราว์เซอร์ ไม่ต้องติดตั้งอะไร
+            และส่งทุกอย่างขึ้นจอสตรีมได้ในที่เดียว — ทำงานในเบราว์เซอร์
+            ไม่ต้องติดตั้งอะไร
           </motion.p>
 
           <motion.div
@@ -281,16 +321,36 @@ export default function Landing() {
             }}
             className="mt-8 flex flex-wrap items-center gap-3"
           >
-            <Link href="/tournaments/">
-              <Button size="lg">
-                {signedIn ? "เข้าแดชบอร์ด" : hasBackend ? "เข้าสู่ระบบเพื่อเริ่ม" : "เริ่มใช้งาน"}
-              </Button>
-            </Link>
-            <Link href="/draw/">
-              <Button variant="outline" size="lg">
-                {signedIn ? "สุ่มทีมเลย" : "ลองสุ่มทีมก่อน"}
-              </Button>
-            </Link>
+            {/* ผู้ชมทั่วไปต้องไม่ถูกพาไปชนหน้าล็อก ปุ่มหลักจึงชี้ไปเครื่องมือที่ใช้ได้จริง */}
+            {admin ? (
+              <>
+                <Link href="/tournaments/">
+                  <Button size="lg">
+                    {signedIn
+                      ? "เข้าแดชบอร์ด"
+                      : hasBackend
+                        ? "เข้าสู่ระบบเพื่อเริ่ม"
+                        : "เริ่มใช้งาน"}
+                  </Button>
+                </Link>
+                <Link href="/draw/">
+                  <Button variant="outline" size="lg">
+                    สุ่มทีมเลย
+                  </Button>
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href="/draw/">
+                  <Button size="lg">เริ่มสุ่มแบ่งทีม</Button>
+                </Link>
+                <Link href="/wheel/">
+                  <Button variant="outline" size="lg">
+                    ลองวงล้อสุ่ม
+                  </Button>
+                </Link>
+              </>
+            )}
           </motion.div>
 
           <motion.div
@@ -303,7 +363,11 @@ export default function Landing() {
             <div className="flex items-center gap-3">
               <motion.span
                 animate={reduced ? undefined : { y: [0, 8, 0] }}
-                transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+                transition={{
+                  duration: 2.2,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
                 className="slug slug-2"
               >
                 เลื่อนลง
@@ -339,7 +403,7 @@ export default function Landing() {
             no="01"
             eyebrow="What it does"
             title="เครื่องมือครบชุดสำหรับคนจัดแข่ง"
-            meta="4 เครื่องมือ · ใช้ฟรีทั้งหมด"
+            meta={`${features.length} เครื่องมือ · ใช้ฟรีทั้งหมด`}
           />
         </Reveal>
 
@@ -350,7 +414,7 @@ export default function Landing() {
         */}
         <div className="mt-12 grid gap-3 sm:grid-cols-6">
           {/* ใบตัวเอก — มีสายแข่งตัวอย่างวาดจริงข้างใน */}
-          <Reveal className="sm:col-span-4 sm:row-span-2">
+          <Reveal className={bigSpan}>
             <Link href={big.href} className="group block h-full">
               <Panel
                 variant="feature"
@@ -390,7 +454,7 @@ export default function Landing() {
           </Reveal>
 
           {rest.map((f, i) => (
-            <Reveal key={f.no} index={i + 1} className="sm:col-span-2">
+            <Reveal key={f.no} index={i + 1} className={restSpan}>
               <Link href={f.href} className="group block h-full">
                 <TiltCard className="h-full">
                   <Panel className="relative flex h-full flex-col overflow-hidden p-6">
@@ -416,27 +480,29 @@ export default function Landing() {
           ))}
 
           {/* ตัวอย่าง widget ของจริง เติมช่องว่างแถวล่างของ bento */}
-          <Reveal index={4} className="sm:col-span-4">
-            <Panel className="flex h-full flex-col p-6">
-              <PanelHeader
-                eyebrow="Live preview"
-                title="หน้าตาจริงบนจอสตรีม"
-                action={
-                  <Link
-                    href="/widgets/"
-                    className="font-display text-xs text-champagne hover:underline"
-                  >
-                    ตั้งค่า →
-                  </Link>
-                }
-              />
-              <WidgetPeek className="grow" />
-              <p className="mt-4 text-xs text-muted">
-                ทุกใบเป็นลิงก์ธรรมดา วางเป็น Browser Source ใน OBS
-                แล้วผลจะอัปเดตเองตอนกรอกคะแนน
-              </p>
-            </Panel>
-          </Reveal>
+          {admin && (
+            <Reveal index={4} className="sm:col-span-4">
+              <Panel className="flex h-full flex-col p-6">
+                <PanelHeader
+                  eyebrow="Live preview"
+                  title="หน้าตาจริงบนจอสตรีม"
+                  action={
+                    <Link
+                      href="/widgets/"
+                      className="font-display text-xs text-champagne hover:underline"
+                    >
+                      ตั้งค่า →
+                    </Link>
+                  }
+                />
+                <WidgetPeek className="grow" />
+                <p className="mt-4 text-xs text-muted">
+                  ทุกใบเป็นลิงก์ธรรมดา วางเป็น Browser Source ใน OBS
+                  แล้วผลจะอัปเดตเองตอนกรอกคะแนน
+                </p>
+              </Panel>
+            </Reveal>
+          )}
         </div>
       </section>
 
@@ -512,28 +578,57 @@ export default function Landing() {
         </div>
 
         <Reveal>
-          <SectionHead no="03" eyebrow="Ready" title="เริ่มจัดทัวร์แรกของคุณ" />
+          <SectionHead
+            no="03"
+            eyebrow="Ready"
+            title={admin ? "เริ่มจัดทัวร์แรกของคุณ" : "ลองเลยไม่ต้องสมัคร"}
+          />
         </Reveal>
 
         <Reveal from="scale" className="mt-10">
-          <Panel variant="feature" className="relative p-10 text-center sm:p-14">
-            <p className="slug">เริ่มจากศูนย์</p>
+          <Panel
+            variant="feature"
+            className="relative p-10 text-center sm:p-14"
+          >
+            <p className="slug">{admin ? "เริ่มจากศูนย์" : "พร้อมใช้ทันที"}</p>
             <h3 className="mx-auto mt-5 max-w-2xl font-display text-h2 font-light">
-              <span className="text-gold-grad">ตั้งชื่อ ใส่จำนวนทีม แล้วกดจัดสาย</span>
+              <span className="text-gold-grad">
+                {admin
+                  ? "ตั้งชื่อ ใส่จำนวนทีม แล้วกดจัดสาย"
+                  : "ใส่รายชื่อ แล้วกดสุ่มได้เลย"}
+              </span>
             </h3>
             <p className="mx-auto mt-5 max-w-lg text-sm text-muted">
-              ทัวร์แรกใช้เวลาไม่ถึงนาที ยังไม่ต้องมีรายชื่อครบก็สร้างไว้ก่อนได้
-              แล้วค่อยเปิดรับสมัครทีหลัง
+              {admin
+                ? "ทัวร์แรกใช้เวลาไม่ถึงนาที ยังไม่ต้องมีรายชื่อครบก็สร้างไว้ก่อนได้ แล้วค่อยเปิดรับสมัครทีหลัง"
+                : "ไม่ต้องสมัครสมาชิก ไม่ต้องติดตั้งอะไร ผลทุกครั้งล็อกด้วย seed ตรวจย้อนหลังได้"}
             </p>
             <div className="mt-9 flex flex-wrap justify-center gap-3">
-              <Link href="/tournaments/">
-                <Button size="lg">{signedIn ? "ไปที่ทัวร์นาเมนต์" : "เข้าสู่ระบบ"}</Button>
-              </Link>
-              <Link href="/widgets/">
-                <Button variant="ghost" size="lg">
-                  ดู widget สำหรับ OBS
-                </Button>
-              </Link>
+              {admin ? (
+                <>
+                  <Link href="/tournaments/">
+                    <Button size="lg">
+                      {signedIn ? "ไปที่ทัวร์นาเมนต์" : "เข้าสู่ระบบ"}
+                    </Button>
+                  </Link>
+                  <Link href="/widgets/">
+                    <Button variant="ghost" size="lg">
+                      ดู widget สำหรับ OBS
+                    </Button>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link href="/draw/">
+                    <Button size="lg">สุ่มแบ่งทีม</Button>
+                  </Link>
+                  <Link href="/wheel/">
+                    <Button variant="ghost" size="lg">
+                      วงล้อสุ่ม
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
           </Panel>
         </Reveal>

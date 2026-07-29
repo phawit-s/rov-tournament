@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import AppShell from "@/components/AppShell";
+import AdminGate from "@/components/auth/AdminGate";
 import AuthGate from "@/components/auth/AuthGate";
 import TournamentsView from "@/components/tournament/TournamentsView";
 
@@ -11,9 +12,11 @@ export const metadata: Metadata = {
 export default function TournamentsPage() {
   return (
     <AppShell wide>
-      <AuthGate description="ต้องล็อกอินก่อนถึงจะสร้างและจัดการทัวร์นาเมนต์ได้ · ถ้าจะดูทัวร์ที่มีคนแชร์มา เปิดจากลิงก์ได้เลยไม่ต้องล็อกอิน">
-        <TournamentsView />
-      </AuthGate>
+      <AdminGate>
+        <AuthGate description="ต้องล็อกอินก่อนถึงจะสร้างและจัดการทัวร์นาเมนต์ได้ · ถ้าจะดูทัวร์ที่มีคนแชร์มา เปิดจากลิงก์ได้เลยไม่ต้องล็อกอิน">
+          <TournamentsView />
+        </AuthGate>
+      </AdminGate>
     </AppShell>
   );
 }

@@ -1,17 +1,34 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { BRAND_MARK } from "@/lib/brand";
-import { NAV, NAV_GROUPS, ThemeSoundButtons } from "./NavBar";
+import { gateStore } from "@/lib/gate";
+import { IconLock, IconUnlock } from "./ui/icons";
+import { NAV_GROUPS, ThemeSoundButtons, visibleNav } from "./NavBar";
 
 /** บรรทัดข้อมูลเล่ม — ข้อเท็จจริงของเว็บ ไม่ใช่คำโฆษณา */
-const COLOPHON = ["ทำงานออฟไลน์ได้", "ข้อมูลเก็บในเบราว์เซอร์", "เผยแพร่เมื่อกดเอง"];
+const COLOPHON = [
+  "ทำงานออฟไลน์ได้",
+  "ข้อมูลเก็บในเบราว์เซอร์",
+  "เผยแพร่เมื่อกดเอง",
+];
 
 /**
  * องก์ปิดของทุกหน้า — สารบัญท้ายเล่ม ข้อมูลเล่ม แล้วปิดด้วย wordmark ที่จมขอบจอ
  * ปีที่แสดงเป็นค่าคงที่ ไม่ใช้ new Date() เพราะ static export จะ prerender ค่าไว้ตอน build
  */
 export default function Footer() {
+  const admin = useSyncExternalStore(
+    gateStore.subscribe,
+    gateStore.getSnapshot,
+    gateStore.getServerSnapshot,
+  );
+  const nav = visibleNav(admin);
+  const groups = NAV_GROUPS.filter((g) =>
+    nav.some((item) => item.group === g.key),
+  );
+
   return (
     <footer className="relative mt-16">
       <div className="hairline-top relative border-t border-hair pt-8">
@@ -22,29 +39,31 @@ export default function Footer() {
 
         {/* สารบัญท้ายเล่ม — สร้างจาก NAV ชุดเดียวกับแถบเมนู */}
         <div className="mt-7 grid grid-cols-2 gap-x-6 gap-y-9 md:grid-cols-4">
-          {NAV_GROUPS.map((group) => (
+          {groups.map((group) => (
             <div key={group.key}>
               <p className="slug">{group.title}</p>
               <span className="rule mt-3 block h-px" />
               <ul className="mt-2">
-                {NAV.filter((item) => item.group === group.key).map((item) => {
-                  const Icon = item.Icon;
-                  return (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        className="group flex items-baseline gap-2.5 py-1.5 text-sm text-muted transition-colors hover:text-ice"
-                      >
-                        <span className="num text-eyebrow text-champagne/45 transition-colors group-hover:text-champagne">
-                          {item.no}
-                        </span>
-                        <span className="truncate">{item.label}</span>
-                        <span className="h-px flex-1 self-center border-b border-dotted border-hair transition-colors group-hover:border-[rgb(var(--accent)/.6)]" />
-                        <Icon className="h-3.5 w-3.5 self-center opacity-35 transition-opacity group-hover:opacity-90" />
-                      </Link>
-                    </li>
-                  );
-                })}
+                {nav
+                  .filter((item) => item.group === group.key)
+                  .map((item) => {
+                    const Icon = item.Icon;
+                    return (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          className="group flex items-baseline gap-2.5 py-1.5 text-sm text-muted transition-colors hover:text-ice"
+                        >
+                          <span className="num text-eyebrow text-champagne/45 transition-colors group-hover:text-champagne">
+                            {item.no}
+                          </span>
+                          <span className="truncate">{item.label}</span>
+                          <span className="h-px flex-1 self-center border-b border-dotted border-hair transition-colors group-hover:border-[rgb(var(--accent)/.6)]" />
+                          <Icon className="h-3.5 w-3.5 self-center opacity-35 transition-opacity group-hover:opacity-90" />
+                        </Link>
+                      </li>
+                    );
+                  })}
               </ul>
             </div>
           ))}
@@ -53,8 +72,8 @@ export default function Footer() {
             <p className="slug">เกี่ยวกับ</p>
             <span className="rule mt-3 block h-px" />
             <p className="mt-3 text-sm leading-relaxed text-muted">
-              เครื่องมือจัดทัวร์นาเมนต์ครบชุดในหน้าเดียว ใช้ได้กับทุกเกม — สุ่มทีม
-              จัดสาย วงล้อ และกราฟิกสำหรับสตรีม
+              เครื่องมือจัดทัวร์นาเมนต์ครบชุดในหน้าเดียว ใช้ได้กับทุกเกม —
+              สุ่มทีม จัดสาย วงล้อ และกราฟิกสำหรับสตรีม
             </p>
             <Link
               href="/"
@@ -81,7 +100,28 @@ export default function Footer() {
               </span>
             ))}
           </p>
-          <ThemeSoundButtons />
+          <div className="flex items-center gap-1">
+            {/* ทางเข้าโหมดผู้จัด — วางท้ายเล่มไว้ ผู้ชมทั่วไปไม่ต้องสนใจ */}
+            {admin ? (
+              <button
+                type="button"
+                onClick={() => gateStore.lock()}
+                className="flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-champagne transition-colors hover:bg-champagne/10"
+              >
+                <IconUnlock className="h-3.5 w-3.5" />
+                ออกจากโหมดผู้จัด
+              </button>
+            ) : (
+              <Link
+                href="/tournaments/"
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-muted transition-colors hover:text-champagne"
+              >
+                <IconLock className="h-3.5 w-3.5" />
+                ผู้จัดแข่ง
+              </Link>
+            )}
+            <ThemeSoundButtons />
+          </div>
         </div>
 
         {/* ขีดไม้บรรทัด — รายละเอียดเล็กๆ ที่ทำให้ท้ายเล่มดูเป็นงานพิมพ์ */}
