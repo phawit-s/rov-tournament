@@ -8,12 +8,35 @@ export type TeamEntry = {
   members: string[];
   /** ชื่อผู้ติดต่อ / กัปตัน */
   contact?: string;
+  /** โลโก้ทีม (ไม่บังคับ) เก็บเป็น data URL ย่อแล้ว */
   logo?: string;
   /** เวลาที่สมัคร (ISO) */
   registeredAt: string;
   /** ผู้จัดยืนยันการสมัครแล้วหรือยัง */
   approved: boolean;
   seed?: number;
+};
+
+/** วิธีรับสมัคร */
+export type EntryMode =
+  /** สมัครมาเป็นทีม ล็อกทีมตามที่ส่งมา */
+  | "team"
+  /** สมัครรายบุคคล แล้วผู้จัดสุ่มแบ่งทีมทีหลัง */
+  | "solo";
+
+/** ผู้สมัครรายบุคคล (ใช้ตอน entryMode = solo) */
+export type SoloEntry = {
+  id: string;
+  name: string;
+  /** ชื่อในเกม */
+  ign?: string;
+  contact?: string;
+  /** รูปโปรไฟล์ (ไม่บังคับ) */
+  avatar?: string;
+  /** ตำแหน่งที่ถนัด */
+  lane?: string;
+  registeredAt: string;
+  approved: boolean;
 };
 
 export type MatchSide = {
@@ -161,7 +184,11 @@ export type Tournament = {
   startAt?: string;
   venue?: string;
 
+  /** รับสมัครแบบไหน — ค่าเริ่มต้นคือมาเป็นทีม */
+  entryMode: EntryMode;
   teams: TeamEntry[];
+  /** ผู้สมัครรายบุคคล รอผู้จัดสุ่มแบ่งทีม */
+  soloPlayers: SoloEntry[];
   bracket: Bracket | null;
   /** BO ของแต่ละรอบ index 0 = รอบแรก */
   roundBestOf: BestOf[];
@@ -173,6 +200,12 @@ export type Tournament = {
 
   /** PIN โหมดผู้จัด (ทำงานฝั่ง client เท่านั้น กันมือลั่น ไม่ใช่ระบบความปลอดภัยจริง) */
   adminPin?: string;
+
+  /** บัญชี Google ของเจ้าของ — ตั้งตอนเผยแพร่ขึ้นคลาวด์ */
+  ownerUid?: string;
+  ownerEmail?: string;
+  /** อีเมล Google ของทีมงานที่ช่วยกรอกผล/อนุมัติสลิปได้ */
+  adminEmails?: string[];
 
   createdAt: string;
   updatedAt: string;

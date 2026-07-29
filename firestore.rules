@@ -1,4 +1,4 @@
-rules_version = '2';
+﻿rules_version = '2';
 
 // กติกาความปลอดภัยของ ROV Tournament Hub
 // เอาไปวางที่ Firebase Console → Firestore Database → Rules → Publish
@@ -19,14 +19,30 @@ service cloud.firestore {
         return request.auth != null
           && request.resource.data.ownerUid == request.auth.uid;
       }
+      // ทีมงานที่เจ้าของเพิ่มอีเมลไว้ ต้องเป็นอีเมลที่ยืนยันแล้วเท่านั้น
+      // (ล็อกอินแบบไม่ระบุตัวตนไม่มี email ใน token เลยผ่านตรงนี้ไม่ได้)
+      function isStaff() {
+        return request.auth != null
+          && request.auth.token.email_verified == true
+          && resource.data.adminEmails is list
+          && request.auth.token.email.lower() in resource.data.adminEmails;
+      }
+      // ทีมงานห้ามยกระดับตัวเอง: เปลี่ยนเจ้าของหรือแก้รายชื่อทีมงานไม่ได้
+      function keepsAccessFields() {
+        return request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.adminEmails == resource.data.adminEmails;
+      }
 
-      allow read: if resource.data.isPublic == true || isOwner();
+      allow read: if resource.data.isPublic == true || isOwner() || isStaff();
 
       // สร้างใหม่ได้ถ้าใส่ ownerUid เป็นตัวเอง
       allow create: if claimsOwnership();
 
-      // แก้/ลบได้เฉพาะเจ้าของ และห้ามโอนเจ้าของให้คนอื่น
-      allow update: if isOwner() && claimsOwnership();
+      // เจ้าของแก้ได้ทุกอย่าง ทีมงานแก้ได้ทุกอย่างยกเว้นสิทธิ์
+      allow update: if (isOwner() && claimsOwnership())
+        || (isStaff() && keepsAccessFields());
+
+      // ลบได้เฉพาะเจ้าของ
       allow delete: if isOwner();
 
       match /registrations/{registrationId} {
@@ -36,6 +52,16 @@ service cloud.firestore {
         function isTournamentOwner() {
           return request.auth != null
             && tournament().ownerUid == request.auth.uid;
+        }
+        // ทีมงานอนุมัติใบสมัคร/สลิปได้เหมือนเจ้าของ
+        function isTournamentStaff() {
+          return request.auth != null
+            && request.auth.token.email_verified == true
+            && tournament().adminEmails is list
+            && request.auth.token.email.lower() in tournament().adminEmails;
+        }
+        function canManage() {
+          return isTournamentOwner() || isTournamentStaff();
         }
 
         // เจ้าของเห็นทุกใบ ผู้สมัครเห็นใบตัวเอง
@@ -52,7 +78,7 @@ service cloud.firestore {
           && request.resource.data.members.size() <= 12;
 
         // อนุมัติ/ปฏิเสธ ทำได้เฉพาะเจ้าของทัวร์
-        allow update, delete: if isTournamentOwner();
+        allow update, delete: if canManage();
       }
 
       match /donations/{donationId} {
@@ -62,6 +88,16 @@ service cloud.firestore {
         function isTournamentOwner() {
           return request.auth != null
             && tournament().ownerUid == request.auth.uid;
+        }
+        // ทีมงานอนุมัติใบสมัคร/สลิปได้เหมือนเจ้าของ
+        function isTournamentStaff() {
+          return request.auth != null
+            && request.auth.token.email_verified == true
+            && tournament().adminEmails is list
+            && request.auth.token.email.lower() in tournament().adminEmails;
+        }
+        function canManage() {
+          return isTournamentOwner() || isTournamentStaff();
         }
 
         // widget แจ้งเตือนใน OBS ไม่ได้ล็อกอิน เลยต้องอ่านใบที่อนุมัติแล้วได้
@@ -86,7 +122,7 @@ service cloud.firestore {
               || request.resource.data.slip.size() <= 400000);
 
         // อนุมัติ/ลบ ได้เฉพาะเจ้าของทัวร์
-        allow update, delete: if isTournamentOwner();
+        allow update, delete: if canManage();
       }
     }
   }

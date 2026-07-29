@@ -88,6 +88,42 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
+/**
+ * ช่องกรอกตัวเลข — โชว์ค่าว่างแทน 0
+ * ถ้าปล่อยให้โชว์ 0 พอผู้ใช้พิมพ์ต่อท้ายจะกลายเป็น 0111
+ */
+export function NumberInput({
+  value,
+  onChange,
+  min = 0,
+  max,
+  className = "",
+  ...rest
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type"> & {
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+}) {
+  return (
+    <input
+      {...rest}
+      type="number"
+      inputMode="numeric"
+      min={min}
+      max={max}
+      value={value === 0 ? "" : String(value)}
+      onChange={(e) => {
+        const raw = e.target.value.replace(/^0+(?=\d)/, "");
+        const next = raw === "" ? 0 : Number(raw);
+        if (!Number.isFinite(next)) return;
+        onChange(Math.min(max ?? Number.MAX_SAFE_INTEGER, Math.max(min, next)));
+      }}
+      className={`field ${widthClass(className)} rounded-xl px-3.5 py-2.5 text-sm text-ice outline-none placeholder:text-muted/80 ${className}`}
+    />
+  );
+}
+
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const { className = "", ...rest } = props;
   return (

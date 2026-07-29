@@ -6,6 +6,8 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { useHashParam, useHydrated } from "@/hooks/useClient";
 import { adminStore } from "@/lib/tournament/admin";
+import { authStore } from "@/lib/backend/firebase";
+import { CAN, ROLE_META, roleFor } from "@/lib/tournament/roles";
 import { cloudReady, watchTournament } from "@/lib/tournament/cloud";
 import { championId, standings } from "@/lib/tournament/bracket";
 import { calcPrizes, formatMoney } from "@/lib/tournament/prize";
@@ -22,18 +24,21 @@ import Panel from "../ui/Panel";
 import BracketPanel from "./BracketPanel";
 import PrizePanel from "./PrizePanel";
 import SchedulePanel from "./SchedulePanel";
+import AccessPanel from "./AccessPanel";
 import SupportersPanel from "./SupportersPanel";
 import TeamsPanel from "./TeamsPanel";
 import TournamentForm from "./TournamentForm";
 import { EmptyNote, Input, LiveBadge, Stat, StatusBadge } from "./ui";
 
+/** manage = true คือแท็บที่เปิดให้เฉพาะเจ้าของกับทีมงาน */
 const TABS = [
-  { key: "overview", label: "ภาพรวม" },
-  { key: "teams", label: "ทีม / สมัคร" },
-  { key: "bracket", label: "สายแข่ง" },
-  { key: "schedule", label: "ตารางแข่ง" },
-  { key: "prize", label: "เงินรางวัล" },
-  { key: "support", label: "โดเนท / สมาชิก" },
+  { key: "overview", label: "ภาพรวม", manage: false },
+  { key: "teams", label: "ทีม / สมัคร", manage: false },
+  { key: "bracket", label: "สายแข่ง", manage: false },
+  { key: "schedule", label: "ตารางแข่ง", manage: false },
+  { key: "prize", label: "เงินรางวัล", manage: false },
+  { key: "support", label: "โดเนท / สมาชิก", manage: true },
+  { key: "access", label: "สิทธิ์", manage: true },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -49,6 +54,12 @@ export default function TournamentDetail() {
     adminStore.getSnapshot,
     adminStore.getServerSnapshot,
   );
+  useSyncExternalStore(
+    authStore.subscribe,
+    authStore.getSnapshot,
+    authStore.getServerSnapshot,
+  );
+  const user = authStore.user();
 
   const [tab, setTab] = useState<TabKey>("overview");
   const [editing, setEditing] = useState(false);
@@ -101,8 +112,16 @@ export default function TournamentDetail() {
     );
   }
 
-  const isAdmin = adminStore.isUnlocked(tournament.id, tournament.adminPin);
-  const locked = !!tournament.adminPin && !isAdmin;
+  // สิทธิ์จริงมาจากบัญชีที่ล็อกอิน ส่วน PIN เป็นแค่ชั้นกันมือลั่นของทัวร์ในเครื่อง
+  const role = roleFor(tournament, {
+    uid: user?.uid,
+    email: user?.email,
+    anonymous: user?.email === null && !!user?.uid,
+  });
+  const pinOk = adminStore.isUnlocked(tournament.id, tournament.adminPin);
+  const isAdmin = CAN.manage(role) && pinOk;
+  const locked = CAN.manage(role) && !!tournament.adminPin && !pinOk;
+  const visibleTabs = TABS.filter((t) => !t.manage || CAN.manage(role));
 
   if (editing) {
     return (
@@ -152,6 +171,19 @@ export default function TournamentDetail() {
             <StatusBadge status={tournament.status} />
             {tournament.live.isLive && tournament.live.url && (
               <LiveBadge url={tournament.live.url} />
+            )}
+            {CAN.manage(role) && (
+              <span
+                className="rounded-full px-2.5 py-1 font-display text-[11px]"
+                style={{
+                  color: `rgb(${ROLE_META[role].rgb})`,
+                  background: `rgb(${ROLE_META[role].rgb} / 0.12)`,
+                  boxShadow: `inset 0 0 0 1px rgb(${ROLE_META[role].rgb} / 0.3)`,
+                }}
+                title={ROLE_META[role].hint}
+              >
+                {ROLE_META[role].label}
+              </span>
             )}
           </div>
 
@@ -270,7 +302,7 @@ export default function TournamentDetail() {
 
       {/* แท็บ */}
       <div className="flex flex-wrap gap-1 rounded-xl tile p-1">
-        {TABS.map((item) => (
+        {visibleTabs.map((item) => (
           <button
             key={item.key}
             type="button"
@@ -302,8 +334,11 @@ export default function TournamentDetail() {
         <SchedulePanel tournament={tournament} isAdmin={isAdmin} />
       )}
       {tab === "prize" && <PrizePanel tournament={tournament} isAdmin={isAdmin} />}
-      {tab === "support" && (
+      {tab === "support" && CAN.manage(role) && (
         <SupportersPanel tournament={tournament} isAdmin={isAdmin} />
+      )}
+      {tab === "access" && CAN.manage(role) && (
+        <AccessPanel tournament={tournament} role={role} />
       )}
 
       <AnimatePresence>

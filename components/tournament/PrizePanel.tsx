@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import { standings } from "@/lib/tournament/bracket";
 import { PRIZE_PRESETS, calcPrizes, formatMoney } from "@/lib/tournament/prize";
 import { tournamentStore } from "@/lib/tournament/store";
 import type { PrizeSlot, Tournament } from "@/lib/tournament/types";
 import Panel from "../ui/Panel";
-import { Input, Label } from "./ui";
+import { Input, Label, NumberInput } from "./ui";
 
 type Props = { tournament: Tournament; isAdmin: boolean };
 
@@ -58,11 +58,11 @@ export default function PrizePanel({ tournament, isAdmin }: Props) {
             <div className="flex items-end gap-2">
               <div>
                 <Label>ยอดรวม</Label>
-                <Input
-                  type="number"
-                  min={0}
+                <NumberInput
                   value={prize.total}
-                  onChange={(e) => setPrize({ total: Number(e.target.value) || 0 })}
+                  onChange={(total) => setPrize({ total })}
+                  max={100000000}
+                  placeholder="0"
                   className="w-36"
                 />
               </div>
@@ -100,32 +100,24 @@ export default function PrizePanel({ tournament, isAdmin }: Props) {
                         className="w-40"
                       />
                       <div className="flex items-center gap-1.5">
-                        <Input
-                          type="number"
-                          min={0}
+                        <NumberInput
                           max={100}
                           value={row.slot.percent}
-                          onChange={(e) =>
-                            setSlot(index, {
-                              percent: Number(e.target.value) || 0,
-                              fixed: undefined,
-                            })
+                          onChange={(percent) =>
+                            setSlot(index, { percent, fixed: undefined })
                           }
                           className="w-20 text-center"
                           disabled={row.slot.fixed != null}
+                          placeholder="0"
                         />
                         <span className="text-xs text-muted">%</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <Input
-                          type="number"
-                          min={0}
-                          placeholder="ระบุยอดตายตัว"
-                          value={row.slot.fixed ?? ""}
-                          onChange={(e) =>
-                            setSlot(index, {
-                              fixed: e.target.value ? Number(e.target.value) : undefined,
-                            })
+                        <NumberInput
+                          placeholder="ยอดตายตัว"
+                          value={row.slot.fixed ?? 0}
+                          onChange={(fixed) =>
+                            setSlot(index, { fixed: fixed > 0 ? fixed : undefined })
                           }
                           className="w-36"
                         />

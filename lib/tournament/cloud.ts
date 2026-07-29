@@ -59,7 +59,7 @@ function sanitize(t: Tournament): Omit<Tournament, "adminPin"> {
 /** อัปโหลด/อัปเดตทัวร์ขึ้นคลาวด์ */
 export async function pushTournament(
   tournament: Tournament,
-  owner: { uid: string; name: string },
+  owner: { uid: string; name: string; email?: string | null },
   isPublic = true,
 ): Promise<void> {
   const db = getDb();
@@ -70,6 +70,8 @@ export async function pushTournament(
       ...sanitize(tournament),
       ownerUid: owner.uid,
       ownerName: owner.name,
+      ownerEmail: owner.email ?? null,
+      adminEmails: (tournament.adminEmails ?? []).map((e) => e.toLowerCase()),
       isPublic,
       syncedAt: serverTimestamp(),
     },

@@ -15,12 +15,23 @@ let cache: Tournament[] | null = null;
 let snapshotVersion = 0;
 const listeners = new Set<() => void>();
 
+/** ทัวร์ที่บันทึกไว้ก่อนมีฟิลด์ใหม่ ต้องเติมค่าเริ่มต้นให้ ไม่งั้นหน้าจอพัง */
+function migrate(t: Tournament): Tournament {
+  return {
+    ...t,
+    entryMode: t.entryMode ?? "team",
+    soloPlayers: t.soloPlayers ?? [],
+    teams: t.teams ?? [],
+    adminEmails: t.adminEmails ?? [],
+  };
+}
+
 function readAll(): Tournament[] {
   if (cache) return cache;
   if (typeof window === "undefined") return EMPTY;
   try {
     const raw = localStorage.getItem(KEY);
-    cache = raw ? (JSON.parse(raw) as Tournament[]) : [];
+    cache = raw ? (JSON.parse(raw) as Tournament[]).map(migrate) : [];
   } catch {
     cache = [];
   }
@@ -49,7 +60,9 @@ export function emptyTournament(name = "ทัวร์นาเมนต์ใ�
     status: "draft",
     teamSize: 5,
     maxTeams: 8,
+    entryMode: "team",
     teams: [],
+    soloPlayers: [],
     bracket: null,
     roundBestOf: defaultRoundBestOf(3),
     prize: { ...DEFAULT_PRIZE, slots: DEFAULT_PRIZE.slots.map((s) => ({ ...s })) },

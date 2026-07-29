@@ -2,7 +2,7 @@
 
 import { safeImageSrc } from "@/lib/safe";
 import { useState } from "react";
-import { PRIZE_PRESETS } from "@/lib/tournament/prize";
+import { PRIZE_PRESETS, calcPrizes, formatMoney } from "@/lib/tournament/prize";
 import { tournamentStore } from "@/lib/tournament/store";
 import type { Tournament, TournamentStatus } from "@/lib/tournament/types";
 import Button from "../ui/Button";
@@ -10,6 +10,7 @@ import Panel from "../ui/Panel";
 import {
   Input,
   Label,
+  NumberInput,
   STATUS_META,
   Textarea,
   fromLocalInput,
@@ -31,6 +32,8 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
 
   const set = <K extends keyof Tournament>(key: K, value: Tournament[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
+
+  const prizePreview = calcPrizes(draft.prize);
 
   const pickCover = (file: File | undefined) => {
     if (!file) return;
@@ -150,25 +153,66 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
         </div>
 
         <div className="space-y-5">
+          <div>
+            <Label hint="เปลี่ยนภายหลังได้ แต่ต้องรับสมัครใหม่">วิธีรับสมัคร</Label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(
+                [
+                  {
+                    value: "team",
+                    title: "ล็อกทีม",
+                    detail: "สมัครมาเป็นทีมพร้อมรายชื่อ ใช้ทีมนั้นแข่งเลย",
+                  },
+                  {
+                    value: "solo",
+                    title: "สมัครเดี่ยว แล้วสุ่มทีม",
+                    detail: "รับรายบุคคล แล้วผู้จัดกดสุ่มแบ่งทีมให้",
+                  },
+                ] as const
+              ).map((opt) => {
+                const active = draft.entryMode === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => set("entryMode", opt.value)}
+                    className={`cursor-pointer rounded-xl px-4 py-3 text-left transition-all ${
+                      active
+                        ? "bg-champagne/14 shadow-[inset_0_0_0_1px_rgb(207_167_101/0.45)]"
+                        : "tile hover:border-champagne/30"
+                    }`}
+                  >
+                    <p
+                      className={`font-display text-sm ${active ? "text-champagne" : "text-ice"}`}
+                    >
+                      {active && "✓ "}
+                      {opt.title}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">{opt.detail}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>ทีมละกี่คน</Label>
-              <Input
-                type="number"
+              <NumberInput
                 min={1}
                 max={10}
                 value={draft.teamSize}
-                onChange={(e) => set("teamSize", Number(e.target.value))}
+                onChange={(teamSize) => set("teamSize", teamSize)}
               />
             </div>
             <div>
               <Label hint="0 = ไม่จำกัด">รับกี่ทีม</Label>
-              <Input
-                type="number"
+              <NumberInput
                 min={0}
                 max={64}
                 value={draft.maxTeams}
-                onChange={(e) => set("maxTeams", Number(e.target.value))}
+                onChange={(maxTeams) => set("maxTeams", maxTeams)}
+                placeholder="ไม่จำกัด"
               />
             </div>
           </div>
@@ -254,13 +298,11 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
           <div>
             <Label>เงินรางวัลรวม</Label>
             <div className="flex gap-2">
-              <Input
-                type="number"
-                min={0}
+              <NumberInput
                 value={draft.prize.total}
-                onChange={(e) =>
-                  set("prize", { ...draft.prize, total: Number(e.target.value) || 0 })
-                }
+                onChange={(total) => set("prize", { ...draft.prize, total })}
+                placeholder="0"
+                max={100_000_000}
               />
               <Input
                 value={draft.prize.currency}
@@ -271,23 +313,57 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
                 maxLength={3}
               />
             </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {PRIZE_PRESETS.map((preset) => (
-                <button
-                  key={preset.name}
-                  type="button"
-                  onClick={() =>
-                    set("prize", {
-                      ...draft.prize,
-                      slots: preset.slots.map((s) => ({ ...s })),
-                    })
-                  }
-                  className="cursor-pointer rounded-lg tile px-2.5 py-1 text-xs text-muted transition-colors hover:text-champagne"
-                >
-                  {preset.name}
-                </button>
-              ))}
+
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {PRIZE_PRESETS.map((preset) => {
+                const active =
+                  preset.slots.length === draft.prize.slots.length &&
+                  preset.slots.every(
+                    (s, i) => draft.prize.slots[i]?.percent === s.percent,
+                  );
+                return (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() =>
+                      set("prize", {
+                        ...draft.prize,
+                        slots: preset.slots.map((s) => ({ ...s })),
+                      })
+                    }
+                    className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-xs transition-colors ${
+                      active
+                        ? "bg-champagne/18 text-champagne shadow-[inset_0_0_0_1px_rgb(207_167_101/0.45)]"
+                        : "tile text-muted hover:text-champagne"
+                    }`}
+                  >
+                    {active && "✓ "}
+                    {preset.name}
+                  </button>
+                );
+              })}
             </div>
+
+            {/* โชว์ผลทันทีที่กด ไม่งั้นดูเหมือนปุ่มไม่ทำงาน */}
+            <ul className="mt-3 space-y-1.5 rounded-xl tile px-4 py-3">
+              {prizePreview.breakdown.map((row) => (
+                <li
+                  key={row.slot.place}
+                  className="flex items-center justify-between gap-3 text-xs"
+                >
+                  <span className="text-muted">
+                    {row.slot.label}{" "}
+                    <span className="text-muted/60">({row.slot.percent}%)</span>
+                  </span>
+                  <span className="font-display text-ice">
+                    {formatMoney(row.amount, draft.prize.currency)}
+                  </span>
+                </li>
+              ))}
+              {prizePreview.breakdown.length === 0 && (
+                <li className="text-xs text-muted">ยังไม่ได้เลือกรูปแบบการแบ่ง</li>
+              )}
+            </ul>
           </div>
 
           <div>

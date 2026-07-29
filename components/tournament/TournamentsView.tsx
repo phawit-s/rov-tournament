@@ -12,6 +12,7 @@ import type { Tournament } from "@/lib/tournament/types";
 import Button from "../ui/Button";
 import Panel from "../ui/Panel";
 import TournamentForm from "./TournamentForm";
+import Reveal, { PageHeading } from "../ui/Reveal";
 import { EmptyNote, LiveBadge, StatusBadge } from "./ui";
 
 export default function TournamentsView() {
@@ -54,22 +55,16 @@ export default function TournamentsView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase">
-            Tournaments
-          </p>
-          <h2 className="mt-1.5 font-display text-2xl font-medium text-ice sm:text-3xl">
-            ทัวร์นาเมนต์ทั้งหมด
-          </h2>
-          <p className="mt-1.5 text-sm text-muted">
-            สร้างทัวร์ รับสมัครทีม จัดสายแข่ง กรอกผล และแชร์ให้คนอื่นดู
-          </p>
-        </div>
-        <Button onClick={() => setEditing(emptyTournament(""))}>
-          + สร้างทัวร์นาเมนต์
-        </Button>
-      </div>
+      <PageHeading
+        eyebrow="Tournaments"
+        title="ทัวร์นาเมนต์ทั้งหมด"
+        description="สร้างทัวร์ รับสมัครทีม จัดสายแข่ง กรอกผล และแชร์ให้คนอื่นดู"
+        action={
+          <Button onClick={() => setEditing(emptyTournament(""))}>
+            + สร้างทัวร์นาเมนต์
+          </Button>
+        }
+      />
 
       {incoming && (
         <Panel accent="109 146 219" className="p-5">
@@ -105,15 +100,8 @@ export default function TournamentsView() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <AnimatePresence initial={false}>
-            {list.map((t) => (
-              <motion.div
-                key={t.id}
-                layout
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                transition={{ type: "spring", stiffness: 260, damping: 28 }}
-              >
+            {list.map((t, i) => (
+              <Reveal key={t.id} index={i} from="scale">
                 <Card
                   tournament={t}
                   onEdit={() => setEditing(t)}
@@ -127,7 +115,7 @@ export default function TournamentsView() {
                     setToast("ลบแล้ว");
                   }}
                 />
-              </motion.div>
+              </Reveal>
             ))}
           </AnimatePresence>
         </div>
