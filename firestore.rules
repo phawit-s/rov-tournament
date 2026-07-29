@@ -126,6 +126,34 @@ service cloud.firestore {
       }
     }
 
+    /*
+      ---------- ต้นฉบับของทัวร์ (ที่ทำงานจริง) ----------
+      แยกจาก tournaments เพราะ tournaments เปิดให้อ่านสาธารณะเมื่อ isPublic
+      (widget ใน OBS กับลิงก์แชร์ไม่ได้ล็อกอิน) ถ้าเก็บของทุกอย่างไว้ที่เดียว
+      เบอร์ติดต่อทีมกับ PIN ผู้จัดจะหลุดตามไปด้วย
+
+      drafts จึงเก็บข้อมูลเต็มและไม่เปิดสาธารณะเด็ดขาด
+      ส่วน tournaments เก็บสำเนาที่ตัดข้อมูลติดต่อออกแล้วไว้ให้คนนอกดู
+    */
+    match /drafts/{draftId} {
+      function draftOwner() {
+        return request.auth != null
+          && resource.data.ownerUid == request.auth.uid;
+      }
+      function draftStaff() {
+        return request.auth != null
+          && request.auth.token.email_verified == true
+          && resource.data.adminEmails is list
+          && request.auth.token.email.lower() in resource.data.adminEmails;
+      }
+
+      allow read: if draftOwner() || draftStaff() || isAdmin();
+      allow create: if request.auth != null
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if draftOwner() || draftStaff() || isAdmin();
+      allow delete: if draftOwner() || isAdmin();
+    }
+
     match /tournaments/{tournamentId} {
       function isOwner() {
         return request.auth != null

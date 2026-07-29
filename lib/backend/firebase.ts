@@ -3,6 +3,9 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   type Firestore,
 } from "firebase/firestore";
 import {
@@ -36,7 +39,24 @@ function ensureApp(): FirebaseApp | null {
 export function getDb(): Firestore | null {
   const instance = ensureApp();
   if (!instance) return null;
-  if (!db) db = getFirestore(instance);
+  if (db) return db;
+
+  /*
+    เปิดแคชถาวร (IndexedDB) เพราะทัวร์ย้ายจาก localStorage มาอยู่บนคลาวด์แล้ว
+    ถ้าไม่มีแคช ทุกครั้งที่เปิดหน้าจะเห็นรายการว่างจนกว่าเน็ตจะตอบ
+    และแก้อะไรตอนเน็ตหลุดไม่ได้เลย — แคชนี้คืนสองอย่างนั้นกลับมาให้
+    persistentMultipleTabManager เผื่อเปิดหลายแท็บพร้อมกัน (OBS + หน้าตั้งค่า)
+  */
+  try {
+    db = initializeFirestore(instance, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
+  } catch {
+    // เบราว์เซอร์บางตัวปิด IndexedDB (โหมดส่วนตัวบางรุ่น) — ใช้แบบไม่มีแคชแทน
+    db = getFirestore(instance);
+  }
   return db;
 }
 
