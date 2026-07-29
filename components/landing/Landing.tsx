@@ -7,6 +7,8 @@ import { authStore, hasBackend } from "@/lib/backend/firebase";
 import Button from "../ui/Button";
 import Panel from "../ui/Panel";
 import Reveal from "../ui/Reveal";
+import OrbitalObject from "../fx/OrbitalObject";
+import RotatingBadge from "../fx/RotatingBadge";
 
 const FEATURES = [
   {
@@ -60,6 +62,16 @@ export default function Landing() {
     <div className="space-y-28 pb-16 sm:space-y-40">
       {/* ---------- Hero ---------- */}
       <section className="relative flex min-h-[76vh] flex-col justify-center pt-10">
+        {/* วัตถุหมุนด้านหลัง */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 1.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="pointer-events-none absolute -top-10 -right-24 hidden lg:block xl:-right-10"
+        >
+          <OrbitalObject size={560} />
+        </motion.div>
+
         <motion.p
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -131,21 +143,24 @@ export default function Landing() {
           )}
         </motion.div>
 
-        {/* ตัวบอกให้เลื่อนลง */}
+        {/* ตัวบอกให้เลื่อนลง + วงแหวนตัวอักษรหมุน */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1.2, duration: 0.8 }}
-          className="mt-20 flex items-center gap-3 text-muted"
+          transition={{ delay: 1.1, duration: 0.8 }}
+          className="mt-16 flex items-center gap-6 text-muted"
         >
-          <motion.span
-            animate={reduced ? undefined : { y: [0, 8, 0] }}
-            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-            className="font-display text-xs tracking-luxe uppercase"
-          >
-            เลื่อนลง
-          </motion.span>
-          <span className="h-px w-16 bg-[linear-gradient(90deg,rgba(230,200,148,0.6),transparent)]" />
+          <RotatingBadge />
+          <div className="flex items-center gap-3">
+            <motion.span
+              animate={reduced ? undefined : { y: [0, 8, 0] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+              className="font-display text-xs tracking-luxe uppercase"
+            >
+              เลื่อนลง
+            </motion.span>
+            <span className="h-px w-16 bg-[linear-gradient(90deg,rgba(230,200,148,0.6),transparent)]" />
+          </div>
         </motion.div>
       </section>
 
