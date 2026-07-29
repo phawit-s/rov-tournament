@@ -2,7 +2,7 @@
 
 /**
  * วงแหวนตัวอักษรหมุนรอบตัวเอง — ใช้ SVG textPath วิ่งรอบวงกลม
- * เอาไว้วางแถวปุ่มหลัก ให้หน้าจอมีจุดที่เคลื่อนไหวตลอด
+ * ชี้เมาส์แล้วหมุนเร็วขึ้น กดแล้วเลื่อนลงไปเนื้อหาถัดไป
  */
 export default function RotatingBadge({
   text = "ROV TOURNAMENT HUB · จัดสาย · สุ่มทีม · โดเนท · ",
@@ -15,17 +15,28 @@ export default function RotatingBadge({
 }) {
   const r = size / 2 - 14;
 
+  const scrollDown = () => {
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({
+      top: window.innerHeight * 0.82,
+      behavior: reduced ? "auto" : "smooth",
+    });
+  };
+
   return (
-    <div
-      className={`pointer-events-none relative grid shrink-0 place-items-center ${className}`}
+    <button
+      type="button"
+      onClick={scrollDown}
+      aria-label="เลื่อนลงไปดูเนื้อหา"
+      className={`group relative grid shrink-0 cursor-pointer place-items-center ${className}`}
       style={{ width: size, height: size }}
-      aria-hidden
     >
       <svg
         viewBox={`0 0 ${size} ${size}`}
         width={size}
         height={size}
-        className="animate-spin-slow"
+        aria-hidden
+        className="animate-spin-slow transition-[animation-duration,transform] duration-500 group-hover:[animation-duration:6s] group-hover:scale-105"
       >
         <defs>
           <path
@@ -36,7 +47,7 @@ export default function RotatingBadge({
         </defs>
         <text
           fill="currentColor"
-          className="font-display text-champagne/70"
+          className="font-display text-champagne/70 transition-colors duration-500 group-hover:text-champagne"
           style={{ fontSize: 10, letterSpacing: "0.24em" }}
         >
           <textPath href="#badge-circle">{text}</textPath>
@@ -44,7 +55,10 @@ export default function RotatingBadge({
       </svg>
 
       {/* ลูกศรตรงกลาง */}
-      <span className="absolute grid h-11 w-11 place-items-center rounded-full border border-champagne/35 text-champagne">
+      <span
+        aria-hidden
+        className="absolute grid h-11 w-11 place-items-center rounded-full border border-champagne/35 text-champagne transition duration-500 group-hover:border-champagne/70 group-hover:bg-champagne/10"
+      >
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -52,11 +66,11 @@ export default function RotatingBadge({
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="h-4 w-4"
+          className="h-4 w-4 transition-transform duration-500 group-hover:translate-y-0.5"
         >
           <path d="M12 5v14M6 13l6 6 6-6" />
         </svg>
       </span>
-    </div>
+    </button>
   );
 }

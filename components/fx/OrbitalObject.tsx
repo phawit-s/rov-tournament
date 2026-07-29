@@ -4,19 +4,32 @@ import { useEffect, useRef } from "react";
 import { useReducedMotion } from "motion/react";
 
 type Point3 = { x: number; y: number; z: number };
+type Pulse = { r: number; alpha: number };
+type Satellite = {
+  radius: number;
+  tilt: number;
+  speed: number;
+  phase: number;
+  size: number;
+};
 
 /**
- * ทรงกลม wireframe + วงแหวนโคจร หมุนช้าๆ อยู่หลังเนื้อหา
+ * ทรงกลม wireframe + วงแหวนโคจร + ดาวบริวาร ที่เล่นกับเมาส์ได้
  *
- * วาดด้วย canvas ล้วน ฉายจุด 3 มิติลงระนาบ 2 มิติเอง ไม่ต้องใช้ WebGL
- * เส้นที่อยู่ด้านหลังจะจางกว่า ทำให้เห็นความลึกโดยไม่ต้องมีแสงเงา
+ *  - ลากเพื่อหมุน ปล่อยแล้วหมุนต่อด้วยแรงเฉื่อยก่อนจะกลับไปหมุนเองช้าๆ
+ *  - เลื่อนเมาส์ผ่านจะเอียงตาม และเส้นสว่างขึ้น
+ *  - คลิกแล้วมีคลื่นวงแหวนกระจายออก
+ *
+ * วาดด้วย canvas 2D ล้วน ฉายจุด 3 มิติเอง ไม่ต้องใช้ WebGL
  */
 export default function OrbitalObject({
   className = "",
   size = 520,
+  interactive = true,
 }: {
   className?: string;
   size?: number;
+  interactive?: boolean;
 }) {
   const ref = useRef<HTMLCanvasElement | null>(null);
   const reduced = useReducedMotion();
@@ -31,23 +44,42 @@ export default function OrbitalObject({
     canvas.height = size * dpr;
     ctx.scale(dpr, dpr);
 
-    const R = size * 0.34;
+    const R = size * 0.32;
     const cx = size / 2;
     const cy = size / 2;
     const FOV = size * 1.6;
 
-    // เส้นละติจูด/ลองจิจูดของทรงกลม
     const LAT = 9;
     const LON = 16;
-    const SEG = 48;
+    const SEG = 44;
+
+    // สถานะการหมุน
+    const state = {
+      ay: 0,
+      ax: 0.25,
+      vy: 0.0016, // ความเร็วอัตโนมัติ
+      vx: 0,
+      hover: 0, // 0..1 ความสว่างตอนเมาส์อยู่ใกล้
+      targetHover: 0,
+      dragging: false,
+      lastX: 0,
+      lastY: 0,
+      lastMoveAt: 0,
+    };
+
+    const pulses: Pulse[] = [];
+    const satellites: Satellite[] = [
+      { radius: R * 1.42, tilt: 0.42, speed: 1.9, phase: 0, size: 3.2 },
+      { radius: R * 1.72, tilt: -0.28, speed: -1.2, phase: 2.1, size: 2.4 },
+      { radius: R * 1.72, tilt: -0.28, speed: -1.2, phase: 4.4, size: 1.8 },
+      { radius: R * 2.02, tilt: 0.68, speed: 0.75, phase: 1.2, size: 2.8 },
+    ];
 
     const rotate = (p: Point3, ax: number, ay: number): Point3 => {
-      // หมุนรอบแกน Y
       const cosY = Math.cos(ay);
       const sinY = Math.sin(ay);
       const x = p.x * cosY - p.z * sinY;
       let z = p.x * sinY + p.z * cosY;
-      // เอียงรอบแกน X
       const cosX = Math.cos(ax);
       const sinX = Math.sin(ax);
       const y = p.y * cosX - z * sinX;
@@ -57,8 +89,10 @@ export default function OrbitalObject({
 
     const project = (p: Point3) => {
       const scale = FOV / (FOV + p.z);
-      return { x: cx + p.x * scale, y: cy + p.y * scale, depth: p.z };
+      return { x: cx + p.x * scale, y: cy + p.y * scale, depth: p.z, scale };
     };
+
+    const isLight = () => document.documentElement.dataset.theme === "light";
 
     const strokePath = (pts: Point3[], ax: number, ay: number, width: number) => {
       let started = false;
@@ -74,10 +108,10 @@ export default function OrbitalObject({
         }
         lastDepth = p.depth;
       }
-      // เส้นที่อยู่ไกลจางกว่า — ธีมสว่างต้องเข้มขึ้นถึงจะเห็น
       const t = (lastDepth + R) / (R * 2);
-      const light = document.documentElement.dataset.theme === "light";
-      const alpha = light ? 0.1 + (1 - t) * 0.42 : 0.06 + (1 - t) * 0.3;
+      const boost = 1 + state.hover * 0.85;
+      const light = isLight();
+      const alpha = (light ? 0.1 + (1 - t) * 0.42 : 0.06 + (1 - t) * 0.3) * boost;
       ctx.strokeStyle = light
         ? `rgba(150, 116, 52, ${alpha})`
         : `rgba(214, 178, 116, ${alpha})`;
@@ -85,17 +119,96 @@ export default function OrbitalObject({
       ctx.stroke();
     };
 
+    /* ---------- การโต้ตอบ ---------- */
+
+    const localPoint = (e: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+
+    const onEnter = () => {
+      state.targetHover = 1;
+    };
+    const onLeave = () => {
+      state.targetHover = 0;
+      state.dragging = false;
+    };
+
+    const onDown = (e: PointerEvent) => {
+      if (!interactive) return;
+      canvas.setPointerCapture(e.pointerId);
+      const p = localPoint(e);
+      state.dragging = true;
+      state.lastX = p.x;
+      state.lastY = p.y;
+      state.lastMoveAt = performance.now();
+      pulses.push({ r: R * 0.4, alpha: 0.55 });
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (!interactive) return;
+      const p = localPoint(e);
+      if (!state.dragging) {
+        // ไม่ได้ลาก แค่เอียงตามตำแหน่งเมาส์เล็กน้อย
+        const ny = (p.y / size - 0.5) * 2;
+        state.vx += (ny * 0.55 - state.ax) * 0.0009;
+        return;
+      }
+      const now = performance.now();
+      const dt = Math.max(8, now - state.lastMoveAt);
+      state.vy += ((p.x - state.lastX) / dt) * 0.02;
+      state.vx += ((p.y - state.lastY) / dt) * 0.012;
+      state.lastX = p.x;
+      state.lastY = p.y;
+      state.lastMoveAt = now;
+    };
+
+    const onUp = () => {
+      state.dragging = false;
+    };
+
+    if (interactive) {
+      canvas.addEventListener("pointerenter", onEnter);
+      canvas.addEventListener("pointerleave", onLeave);
+      canvas.addEventListener("pointerdown", onDown);
+      canvas.addEventListener("pointermove", onMove);
+      canvas.addEventListener("pointerup", onUp);
+      canvas.addEventListener("pointercancel", onUp);
+    }
+
+    /* ---------- วาด ---------- */
+
     let raf = 0;
-    let t = 0;
+    let clock = 0;
 
     const draw = (time: number) => {
-      if (!reduced) t = time * 0.00013;
+      if (!reduced) {
+        clock = time * 0.001;
+        // แรงเฉื่อยค่อยๆ กลับไปหาความเร็วอัตโนมัติ
+        state.vy += (0.0016 - state.vy) * 0.012;
+        state.vx *= 0.94;
+        state.ay += state.vy;
+        state.ax += state.vx;
+        state.ax = Math.max(-0.9, Math.min(0.9, state.ax));
+      }
+      state.hover += (state.targetHover - state.hover) * 0.08;
+
       ctx.clearRect(0, 0, size, size);
 
-      const ay = t;
-      const ax = Math.sin(t * 0.6) * 0.32 + 0.25;
+      const { ax, ay } = state;
+      const light = isLight();
 
-      // เส้นละติจูด
+      // แสงเรืองตรงกลาง
+      const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.1);
+      const coreAlpha = (light ? 0.1 : 0.16) * (0.6 + state.hover * 0.8);
+      core.addColorStop(0, `rgba(214, 178, 116, ${coreAlpha})`);
+      core.addColorStop(1, "rgba(214, 178, 116, 0)");
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R * 1.1, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ละติจูด
       for (let i = 1; i < LAT; i++) {
         const phi = (Math.PI * i) / LAT;
         const r = R * Math.sin(phi);
@@ -108,7 +221,7 @@ export default function OrbitalObject({
         strokePath(pts, ax, ay, 0.7);
       }
 
-      // เส้นลองจิจูด
+      // ลองจิจูด
       for (let j = 0; j < LON; j++) {
         const th = (Math.PI * 2 * j) / LON;
         const pts: Point3[] = [];
@@ -123,10 +236,11 @@ export default function OrbitalObject({
         strokePath(pts, ax, ay, 0.55);
       }
 
-      // วงแหวนโคจรสองวง หมุนสวนทางกัน
+      // วงแหวนโคจร
       for (const [tilt, radius, speed, width] of [
-        [0.42, R * 1.42, -1.35, 1.1],
-        [-0.28, R * 1.72, 0.85, 0.8],
+        [0.42, R * 1.42, -0.9, 1.1],
+        [-0.28, R * 1.72, 0.6, 0.8],
+        [0.68, R * 2.02, -0.35, 0.6],
       ] as const) {
         const pts: Point3[] = [];
         for (let s = 0; s <= 96; s++) {
@@ -135,46 +249,82 @@ export default function OrbitalObject({
           const z = radius * Math.sin(th);
           pts.push({ x, y: z * Math.sin(tilt), z: z * Math.cos(tilt) });
         }
-        strokePath(pts, ax * 0.4, t * speed, width);
+        strokePath(pts, ax * 0.4, ay * speed, width);
       }
 
-      // จุดสว่างวิ่งบนวงแหวน
-      if (!reduced) {
-        const orbit = t * 1.9;
-        const rr = R * 1.42;
+      // ดาวบริวารวิ่งบนวงแหวน
+      for (const sat of satellites) {
+        const a = clock * sat.speed * 0.5 + sat.phase;
         const p = project(
           rotate(
             {
-              x: rr * Math.cos(orbit),
-              y: rr * Math.sin(orbit) * Math.sin(0.42),
-              z: rr * Math.sin(orbit) * Math.cos(0.42),
+              x: sat.radius * Math.cos(a),
+              y: sat.radius * Math.sin(a) * Math.sin(sat.tilt),
+              z: sat.radius * Math.sin(a) * Math.cos(sat.tilt),
             },
             ax * 0.4,
-            t * -1.35,
+            ay * (sat.speed > 0 ? 0.6 : -0.9),
           ),
         );
-        const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 14);
-        glow.addColorStop(0, "rgba(246, 224, 178, 0.9)");
+        const r = sat.size * p.scale * (1 + state.hover * 0.5);
+        const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 5);
+        glow.addColorStop(0, `rgba(246, 224, 178, ${0.85 * (0.5 + state.hover * 0.5)})`);
         glow.addColorStop(1, "rgba(246, 224, 178, 0)");
         ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, r * 5, 0, Math.PI * 2);
         ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = light ? "#8a6a2c" : "#f6e0b2";
+        ctx.fill();
+      }
+
+      // คลื่นตอนคลิก
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const pulse = pulses[i];
+        pulse.r += (size * 0.5 - pulse.r) * 0.06;
+        pulse.alpha *= 0.955;
+        if (pulse.alpha < 0.01) {
+          pulses.splice(i, 1);
+          continue;
+        }
+        ctx.beginPath();
+        ctx.arc(cx, cy, pulse.r, 0, Math.PI * 2);
+        ctx.strokeStyle = light
+          ? `rgba(150, 116, 52, ${pulse.alpha})`
+          : `rgba(246, 224, 178, ${pulse.alpha})`;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
       }
 
       raf = requestAnimationFrame(draw);
     };
 
     raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
-  }, [reduced, size]);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      if (interactive) {
+        canvas.removeEventListener("pointerenter", onEnter);
+        canvas.removeEventListener("pointerleave", onLeave);
+        canvas.removeEventListener("pointerdown", onDown);
+        canvas.removeEventListener("pointermove", onMove);
+        canvas.removeEventListener("pointerup", onUp);
+        canvas.removeEventListener("pointercancel", onUp);
+      }
+    };
+  }, [reduced, size, interactive]);
 
   return (
     <canvas
       ref={ref}
       aria-hidden
-      style={{ width: size, height: size }}
-      className={`pointer-events-none select-none ${className}`}
+      style={{ width: size, height: size, touchAction: "none" }}
+      className={`select-none ${
+        interactive ? "cursor-grab active:cursor-grabbing" : "pointer-events-none"
+      } ${className}`}
     />
   );
 }

@@ -9,6 +9,8 @@ import Panel from "../ui/Panel";
 import Reveal from "../ui/Reveal";
 import OrbitalObject from "../fx/OrbitalObject";
 import RotatingBadge from "../fx/RotatingBadge";
+import RingCluster from "../fx/RingCluster";
+import TiltCard from "../fx/TiltCard";
 
 const FEATURES = [
   {
@@ -62,14 +64,22 @@ export default function Landing() {
     <div className="space-y-28 pb-16 sm:space-y-40">
       {/* ---------- Hero ---------- */}
       <section className="relative flex min-h-[76vh] flex-col justify-center pt-10">
-        {/* วัตถุหมุนด้านหลัง */}
+        {/* วัตถุหมุน — ลากได้ */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 1.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="pointer-events-none absolute -top-10 -right-24 hidden lg:block xl:-right-10"
+          className="absolute -top-10 -right-24 hidden lg:block xl:-right-10"
         >
           <OrbitalObject size={560} />
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.8, duration: 1 }}
+            className="pointer-events-none absolute inset-x-0 bottom-4 text-center font-display text-[10px] tracking-luxe text-muted/70 uppercase"
+          >
+            ลากเพื่อหมุน
+          </motion.p>
         </motion.div>
 
         <motion.p
@@ -179,19 +189,21 @@ export default function Landing() {
           {FEATURES.map((f, i) => (
             <Reveal key={f.no} index={i} from="up">
               <Link href={f.href} className="group block h-full">
-                <Panel className="flex h-full flex-col p-7 transition-transform duration-500 group-hover:-translate-y-1">
-                  <span className="font-display text-[11px] tracking-luxe text-champagne/60">
-                    {f.no}
-                  </span>
-                  <h3 className="mt-5 font-display text-2xl font-light text-ice">
-                    {f.title}
-                  </h3>
-                  <p className="mt-3 text-sm leading-relaxed text-muted">{f.detail}</p>
-                  <span className="mt-8 inline-flex items-center gap-2 font-display text-xs text-champagne transition-transform duration-500 group-hover:translate-x-1">
-                    เปิดดู
-                    <span className="h-px w-8 bg-champagne/60" />
-                  </span>
-                </Panel>
+                <TiltCard className="h-full">
+                  <Panel className="flex h-full flex-col p-7">
+                    <span className="font-display text-[11px] tracking-luxe text-champagne/60">
+                      {f.no}
+                    </span>
+                    <h3 className="mt-5 font-display text-2xl font-light text-ice">
+                      {f.title}
+                    </h3>
+                    <p className="mt-3 text-sm leading-relaxed text-muted">{f.detail}</p>
+                    <span className="mt-8 inline-flex items-center gap-2 font-display text-xs text-champagne transition-transform duration-500 group-hover:translate-x-1">
+                      เปิดดู
+                      <span className="h-px w-8 bg-champagne/60" />
+                    </span>
+                  </Panel>
+                </TiltCard>
               </Link>
             </Reveal>
           ))}
@@ -199,7 +211,12 @@ export default function Landing() {
       </section>
 
       {/* ---------- ขั้นตอน ---------- */}
-      <section>
+      <section className="relative">
+        {/* วงแหวนซ้อน — กางออกเมื่อเมาส์เข้าใกล้ */}
+        <div className="pointer-events-none absolute -top-24 -right-16 hidden opacity-80 md:block">
+          <RingCluster size={380} />
+        </div>
+
         <Reveal>
           <p className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase">
             How it works
@@ -209,14 +226,18 @@ export default function Landing() {
           </h2>
         </Reveal>
 
-        <div className="mt-14 space-y-px">
+        <div className="relative mt-14 space-y-px">
           {STEPS.map((s, i) => (
             <Reveal key={s.no} index={i} from="left">
-              <div className="group grid items-start gap-4 border-t border-hair py-8 sm:grid-cols-[auto_1fr_2fr] sm:gap-10">
+              <div className="group relative grid items-start gap-4 border-t border-hair py-8 sm:grid-cols-[auto_1fr_2fr] sm:gap-10">
+                {/* เส้นทองไล่จากซ้ายเมื่อชี้เมาส์ */}
+                <span className="pointer-events-none absolute inset-x-0 top-0 h-px origin-left scale-x-0 bg-[linear-gradient(90deg,rgba(230,200,148,0.85),transparent)] transition-transform duration-700 ease-out group-hover:scale-x-100" />
                 <span className="font-display text-4xl font-extralight text-champagne/40 transition-colors duration-500 group-hover:text-champagne">
                   0{s.no}
                 </span>
-                <h3 className="font-display text-xl font-light text-ice">{s.title}</h3>
+                <h3 className="font-display text-xl font-light text-ice transition-transform duration-500 group-hover:translate-x-1">
+                  {s.title}
+                </h3>
                 <p className="text-sm leading-relaxed text-muted">{s.detail}</p>
               </div>
             </Reveal>
@@ -225,9 +246,13 @@ export default function Landing() {
       </section>
 
       {/* ---------- ปิดท้าย ---------- */}
-      <section>
+      <section className="relative">
+        <div className="pointer-events-none absolute inset-0 hidden place-items-center sm:grid">
+          <OrbitalObject size={760} interactive={false} className="opacity-40" />
+        </div>
+
         <Reveal from="scale">
-          <Panel className="p-10 text-center sm:p-16">
+          <Panel className="relative p-10 text-center sm:p-16">
             <p className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase">
               Ready
             </p>

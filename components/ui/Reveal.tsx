@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
+import RingCluster from "../fx/RingCluster";
 
 type Props = {
   children: ReactNode;
@@ -67,8 +68,13 @@ export function PageHeading({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-6 pb-2">
-      <div className="min-w-0">
+    <div className="relative flex flex-wrap items-end justify-between gap-6 pb-2">
+      {/* วงแหวนตกแต่ง — ขยับตามเมาส์ */}
+      <div className="pointer-events-none absolute -top-6 right-0 hidden translate-x-1/3 opacity-40 lg:block">
+        <RingCluster size={240} />
+      </div>
+
+      <div className="relative min-w-0">
         <motion.p
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -111,7 +117,7 @@ export function PageHeading({
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="shrink-0"
+          className="relative shrink-0"
         >
           {action}
         </motion.div>

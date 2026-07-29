@@ -19,7 +19,13 @@ type Mote = {
   phase: number;
   alpha: number;
   warm: boolean;
+  vx: number;
+  vy: number;
 };
+
+type Ripple = { x: number; y: number; r: number; alpha: number };
+
+const PUSH_RADIUS = 170;
 
 /**
  * พื้นหลังโทนหรู — เคลื่อนไหวช้ามากจนแทบไม่รู้ตัว แต่ภาพไม่นิ่งตาย
@@ -28,6 +34,8 @@ type Mote = {
  */
 export default function BackgroundFX() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pointerRef = useRef({ x: -9999, y: -9999 });
+  const ripplesRef = useRef<Ripple[]>([]);
   const reduced = useReducedMotion();
 
   const mx = useMotionValue(0.5);
@@ -50,9 +58,25 @@ export default function BackgroundFX() {
     const onMove = (e: PointerEvent) => {
       mx.set(e.clientX / window.innerWidth);
       my.set(e.clientY / window.innerHeight);
+      pointerRef.current = { x: e.clientX, y: e.clientY };
+    };
+    const onLeave = () => {
+      pointerRef.current = { x: -9999, y: -9999 };
+    };
+    // คลิกที่ไหนก็ได้ ให้มีคลื่นทองกระจายออกจากจุดนั้น
+    const onDown = (e: PointerEvent) => {
+      const list = ripplesRef.current;
+      list.push({ x: e.clientX, y: e.clientY, r: 4, alpha: 0.4 });
+      if (list.length > 6) list.shift();
     };
     window.addEventListener("pointermove", onMove, { passive: true });
-    return () => window.removeEventListener("pointermove", onMove);
+    window.addEventListener("pointerleave", onLeave);
+    window.addEventListener("pointerdown", onDown, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerleave", onLeave);
+      window.removeEventListener("pointerdown", onDown);
+    };
   }, [mx, my]);
 
   // ฝุ่นทองลอยขึ้นช้าๆ — น้อยชิ้น ความทึบต่ำ ไม่กวนสายตา
@@ -77,6 +101,8 @@ export default function BackgroundFX() {
         phase: Math.random() * Math.PI * 2,
         alpha: 0.1 + Math.random() * 0.24,
         warm: Math.random() < 0.7,
+        vx: 0,
+        vy: 0,
       }));
     };
 
@@ -102,6 +128,7 @@ export default function BackgroundFX() {
       ctx.clearRect(0, 0, width, height);
 
       const light = document.documentElement.dataset.theme === "light";
+      const pointer = pointerRef.current;
 
       for (const mote of motes) {
         if (!reduced) {
@@ -112,20 +139,60 @@ export default function BackgroundFX() {
           }
         }
         const drift = Math.sin(time * 0.00016 + mote.phase) * mote.sway;
-        const x = mote.x + drift;
+
+        // ฝุ่นหลบเมาส์ แล้วค่อยๆ ลอยกลับที่เดิม
+        let near = 0;
+        if (!reduced) {
+          const dx = mote.x + drift + mote.vx - pointer.x;
+          const dy = mote.y + mote.vy - pointer.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < PUSH_RADIUS && dist > 0.01) {
+            near = 1 - dist / PUSH_RADIUS;
+            const force = near * near * 260 * dt;
+            mote.vx += (dx / dist) * force;
+            mote.vy += (dy / dist) * force;
+          }
+          mote.vx *= 0.92;
+          mote.vy *= 0.92;
+          mote.vx += -mote.vx * 0.05;
+          mote.vy += -mote.vy * 0.05;
+        }
+
+        const x = mote.x + drift + mote.vx;
+        const y = mote.y + mote.vy;
         const twinkle = reduced
           ? 1
           : 0.65 + 0.35 * Math.sin(time * 0.0009 + mote.phase * 2);
-        const alpha = mote.alpha * twinkle * (light ? 0.55 : 1);
+        const alpha = mote.alpha * twinkle * (light ? 0.55 : 1) * (1 + near * 2.2);
+        const r = mote.r * (1 + near * 0.9);
 
         ctx.beginPath();
-        ctx.arc(x, mote.y, mote.r, 0, Math.PI * 2);
+        ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.fillStyle = light
           ? `rgba(150, 118, 56, ${alpha})`
           : mote.warm
             ? `rgba(240, 216, 171, ${alpha})`
             : `rgba(190, 205, 240, ${alpha * 0.8})`;
         ctx.fill();
+      }
+
+      // คลื่นตอนคลิก
+      const ripples = ripplesRef.current;
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        const ripple = ripples[i];
+        ripple.r += (260 - ripple.r) * 0.055;
+        ripple.alpha *= 0.955;
+        if (ripple.alpha < 0.01) {
+          ripples.splice(i, 1);
+          continue;
+        }
+        ctx.beginPath();
+        ctx.arc(ripple.x, ripple.y, ripple.r, 0, Math.PI * 2);
+        ctx.strokeStyle = light
+          ? `rgba(150, 118, 56, ${ripple.alpha})`
+          : `rgba(230, 200, 148, ${ripple.alpha})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
 
       raf = requestAnimationFrame(draw);
