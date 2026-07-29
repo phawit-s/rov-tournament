@@ -149,17 +149,18 @@ service cloud.firestore {
           && request.resource.data.adminEmails == resource.data.adminEmails;
       }
 
-      allow read: if resource.data.isPublic == true || isOwner() || isStaff();
+      allow read: if resource.data.isPublic == true || isOwner() || isStaff() || isAdmin();
 
       // สร้างใหม่ได้ถ้าใส่ ownerUid เป็นตัวเอง
       allow create: if claimsOwnership();
 
-      // เจ้าของแก้ได้ทุกอย่าง ทีมงานแก้ได้ทุกอย่างยกเว้นสิทธิ์
+      // เจ้าของกับผู้ดูแลระบบแก้ได้ทุกอย่าง ทีมงานแก้ได้ทุกอย่างยกเว้นสิทธิ์
       allow update: if (isOwner() && claimsOwnership())
+        || isAdmin()
         || (isStaff() && keepsAccessFields());
 
-      // ลบได้เฉพาะเจ้าของ
-      allow delete: if isOwner();
+      // ลบได้เฉพาะเจ้าของกับผู้ดูแลระบบ
+      allow delete: if isOwner() || isAdmin();
 
       match /registrations/{registrationId} {
         function tournament() {
@@ -177,11 +178,15 @@ service cloud.firestore {
             && request.auth.token.email.lower() in tournament().adminEmails;
         }
         function canManage() {
-          return isTournamentOwner() || isTournamentStaff();
+          return isTournamentOwner() || isTournamentStaff() || isAdmin();
         }
 
-        // เจ้าของเห็นทุกใบ ผู้สมัครเห็นใบตัวเอง
-        allow read: if isTournamentOwner()
+        /*
+          ต้องให้ทีมงานกับผู้ดูแลระบบ "อ่าน" ได้ด้วย ไม่ใช่แค่ "แก้"
+          ของเดิมเปิดแค่เจ้าของ ทีมงานจึงอนุมัติได้แต่มองไม่เห็นว่ามีใบอะไรให้อนุมัติ
+          ซึ่งเท่ากับอนุมัติไม่ได้จริง
+        */
+        allow read: if canManage()
           || (request.auth != null && resource.data.byUid == request.auth.uid);
 
         // ล็อกอินแล้วสมัครได้ ต้องส่งชื่อทีมมาด้วย และสถานะเริ่มต้นต้องเป็น pending

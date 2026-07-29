@@ -17,7 +17,15 @@ export type Viewer = {
  *  member = ล็อกอิน Google แล้ว แต่ไม่ได้อยู่ในทีมงาน          — สมัครทีม/โดเนทได้
  *  guest  = ไม่ได้ล็อกอิน หรือล็อกอินแบบไม่ระบุตัวตน           — ดูอย่างเดียว + โดเนทได้
  */
-export function roleFor(tournament: Tournament, viewer: Viewer): Role {
+export function roleFor(
+  tournament: Tournament,
+  viewer: Viewer,
+  /**
+   * ผู้ดูแลระบบที่ Firestore ยืนยันแล้ว (ไม่ใช่รหัสในเครื่อง)
+   * กติกาให้สิทธิ์เท่าทีมงานทุกทัวร์ หน้าจอจึงต้องมองเห็นตรงกัน
+   */
+  isSiteAdmin = false,
+): Role {
   // ยังไม่เคยเผยแพร่ขึ้นคลาวด์ = ทัวร์อยู่ในเครื่องนี้เครื่องเดียว
   // คนที่เปิดอยู่คือคนสร้าง ไม่ต้องล็อกอินก็จัดการได้
   if (!tournament.ownerUid) return "owner";
@@ -25,6 +33,9 @@ export function roleFor(tournament: Tournament, viewer: Viewer): Role {
   if (!viewer?.uid || viewer.anonymous) return "guest";
 
   if (tournament.ownerUid === viewer.uid) return "owner";
+
+  // ผู้ดูแลระบบดูแลทุกทัวร์ได้ แต่ยังไม่ใช่เจ้าของ (ลบทัวร์/เปลี่ยนทีมงานไม่ได้จากหน้าจอ)
+  if (isSiteAdmin) return "staff";
 
   const email = viewer.email?.toLowerCase();
   if (email && (tournament.adminEmails ?? []).some((e) => e.toLowerCase() === email)) {
@@ -43,7 +54,7 @@ export const ROLE_META: Record<Role, { label: string; rgb: string; hint: string 
   staff: {
     label: "ทีมงาน",
     rgb: "109 146 219",
-    hint: "กรอกผล จัดสาย อนุมัติสลิปได้ แต่ลบทัวร์หรือเพิ่มทีมงานไม่ได้",
+    hint: "ดูใบสมัคร อนุมัติ กรอกผล จัดสายได้ แต่ลบทัวร์หรือเพิ่มทีมงานไม่ได้",
   },
   member: {
     label: "ผู้ใช้ทั่วไป",
@@ -79,6 +90,7 @@ export const PERMISSION_MATRIX: {
   { action: "โดเนท / สมัครสมาชิก", owner: true, staff: true, member: true, guest: true },
   { action: "สมัครทีมเข้าแข่ง", owner: true, staff: true, member: true, guest: false },
   { action: "กรอกผลแมตช์ / จัดสาย", owner: true, staff: true, member: false, guest: false },
+  { action: "ดูรายชื่อใบสมัครทั้งหมด", owner: true, staff: true, member: false, guest: false },
   { action: "อนุมัติสลิปและใบสมัคร", owner: true, staff: true, member: false, guest: false },
   { action: "แก้ข้อมูลทัวร์ / เงินรางวัล", owner: true, staff: true, member: false, guest: false },
   { action: "เพิ่ม-ลบทีมงาน", owner: true, staff: false, member: false, guest: false },

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useHashParam, useHydrated } from "@/hooks/useClient";
+import { useAccess } from "@/hooks/useAdmin";
 import { adminStore } from "@/lib/tournament/admin";
 import { authStore } from "@/lib/backend/firebase";
 import { CAN, ROLE_META, roleFor } from "@/lib/tournament/roles";
@@ -66,6 +67,7 @@ export default function TournamentDetail() {
     authStore.getServerSnapshot,
   );
   const user = authStore.user();
+  const access = useAccess();
   const reduced = useReducedMotion();
 
   const [tab, setTab] = useState<TabKey>("overview");
@@ -113,11 +115,16 @@ export default function TournamentDetail() {
   }
 
   // สิทธิ์จริงมาจากบัญชีที่ล็อกอิน ส่วน PIN เป็นแค่ชั้นกันมือลั่นของทัวร์ในเครื่อง
-  const role = roleFor(tournament, {
-    uid: user?.uid,
-    email: user?.email,
-    anonymous: user?.anonymous,
-  });
+  const role = roleFor(
+    tournament,
+    {
+      uid: user?.uid,
+      email: user?.email,
+      anonymous: user?.anonymous,
+    },
+    // เฉพาะสิทธิ์ที่ Firestore ยืนยัน รหัสในเครื่องไม่นับ เพราะคลาวด์ก็ไม่ให้เขียนอยู่ดี
+    access === "verified",
+  );
   const pinOk = adminStore.isUnlocked(tournament.id, tournament.adminPin);
   const isAdmin = CAN.manage(role) && pinOk;
   const locked = CAN.manage(role) && !!tournament.adminPin && !pinOk;
