@@ -26,6 +26,7 @@ import Button from "../ui/Button";
 import Figure, { FigureRow } from "../ui/Figure";
 import Panel from "../ui/Panel";
 import Reveal, { PageHeading } from "../ui/Reveal";
+import AdminTeamPanel from "../auth/AdminTeamPanel";
 import { toast } from "../ui/Toast";
 import { IconCheck, IconCopy, IconExternal, IconMonitor } from "../ui/icons";
 import {
@@ -707,6 +708,11 @@ export default function ChannelSettings() {
             </>
           )}
         </Panel>
+      </Reveal>
+
+      {/* รายชื่อผู้ดูแลระบบ — โผล่เฉพาะบัญชีที่ Firestore ยืนยันสิทธิ์แล้ว */}
+      <Reveal>
+        <AdminTeamPanel />
       </Reveal>
     </div>
   );

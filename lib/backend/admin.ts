@@ -1,69 +1,108 @@
 "use client";
 
-import { doc, onSnapshot, type Unsubscribe } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  setDoc,
+  type Unsubscribe,
+} from "firebase/firestore";
 import { authStore, getDb, hasBackend } from "./firebase";
 
 /**
  * สิทธิ์ผู้ดูแลที่ตรวจจากฝั่งเซิร์ฟเวอร์จริง
  *
- * เอกสาร admins/{uid} มีอยู่ = เป็นผู้ดูแล ตัวกติกาอยู่ใน firestore.rules
- * ซึ่งรันบนเครื่อง Google ไม่ใช่ในเบราว์เซอร์ ปลอมไม่ได้
- *  - อ่านเอกสารของคนอื่นไม่ได้
- *  - สร้างเอกสารให้ตัวเองไม่ได้ถ้ายังไม่ได้เป็นผู้ดูแลอยู่ก่อน
+ * วิธีเช็คคือ "ลองขออ่านรายชื่อผู้ดูแลทั้งคอลเลกชัน" ถ้ากติกาอนุญาต = เป็นผู้ดูแล
+ * ที่ใช้วิธีนี้แทนการอ่านเอกสารของตัวเอง เพราะเจ้าของเว็บ (อีเมลใน ownerEmails
+ * ของ firestore.rules) เป็นผู้ดูแลตั้งแต่ publish กติกา โดยยังไม่มีเอกสารสิทธิ์
+ * ของตัวเองเลย — ถ้าไปเช็คเอกสารจะกลายเป็นไก่กับไข่
  *
- * ข้อจำกัดที่ยังเหลือ: หน้าเว็บเป็นไฟล์ static ใครเปิด devtools ก็ยังบังคับให้
- * เมนูโผล่ได้ แต่ทุกคำสั่งที่แตะข้อมูลบนคลาวด์จะถูกปฏิเสธอยู่ดี
+ * กติกาอยู่ใน firestore.rules ซึ่งรันบนเครื่อง Google ไม่ใช่ในเบราว์เซอร์
+ * จึงปลอมไม่ได้ ข้อจำกัดที่ยังเหลือ: หน้าเว็บเป็นไฟล์ static ใครเปิด devtools
+ * ก็ยังบังคับให้เมนูโผล่ได้ แต่ทุกคำสั่งที่แตะข้อมูลบนคลาวด์จะถูกปฏิเสธอยู่ดี
  */
 
 export type AdminState = "loading" | "no-backend" | "signed-out" | "denied" | "admin";
 
+export type AdminEntry = {
+  uid: string;
+  label: string;
+  addedAt?: string;
+};
+
 let state: AdminState = hasBackend ? "loading" : "no-backend";
+let roster: AdminEntry[] = [];
+const EMPTY: AdminEntry[] = [];
 let watchedUid: string | null = null;
-let unsubDoc: Unsubscribe | null = null;
+let unsubList: Unsubscribe | null = null;
 const listeners = new Set<() => void>();
 
-function set(next: AdminState) {
-  if (next === state) return;
+/*
+  snapshot ต้องมีทั้งสถานะและรายชื่ออยู่ในสตริงเดียว
+  ถ้าคืนแค่สถานะ พอรายชื่อเปลี่ยนแต่สถานะยังเป็น "admin" เหมือนเดิม
+  useSyncExternalStore จะถือว่าไม่มีอะไรเปลี่ยนแล้วไม่รีเรนเดอร์
+*/
+let snapshot: string = state;
+
+function refresh(next: AdminState) {
   state = next;
+  const value =
+    next === "admin" ? `admin:${roster.map((r) => r.uid).join(",")}` : next;
+  if (value === snapshot) return;
+  snapshot = value;
   listeners.forEach((l) => l());
 }
 
-function stopDoc() {
-  unsubDoc?.();
-  unsubDoc = null;
+function stopList() {
+  unsubList?.();
+  unsubList = null;
   watchedUid = null;
+  roster = EMPTY;
 }
 
-/** ตามผู้ใช้ปัจจุบัน แล้วเฝ้าเอกสารสิทธิ์ของ uid นั้น */
+/** ตามผู้ใช้ปัจจุบัน แล้วลองขออ่านรายชื่อผู้ดูแล */
 function syncWithAuth() {
   const user = authStore.user();
 
   if (!user || user.anonymous) {
-    stopDoc();
-    set(authStore.ready() ? "signed-out" : "loading");
+    stopList();
+    refresh(authStore.ready() ? "signed-out" : "loading");
     return;
   }
 
   if (watchedUid === user.uid) return;
 
-  stopDoc();
+  stopList();
   const db = getDb();
   if (!db) {
-    set("no-backend");
+    refresh("no-backend");
     return;
   }
 
   watchedUid = user.uid;
-  set("loading");
-  unsubDoc = onSnapshot(
-    doc(db, "admins", user.uid),
+  refresh("loading");
+  unsubList = onSnapshot(
+    collection(db, "admins"),
     (snap) => {
       // เช็ค uid ซ้ำอีกที เผื่อสลับบัญชีระหว่างที่ผลลัพธ์กำลังเดินทางกลับมา
       if (watchedUid !== user.uid) return;
-      set(snap.exists() ? "admin" : "denied");
+      roster = snap.docs.map((d) => {
+        const data = d.data() as { label?: string; email?: string; addedAt?: string };
+        return {
+          uid: d.id,
+          label: data.label ?? data.email ?? d.id,
+          addedAt: data.addedAt,
+        };
+      });
+      refresh("admin");
     },
     // กติกาปฏิเสธ = ไม่ใช่ผู้ดูแล ไม่ใช่ข้อผิดพลาดที่ต้องแจ้งผู้ใช้
-    () => set("denied"),
+    () => {
+      if (watchedUid !== user.uid) return;
+      roster = EMPTY;
+      refresh("denied");
+    },
   );
 }
 
@@ -85,11 +124,34 @@ export const adminClaimStore = {
       if (listeners.size === 0) {
         unsubAuth?.();
         unsubAuth = null;
-        stopDoc();
+        stopList();
         started = false;
       }
     };
   },
-  getSnapshot: () => state,
-  getServerSnapshot: (): AdminState => (hasBackend ? "loading" : "no-backend"),
+  getSnapshot: () => snapshot,
+  getServerSnapshot: () => (hasBackend ? "loading" : "no-backend"),
+
+  /** สถานะล้วนๆ ไม่รวมรายชื่อ */
+  status: (): AdminState => state,
+
+  /** รายชื่อผู้ดูแลที่เพิ่มไว้ (เจ้าของเว็บอยู่ในกติกา ไม่อยู่ในรายการนี้) */
+  roster: () => roster,
+
+  async addAdmin(uid: string, label: string) {
+    const db = getDb();
+    if (!db) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
+    const clean = uid.trim();
+    if (!clean) throw new Error("ต้องใส่รหัสผู้ใช้");
+    await setDoc(doc(db, "admins", clean), {
+      label: label.trim() || clean,
+      addedAt: new Date().toISOString(),
+    });
+  },
+
+  async removeAdmin(uid: string) {
+    const db = getDb();
+    if (!db) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
+    await deleteDoc(doc(db, "admins", uid));
+  },
 };

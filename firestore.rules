@@ -11,23 +11,37 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ---------- ผู้ดูแลระบบ ----------
-    // มีเอกสาร admins/{uid} = บัญชีนั้นเป็นผู้ดูแล
     // นี่คือคำตอบที่เชื่อได้จริงว่า "ใครเป็นแอดมิน" เพราะกติกาถูกบังคับที่ฝั่ง Google
-    // ต่อให้แก้ localStorage หรือตัวแปรใน devtools ก็อ่านเอกสารของคนอื่นไม่ได้
-    // และสร้างเอกสารให้ตัวเองไม่ได้ถ้ายังไม่ได้เป็นผู้ดูแลอยู่ก่อน
+    // ต่อให้แก้ localStorage หรือตัวแปรใน devtools ก็อ่านรายชื่อไม่ได้
+    // และสร้างเอกสารสิทธิ์ให้ตัวเองไม่ได้ถ้ายังไม่ได้เป็นผู้ดูแลอยู่ก่อน
     //
-    // คนแรกต้องเพิ่มด้วยมือที่ Firebase Console (Console ไม่ผ่านกติกานี้)
+    // ★★★ แก้อีเมลบรรทัดล่างเป็นบัญชี Google ที่คุณใช้ล็อกอินเว็บนี้ ★★★
+    // บัญชีนี้เป็นผู้ดูแลทันทีโดยไม่ต้องสร้างเอกสารอะไรด้วยมือ
+    // ใส่ได้หลายอีเมล คั่นด้วยจุลภาค เช่น ['a@gmail.com', 'b@gmail.com']
+    function ownerEmails() {
+      return ['phawit.ps@gmail.com'];
+    }
+
+    function isRootOwner() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in ownerEmails();
+    }
+
+    // ผู้ดูแลคนอื่นเพิ่มทีหลังได้จากหน้าเว็บ เก็บเป็นเอกสาร admins/{uid}
     function isAdmin() {
       return request.auth != null
         && request.auth.token.firebase.sign_in_provider != 'anonymous'
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+        && (isRootOwner()
+            || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
 
     match /admins/{uid} {
-      // อ่านได้เฉพาะเอกสารของตัวเอง เว็บใช้เช็คว่าตัวเองมีสิทธิ์ไหม
-      allow get: if request.auth != null && request.auth.uid == uid;
-      // ผู้ดูแลด้วยกันเห็นรายชื่อทั้งหมดได้
+      // เว็บเช็คสิทธิ์ด้วยการขออ่านทั้งคอลเลกชัน — ผ่าน = เป็นผู้ดูแล
+      // วิธีนี้ทำให้เจ้าของเว็บใช้ได้เลยตั้งแต่ publish กติกา ไม่ต้องมีเอกสารก่อน
       allow list: if isAdmin();
+      // อ่านเอกสารเดี่ยวได้เฉพาะของตัวเอง
+      allow get: if request.auth != null && request.auth.uid == uid;
       // เพิ่มผู้ดูแลใหม่ได้เฉพาะผู้ดูแลที่มีอยู่แล้ว
       allow create, update: if isAdmin();
       // ถอดสิทธิ์คนอื่นได้ แต่ถอดตัวเองไม่ได้ กันล็อกตัวเองออกจนไม่เหลือใคร

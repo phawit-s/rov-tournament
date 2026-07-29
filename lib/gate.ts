@@ -86,11 +86,11 @@ export const gateStore = {
   subscribe(onChange: () => void) {
     listeners.add(onChange);
     const stopClaim = adminClaimStore.subscribe(() => {
-      claim = adminClaimStore.getSnapshot();
+      claim = adminClaimStore.status();
       recompute();
       emit();
     });
-    claim = adminClaimStore.getSnapshot();
+    claim = adminClaimStore.status();
     recompute();
     return () => {
       listeners.delete(onChange);
