@@ -237,6 +237,20 @@ const RECEIVER_ACCOUNT_PATHS = [
   "receiver.account",
 ];
 
+/**
+ * ข้อความบอกเหตุจากผู้ให้บริการ ส่งต่อให้ผู้จัดเห็นจะได้แก้ถูก
+ * Thunder ห่อไว้ใต้ error ที่เป็น object เช่น
+ *   { success:false, error:{ code:"VALIDATION_ERROR", message:"Invalid bank slip format..." } }
+ * ถ้าไล่แค่ "error" เฉยๆ จะได้ object ซึ่งไม่ผ่าน isNonEmptyString แล้วตกไปเป็น null
+ */
+const MESSAGE_PATHS = [
+  "error.message",
+  "error.code",
+  "message",
+  "data.message",
+  "error",
+];
+
 const isNonEmptyString = (v) => typeof v === "string" && v.trim() !== "";
 const isSomething = (v) => v !== undefined && v !== null && v !== "";
 
@@ -490,8 +504,7 @@ const handler = {
       if (!upstream.ok) {
         // ผู้ให้บริการมักใส่ข้อความบอกเหตุมาด้วย ส่งต่อไปให้ผู้จัดเห็นจะได้แก้ถูก
         const message =
-          firstOf(json ?? {}, ["message", "error", "data.message"], isNonEmptyString) ??
-          null;
+          firstOf(json ?? {}, MESSAGE_PATHS, isNonEmptyString) ?? null;
         // 404 ของหลายเจ้าแปลว่า "หาสลิปนี้ไม่เจอ" ไม่ใช่ระบบพัง
         const reason =
           upstream.status === 404 ? "slip-not-found" : `provider-${upstream.status}`;
@@ -512,7 +525,7 @@ const handler = {
         (typeof flagged === "string" && /fail|error/i.test(flagged));
       if (bodySaysFail) {
         const message =
-          firstOf(json, ["message", "error", "data.message"], isNonEmptyString) ?? null;
+          firstOf(json, MESSAGE_PATHS, isNonEmptyString) ?? null;
         return fail("provider-rejected", env, { message });
       }
 

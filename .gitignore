@@ -34,6 +34,11 @@ yarn-error.log*
 .env*
 !.env.example
 
+# ความลับของ Cloudflare Worker — API key ของบริการตรวจสลิปต้องไม่ขึ้น git
+.dev.vars
+worker/.dev.vars
+.wrangler/
+
 # vercel
 .vercel
 
