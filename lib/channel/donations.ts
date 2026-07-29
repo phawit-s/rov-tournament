@@ -5,6 +5,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -82,32 +83,49 @@ export async function submitChannelDonation(
 }
 
 /**
- * จองลายนิ้วมือสลิป — คืน true ถ้าเป็นสลิปใบใหม่ / false ถ้าเคยถูกใช้ไปแล้ว
+ * ผลการจองลายนิ้วมือสลิป
+ *   fresh     = สลิปใบใหม่ จองสำเร็จ
+ *   duplicate = เคยถูกใช้ไปแล้ว ต้องปฏิเสธ
+ *   unchecked = ตรวจไม่ได้ (ยังไม่ได้ publish กติกา / เน็ตมีปัญหา) ต้องปล่อยผ่าน
+ */
+export type SlipClaim = "fresh" | "duplicate" | "unchecked";
+
+/**
+ * จองลายนิ้วมือสลิป กันไม่ให้สลิปใบเดิมถูกส่งซ้ำ
  *
- * ไม่ต้องใช้ transaction เพราะกติกาฝั่งเซิร์ฟเวอร์ปิด update ไว้แล้ว
- * setDoc ทับเอกสารที่มีอยู่จึงถูกนับเป็น update และโดนปฏิเสธเสมอ
- * ต่อให้สองคนยิงพร้อมกัน ก็มีแค่คนแรกที่ create ผ่าน
+ * ทำไมต้องอ่านก่อนเขียน ทั้งที่กติกาปิด update ไว้อยู่แล้ว:
+ * Firestore คืน permission-denied เหมือนกันหมด ทั้งกรณี "เอกสารมีอยู่แล้ว"
+ * และกรณี "ยังไม่ได้ publish กติกา จึงโดน default deny" แยกจาก error ไม่ได้เลย
+ * ถ้าเดาว่าเป็นสลิปซ้ำอย่างเดียว พอลืม publish กติกาเมื่อไหร่ สลิปที่ถูกต้อง
+ * ทุกใบจะถูกปฏิเสธว่า "ถูกใช้ไปแล้ว" ซึ่งแย่กว่าไม่มีระบบกันซ้ำเสียอีก
+ *
+ * การอ่านก่อนแยกสองกรณีนี้ออกจากกันได้ เพราะกติกาเปิด get ให้ทุกคนที่ล็อกอิน
+ *   อ่านไม่ได้        -> ไม่มีกติกาครอบคลุม -> unchecked (ปล่อยผ่าน)
+ *   อ่านได้ มีเอกสาร  -> ซ้ำจริง            -> duplicate
+ *   อ่านได้ ไม่มีเอกสาร -> จองต่อ            -> fresh / duplicate ถ้าโดนแย่งจอง
  */
 export async function claimSlipRef(
   fingerprint: string,
   channelId: string,
-): Promise<boolean> {
+): Promise<SlipClaim> {
   const db = getDb();
-  if (!db) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
+  if (!db) return "unchecked";
+  const ref = doc(db, SLIP_REFS, fingerprint);
+
   try {
-    await setDoc(doc(db, SLIP_REFS, fingerprint), {
-      channelId,
-      at: new Date().toISOString(),
-    });
-    return true;
-  } catch (err) {
-    // permission-denied ที่นี่แปลได้ทางเดียวคือเอกสารมีอยู่แล้ว (กติกา create ผ่านแน่
-    // เพราะล็อกอินแล้วและ id ยาว 64 ตัว) — เท่ากับสลิปซ้ำ
-    const code = (err as { code?: string }).code;
-    if (code === "permission-denied" || code === "already-exists") return false;
-    // เน็ตหลุด/เซิร์ฟเวอร์ล่ม = ยังไม่รู้ว่าซ้ำหรือไม่ ห้ามเดาว่าซ้ำ
-    // โยนออกไปให้ฟอร์มบอกว่าส่งไม่สำเร็จแทน จะได้ไม่กล่าวหาคนโอนผิดๆ
-    throw err;
+    const snap = await getDoc(ref);
+    if (snap.exists()) return "duplicate";
+  } catch {
+    // อ่านไม่ได้ = กติกายังไม่ขึ้น หรือเน็ตมีปัญหา ห้ามกล่าวหาคนโอนว่าส่งซ้ำ
+    return "unchecked";
+  }
+
+  try {
+    await setDoc(ref, { channelId, at: new Date().toISOString() });
+    return "fresh";
+  } catch {
+    // อ่านผ่านแล้วแต่เขียนไม่ผ่าน = มีคนจองแทรกไประหว่างนั้น (กติกาปิด update)
+    return "duplicate";
   }
 }
 

@@ -203,16 +203,20 @@ export default function ChannelSupport() {
       if (slipScan.state === "ok") {
         setPhase("กำลังตรวจสลิป…");
         // จองลายนิ้วมือก่อนเสมอ — สลิปซ้ำต้องตกตั้งแต่ตรงนี้ ยังไม่มีใบเกิดขึ้น
-        const fresh = await claimSlipRef(slipScan.fingerprint, channel.id);
-        if (!fresh) {
+        const claim = await claimSlipRef(slipScan.fingerprint, channel.id);
+        if (claim === "duplicate") {
           setError(
             "สลิปใบนี้ถูกใช้ไปแล้ว — ถ้าโอนมาจริงให้ทักหาเจ้าของช่องโดยตรง",
           );
           toast("สลิปใบนี้ถูกใช้ไปแล้ว", "error");
           return;
         }
-        slipRef = slipScan.fingerprint;
-        slipCheck = "unique";
+        // "unchecked" = ระบบยังตรวจซ้ำไม่ได้ ต้องปล่อยผ่านแล้วให้ผู้จัดดูเอง
+        // ห้ามปฏิเสธ ไม่งั้นคนโอนจริงจะถูกกล่าวหาเพราะระบบตั้งค่าไม่ครบ
+        if (claim === "fresh") {
+          slipRef = slipScan.fingerprint;
+          slipCheck = "unique";
+        }
 
         if (verifyEndpoint) {
           setPhase("กำลังยืนยันกับธนาคาร…");
