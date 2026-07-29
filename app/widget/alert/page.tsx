@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { useHashParam } from "@/hooks/useClient";
 import { useLiveTournament, useWidgetOptions } from "@/hooks/useLiveTournament";
+import { watchChannelDonations } from "@/lib/channel/donations";
+import { watchChannel } from "@/lib/channel/store";
+import type { Channel } from "@/lib/channel/types";
 import { cloudReady, watchDonations } from "@/lib/tournament/cloud";
 import { formatMoney } from "@/lib/tournament/prize";
 import { sfx } from "@/lib/sound";
@@ -27,7 +31,15 @@ export default function AlertWidget() {
   const seen = useRef<Set<string>>(new Set());
   const primed = useRef(false);
 
+  // #ch= คือโหมดช่อง (แนะนำ) ใช้ลิงก์เดียวได้ตลอด
+  const channelId = useHashParam("ch");
+  const [channel, setChannel] = useState<Channel | null>(null);
   const tournamentId = tournament?.id;
+
+  useEffect(() => {
+    if (!channelId || !cloudReady()) return;
+    return watchChannel(channelId, setChannel);
+  }, [channelId]);
 
   // แยกออกมาจาก effect เพราะเป็น callback ของ subscription ไม่ใช่โค้ดที่รันตอน mount
   const handleSnapshot = useCallback((list: Donation[]) => {
@@ -50,9 +62,14 @@ export default function AlertWidget() {
   }, []);
 
   useEffect(() => {
-    if (!tournamentId || !cloudReady()) return;
-    return watchDonations(tournamentId, handleSnapshot, { onlyApproved: true });
-  }, [tournamentId, handleSnapshot]);
+    if (!cloudReady()) return;
+    if (channelId) {
+      return watchChannelDonations(channelId, handleSnapshot, { onlyApproved: true });
+    }
+    if (tournamentId) {
+      return watchDonations(tournamentId, handleSnapshot, { onlyApproved: true });
+    }
+  }, [channelId, tournamentId, handleSnapshot]);
 
   // เล่นทีละใบ พอครบเวลาก็ตัดใบแรกออกให้ใบถัดไปขึ้นแทน
   useEffect(() => {
@@ -66,18 +83,19 @@ export default function AlertWidget() {
     return () => window.clearTimeout(timer);
   }, [current]);
 
-  if (!tournament) {
+  if (!tournament && !channel) {
     return (
       <WidgetShell align="center">
-        <WidgetHint>ลิงก์ต้องมี #c=รหัสทัวร์ และต้องเชื่อม Firebase แล้ว</WidgetHint>
+        <WidgetHint>
+          ลิงก์ต้องมี #ch=รหัสช่อง (หรือ #c=รหัสทัวร์) และต้องเชื่อม Firebase แล้ว
+        </WidgetHint>
       </WidgetShell>
     );
   }
 
   const isMember = current?.kind === "member";
-  const tier = isMember
-    ? tournament.member?.tiers.find((t) => t.id === current?.tierId)
-    : null;
+  const tiers = channel?.member.tiers ?? tournament?.member?.tiers ?? [];
+  const tier = isMember ? tiers.find((t) => t.id === current?.tierId) : null;
   const color = tier ? `rgb(${tier.rgb})` : accent;
 
   return (

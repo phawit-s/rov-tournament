@@ -16,6 +16,7 @@ const NAV: Item[] = [
   { href: "/wheel/", label: "วงล้อ", icon: <IconWheel /> },
   { href: "/tournaments/", label: "ทัวร์นาเมนต์", icon: <IconTrophy /> },
   { href: "/players/", label: "ผู้เล่น", icon: <IconUsers /> },
+  { href: "/channel/", label: "ช่อง", icon: <IconHeart /> },
   { href: "/widgets/", label: "Widget", icon: <IconMonitor /> },
   { href: "/activity/", label: "ประวัติ", icon: <IconClock /> },
 ];
@@ -256,6 +257,12 @@ function IconMonitor() {
       <rect x="3" y="4" width="18" height="12" rx="2.5" />
       <path d="M9 20h6M12 16v4" />
     </>,
+  );
+}
+
+function IconHeart() {
+  return base(
+    <path d="M12 20s-7-4.4-7-9.2A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.8C19 15.6 12 20 12 20Z" />,
   );
 }
 
