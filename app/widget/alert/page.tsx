@@ -7,7 +7,7 @@ import { useLiveTournament, useWidgetOptions } from "@/hooks/useLiveTournament";
 import { watchChannelDonations } from "@/lib/channel/donations";
 import { watchChannel } from "@/lib/channel/store";
 import type { Channel } from "@/lib/channel/types";
-import { cloudReady, watchDonations } from "@/lib/tournament/cloud";
+import { cloudReady } from "@/lib/tournament/cloud";
 import { formatMoney } from "@/lib/tournament/prize";
 import { sfx } from "@/lib/sound";
 import type { Donation } from "@/lib/tournament/types";
@@ -34,7 +34,6 @@ export default function AlertWidget() {
   // #ch= คือโหมดช่อง (แนะนำ) ใช้ลิงก์เดียวได้ตลอด
   const channelId = useHashParam("ch");
   const [channel, setChannel] = useState<Channel | null>(null);
-  const tournamentId = tournament?.id;
 
   useEffect(() => {
     if (!channelId || !cloudReady()) return;
@@ -62,14 +61,9 @@ export default function AlertWidget() {
   }, []);
 
   useEffect(() => {
-    if (!cloudReady()) return;
-    if (channelId) {
-      return watchChannelDonations(channelId, handleSnapshot, { onlyApproved: true });
-    }
-    if (tournamentId) {
-      return watchDonations(tournamentId, handleSnapshot, { onlyApproved: true });
-    }
-  }, [channelId, tournamentId, handleSnapshot]);
+    if (!cloudReady() || !channelId) return;
+    return watchChannelDonations(channelId, handleSnapshot, { onlyApproved: true });
+  }, [channelId, handleSnapshot]);
 
   // เล่นทีละใบ พอครบเวลาก็ตัดใบแรกออกให้ใบถัดไปขึ้นแทน
   useEffect(() => {
@@ -94,7 +88,7 @@ export default function AlertWidget() {
   }
 
   const isMember = current?.kind === "member";
-  const tiers = channel?.member.tiers ?? tournament?.member?.tiers ?? [];
+  const tiers = channel?.member.tiers ?? [];
   const tier = isMember ? tiers.find((t) => t.id === current?.tierId) : null;
   const color = tier ? `rgb(${tier.rgb})` : accent;
 

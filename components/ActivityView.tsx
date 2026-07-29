@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
@@ -7,6 +7,7 @@ import { ACTIVITY_META, activityStore, type ActivityType } from "@/lib/activity"
 import { formatThaiDate } from "@/lib/tournament/share";
 import Panel from "./ui/Panel";
 import Button from "./ui/Button";
+import { PageHeading } from "./ui/Reveal";
 import { EmptyNote } from "./tournament/ui";
 
 const GROUPS: { key: string; label: string; types: ActivityType[] }[] = [
@@ -59,29 +60,23 @@ export default function ActivityView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase">
-            Activity log
-          </p>
-          <h2 className="mt-1.5 font-display text-2xl font-medium text-ice sm:text-3xl">
-            ประวัติการทำงาน
-          </h2>
-          <p className="mt-1.5 text-sm text-muted">
-            ทุกอย่างที่เกิดขึ้นในเครื่องนี้ — ใครกดอะไร เมื่อไหร่ ย้อนดูได้
-          </p>
-        </div>
-        {entries.length > 0 && (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              if (confirm("ล้างประวัติทั้งหมด?")) activityStore.clear();
-            }}
-          >
-            ล้างประวัติ
-          </Button>
-        )}
-      </div>
+      <PageHeading
+        eyebrow="Activity log"
+        title="ประวัติการทำงาน"
+        description="ทุกอย่างที่เกิดขึ้นในเครื่องนี้ — ใครกดอะไร เมื่อไหร่ ย้อนดูได้"
+        action={
+          entries.length > 0 ? (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                if (confirm("ล้างประวัติทั้งหมด?")) activityStore.clear();
+              }}
+            >
+              ล้างประวัติ
+            </Button>
+          ) : undefined
+        }
+      />
 
       <div className="flex flex-wrap gap-1 rounded-xl tile p-1">
         {[{ key: "all", label: "ทั้งหมด" }, ...GROUPS].map((g) => (

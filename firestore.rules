@@ -125,49 +125,6 @@ service cloud.firestore {
         allow update, delete: if canManage();
       }
 
-      match /donations/{donationId} {
-        function tournament() {
-          return get(/databases/$(database)/documents/tournaments/$(tournamentId)).data;
-        }
-        function isTournamentOwner() {
-          return request.auth != null
-            && tournament().ownerUid == request.auth.uid;
-        }
-        // ทีมงานอนุมัติใบสมัคร/สลิปได้เหมือนเจ้าของ
-        function isTournamentStaff() {
-          return request.auth != null
-            && request.auth.token.email_verified == true
-            && tournament().adminEmails is list
-            && request.auth.token.email.lower() in tournament().adminEmails;
-        }
-        function canManage() {
-          return isTournamentOwner() || isTournamentStaff();
-        }
-
-        // widget แจ้งเตือนใน OBS ไม่ได้ล็อกอิน เลยต้องอ่านใบที่อนุมัติแล้วได้
-        allow read: if isTournamentOwner()
-          || resource.data.status == 'approved';
-
-        // ต้องล็อกอินก่อน (หน้าโดเนทล็อกอินแบบไม่ระบุตัวตนให้อัตโนมัติ)
-        // มี uid ติดมาด้วยจะได้ตามรอยและกันสแปมได้
-        // และเปิดรับเฉพาะตอนผู้จัดเปิดระบบโดเนทหรือสมาชิกไว้เท่านั้น
-        allow create: if request.auth != null
-          && (tournament().donate.enabled == true
-              || tournament().member.enabled == true)
-          && request.resource.data.status == 'pending'
-          && request.resource.data.name is string
-          && request.resource.data.name.size() > 0
-          && request.resource.data.name.size() <= 40
-          && request.resource.data.amount is number
-          && request.resource.data.amount > 0
-          && request.resource.data.amount <= 1000000
-          && request.resource.data.message.size() <= 140
-          && (request.resource.data.slip == null
-              || request.resource.data.slip.size() <= 400000);
-
-        // อนุมัติ/ลบ ได้เฉพาะเจ้าของทัวร์
-        allow update, delete: if canManage();
-      }
     }
   }
 }

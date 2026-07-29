@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "motion/react";
@@ -6,6 +6,7 @@ import { recordActivity } from "@/lib/activity";
 import { authStore } from "@/lib/backend/firebase";
 import {
   setChannelDonationStatus,
+  expiryFrom,
   watchChannelDonations,
   type ChannelDonation,
 } from "@/lib/channel/donations";
@@ -14,7 +15,7 @@ import { normalizeHandle, type Channel } from "@/lib/channel/types";
 import { compressImage } from "@/lib/image";
 import { uid } from "@/lib/random";
 import { safeImageSrc } from "@/lib/safe";
-import { expiryFrom } from "@/lib/tournament/cloud";
+
 import { formatMoney } from "@/lib/tournament/prize";
 import { formatThaiDate } from "@/lib/tournament/share";
 import type { MemberTier } from "@/lib/tournament/types";

@@ -25,7 +25,7 @@ import BracketPanel from "./BracketPanel";
 import PrizePanel from "./PrizePanel";
 import SchedulePanel from "./SchedulePanel";
 import AccessPanel from "./AccessPanel";
-import SupportersPanel from "./SupportersPanel";
+import CloudPanel from "./CloudPanel";
 import TeamsPanel from "./TeamsPanel";
 import TournamentForm from "./TournamentForm";
 import { EmptyNote, Input, LiveBadge, Stat, StatusBadge } from "./ui";
@@ -37,7 +37,7 @@ const TABS = [
   { key: "bracket", label: "สายแข่ง", manage: false },
   { key: "schedule", label: "ตารางแข่ง", manage: false },
   { key: "prize", label: "เงินรางวัล", manage: false },
-  { key: "support", label: "โดเนท / สมาชิก", manage: true },
+  { key: "support", label: "คลาวด์ / สมทบทุน", manage: true },
   { key: "access", label: "สิทธิ์", manage: true },
 ] as const;
 
@@ -335,7 +335,7 @@ export default function TournamentDetail() {
       )}
       {tab === "prize" && <PrizePanel tournament={tournament} isAdmin={isAdmin} />}
       {tab === "support" && CAN.manage(role) && (
-        <SupportersPanel tournament={tournament} isAdmin={isAdmin} />
+        <CloudPanel tournament={tournament} isAdmin={isAdmin} />
       )}
       {tab === "access" && CAN.manage(role) && (
         <AccessPanel tournament={tournament} role={role} />

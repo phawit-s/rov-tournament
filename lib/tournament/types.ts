@@ -195,8 +195,11 @@ export type Tournament = {
 
   prize: PrizeConfig;
   live: LiveInfo;
-  donate?: DonateConfig;
-  member?: MemberConfig;
+  /**
+   * ช่องที่ผูกกับทัวร์นี้ (= uid เจ้าของ) ตั้งอัตโนมัติตอนเผยแพร่
+   * ใช้ดึงยอดสมทบทุนเงินรางวัลจากใบโดเนทของช่องที่ระบุ tournamentId ตรงกัน
+   */
+  channelId?: string;
 
   /** PIN โหมดผู้จัด (ทำงานฝั่ง client เท่านั้น กันมือลั่น ไม่ใช่ระบบความปลอดภัยจริง) */
   adminPin?: string;

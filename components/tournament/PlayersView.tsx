@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { buildPlayerRecords, winRate } from "@/lib/tournament/players";
 import { tournamentStore } from "@/lib/tournament/store";
 import Panel from "../ui/Panel";
+import { PageHeading } from "../ui/Reveal";
 import { EmptyNote, Input, StatusBadge } from "./ui";
 
 export default function PlayersView() {
@@ -25,25 +26,19 @@ export default function PlayersView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase">
-            Players
-          </p>
-          <h2 className="mt-1.5 font-display text-2xl font-medium text-ice sm:text-3xl">
-            ผู้เล่นและประวัติการแข่ง
-          </h2>
-          <p className="mt-1.5 text-sm text-muted">
-            รวบจากทุกทัวร์ที่เก็บไว้ในเครื่องนี้ · ใช้ชื่อเป็นตัวระบุตัวตน
-          </p>
-        </div>
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="ค้นหาชื่อผู้เล่น"
-          className="w-56"
-        />
-      </div>
+      <PageHeading
+        eyebrow="Players"
+        title="ผู้เล่นและประวัติการแข่ง"
+        description="รวบจากทุกทัวร์ที่เก็บไว้ในเครื่องนี้ · ใช้ชื่อเป็นตัวระบุตัวตน"
+        action={
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="ค้นหาชื่อผู้เล่น"
+            className="w-56"
+          />
+        }
+      />
 
       {records.length === 0 ? (
         <EmptyNote>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   addDoc,
@@ -14,7 +14,7 @@ import {
 } from "firebase/firestore";
 import { getDb, hasBackend } from "@/lib/backend/firebase";
 import { stripContacts } from "@/lib/safe";
-import type { Donation, TeamEntry, Tournament } from "./types";
+import type { TeamEntry, Tournament } from "./types";
 
 export type CloudTournament = Tournament & {
   ownerUid: string;
@@ -37,7 +37,6 @@ export type Registration = {
 
 const COL = "tournaments";
 const REG = "registrations";
-const DON = "donations";
 
 export function cloudReady(): boolean {
   return hasBackend && !!getDb();
@@ -70,6 +69,7 @@ export async function pushTournament(
       ...sanitize(tournament),
       ownerUid: owner.uid,
       ownerName: owner.name,
+      channelId: owner.uid,
       ownerEmail: owner.email ?? null,
       adminEmails: (tournament.adminEmails ?? []).map((e) => e.toLowerCase()),
       isPublic,
@@ -177,104 +177,6 @@ export async function setRegistrationStatus(
     { status },
     { merge: true },
   );
-}
-
-/* ---------------- โดเนท ---------------- */
-
-/** ส่งสลิป (โดเนทหรือสมัครสมาชิก) — ไม่ต้องล็อกอิน ผู้จัดค่อยกดอนุมัติ */
-export async function submitDonation(
-  tournamentId: string,
-  data: {
-    kind: "tip" | "member";
-    name: string;
-    amount: number;
-    message?: string;
-    slip?: string;
-    tierId?: string;
-    tierName?: string;
-    months?: number;
-  },
-): Promise<void> {
-  const db = getDb();
-  if (!db) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
-  await addDoc(collection(db, COL, tournamentId, DON), {
-    tournamentId,
-    kind: data.kind,
-    name: data.name.slice(0, 40),
-    amount: data.amount,
-    message: (data.message ?? "").slice(0, 140),
-    slip: data.slip ?? null,
-    tierId: data.tierId ?? null,
-    tierName: data.tierName ?? null,
-    months: data.months ?? null,
-    createdAt: new Date().toISOString(),
-    status: "pending",
-  });
-}
-
-/** สมาชิกที่ยังไม่หมดอายุ */
-export function activeMembers(list: Donation[]): Donation[] {
-  const now = Date.now();
-  return list
-    .filter(
-      (d) =>
-        d.kind === "member" &&
-        d.status === "approved" &&
-        (!d.expiresAt || new Date(d.expiresAt).getTime() > now),
-    )
-    .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name, "th"));
-}
-
-/** คำนวณวันหมดอายุจากจำนวนเดือน */
-export function expiryFrom(months: number, from = new Date()): string {
-  const d = new Date(from);
-  d.setMonth(d.getMonth() + Math.max(1, months));
-  return d.toISOString();
-}
-
-export function watchDonations(
-  tournamentId: string,
-  onChange: (list: Donation[]) => void,
-  options?: { onlyApproved?: boolean; onError?: (e: Error) => void },
-): () => void {
-  const db = getDb();
-  if (!db) {
-    onChange([]);
-    return () => {};
-  }
-  const base = collection(db, COL, tournamentId, DON);
-  const q = options?.onlyApproved
-    ? query(base, where("status", "==", "approved"), orderBy("createdAt", "asc"))
-    : query(base, orderBy("createdAt", "desc"));
-
-  return onSnapshot(
-    q,
-    (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Donation)),
-    (err) => options?.onError?.(err),
-  );
-}
-
-export async function setDonationStatus(
-  tournamentId: string,
-  donationId: string,
-  status: Donation["status"],
-): Promise<void> {
-  const db = getDb();
-  if (!db) return;
-  // ใบที่อนุมัติแล้วจะถูกอ่านได้แบบสาธารณะ (widget ใน OBS ไม่ได้ล็อกอิน)
-  // เพราะฉะนั้นต้องลบรูปสลิปทิ้ง ไม่ให้ข้อมูลบัญชีของคนโอนหลุด
-  const patch =
-    status === "approved" ? { status, slip: null } : { status };
-  await setDoc(doc(db, COL, tournamentId, DON, donationId), patch, { merge: true });
-}
-
-export async function deleteDonation(
-  tournamentId: string,
-  donationId: string,
-): Promise<void> {
-  const db = getDb();
-  if (!db) return;
-  await deleteDoc(doc(db, COL, tournamentId, DON, donationId));
 }
 
 /** แปลงใบสมัครที่อนุมัติแล้วเป็นทีมในทัวร์ */

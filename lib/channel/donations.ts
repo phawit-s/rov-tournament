@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   addDoc,
@@ -112,4 +112,11 @@ export function raisedForTournament(
   return list
     .filter((d) => d.status === "approved" && d.tournamentId === tournamentId)
     .reduce((sum, d) => sum + (d.amount || 0), 0);
+}
+
+/** คำนวณวันหมดอายุสมาชิกจากจำนวนเดือน */
+export function expiryFrom(months: number, from = new Date()): string {
+  const d = new Date(from);
+  d.setMonth(d.getMonth() + Math.max(1, months));
+  return d.toISOString();
 }
