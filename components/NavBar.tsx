@@ -12,7 +12,7 @@ import { themeStore } from "@/lib/theme";
 type Item = { href: string; label: string; icon: React.ReactNode };
 
 const NAV: Item[] = [
-  { href: "/", label: "สุ่มทีม", icon: <IconDice /> },
+  { href: "/draw/", label: "สุ่มทีม", icon: <IconDice /> },
   { href: "/wheel/", label: "วงล้อ", icon: <IconWheel /> },
   { href: "/tournaments/", label: "ทัวร์นาเมนต์", icon: <IconTrophy /> },
   { href: "/players/", label: "ผู้เล่น", icon: <IconUsers /> },

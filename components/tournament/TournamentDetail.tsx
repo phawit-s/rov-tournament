@@ -116,7 +116,7 @@ export default function TournamentDetail() {
   const role = roleFor(tournament, {
     uid: user?.uid,
     email: user?.email,
-    anonymous: user?.email === null && !!user?.uid,
+    anonymous: user?.anonymous,
   });
   const pinOk = adminStore.isUnlocked(tournament.id, tournament.adminPin);
   const isAdmin = CAN.manage(role) && pinOk;

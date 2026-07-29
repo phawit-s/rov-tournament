@@ -7,11 +7,15 @@ import {
 } from "firebase/firestore";
 import {
   GoogleAuthProvider,
+  createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInAnonymously,
+  signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  updateProfile,
   type Auth,
   type User,
 } from "firebase/auth";
@@ -50,6 +54,8 @@ export type AuthUser = {
   name: string;
   email: string | null;
   photo: string | null;
+  /** ล็อกอินแบบไม่ระบุตัวตน (มาจากหน้าโดเนท) */
+  anonymous: boolean;
 };
 
 let currentUser: AuthUser | null = null;
@@ -73,9 +79,10 @@ function startWatching() {
     currentUser = user
       ? {
           uid: user.uid,
-          name: user.displayName ?? "ผู้ใช้",
+          name: user.displayName ?? user.email?.split("@")[0] ?? "ผู้ใช้",
           email: user.email,
           photo: user.photoURL,
+          anonymous: user.isAnonymous,
         }
       : null;
     authReady = true;
@@ -106,6 +113,37 @@ export const authStore = {
     const client = getAuthClient();
     if (!client) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
     await signInWithPopup(client, new GoogleAuthProvider());
+  },
+
+  /** เข้าสู่ระบบด้วยอีเมล + รหัสผ่าน */
+  async signInWithPassword(email: string, password: string) {
+    const client = getAuthClient();
+    if (!client) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
+    await signInWithEmailAndPassword(client, email.trim(), password);
+  },
+
+  /** สมัครบัญชีใหม่ด้วยอีเมล + รหัสผ่าน */
+  async registerWithPassword(email: string, password: string, name?: string) {
+    const client = getAuthClient();
+    if (!client) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
+    const cred = await createUserWithEmailAndPassword(client, email.trim(), password);
+    if (name?.trim()) {
+      await updateProfile(cred.user, { displayName: name.trim() });
+      currentUser = {
+        uid: cred.user.uid,
+        name: name.trim(),
+        email: cred.user.email,
+        photo: cred.user.photoURL,
+        anonymous: false,
+      };
+      publish();
+    }
+  },
+
+  async resetPassword(email: string) {
+    const client = getAuthClient();
+    if (!client) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
+    await sendPasswordResetEmail(client, email.trim());
   },
 
   async signOut() {
