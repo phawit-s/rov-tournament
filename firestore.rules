@@ -48,30 +48,64 @@ service cloud.firestore {
       allow delete: if isAdmin() && request.auth.uid != uid;
     }
 
+    // ---------- ประวัติฝั่งคลาวด์ ----------
+    // เขียนได้อย่างเดียว แก้หรือลบย้อนหลังไม่ได้เลย ประวัติถึงจะเชื่อถือได้
+    match /auditLog/{entryId} {
+      allow read: if isAdmin();
+      allow create: if request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.kind is string
+        && request.resource.data.at is string;
+      allow update, delete: if false;
+    }
+
+    // ---------- ลายนิ้วมือสลิปที่เคยใช้แล้ว ----------
+    // เอกสารหนึ่งใบ = สลิปหนึ่งใบ id คือ SHA-256 ของ QR บนสลิป
+    // สร้างได้อย่างเดียว เขียนทับไม่ได้ สลิปใบเดิมจึงส่งซ้ำไม่ได้
+    // ต่อให้แก้โค้ดฝั่งเบราว์เซอร์ Firestore ก็ปฏิเสธที่เซิร์ฟเวอร์อยู่ดี
+    match /slipRefs/{fingerprint} {
+      allow get: if request.auth != null;
+      allow list: if isAdmin();
+      allow create: if request.auth != null
+        && fingerprint.size() == 64
+        && request.resource.data.channelId is string;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
     // ---------- ช่อง (โปรไฟล์ผู้จัด + ระบบโดเนท/สมาชิก) ----------
     match /channels/{channelId} {
       function isChannelOwner() {
         return request.auth != null && request.auth.uid == channelId;
       }
+      // ผู้ดูแลระบบเข้าไปจัดการได้ทุกช่อง ไม่ใช่แค่ช่องตัวเอง
+      function canManageChannel() {
+        return isChannelOwner() || isAdmin();
+      }
 
       // ใครก็อ่านได้ หน้าโดเนทกับ widget ต้องใช้
       allow read: if true;
 
-      // เขียนได้เฉพาะเจ้าของช่อง และ id ต้องเท่ากับ uid ตัวเอง
-      allow create, update: if isChannelOwner()
-        && request.resource.data.ownerUid == request.auth.uid;
-      allow delete: if isChannelOwner();
+      // เจ้าของช่องต้องใส่ ownerUid เป็นตัวเอง ส่วนผู้ดูแลแก้ของใครก็ได้
+      allow create, update: if (isChannelOwner()
+          && request.resource.data.ownerUid == request.auth.uid)
+        || isAdmin();
+      allow delete: if canManageChannel();
 
       match /donations/{donationId} {
         function isChannelOwner() {
           return request.auth != null && request.auth.uid == channelId;
         }
+        function canManageChannel() {
+          return isChannelOwner() || isAdmin();
+        }
         function channel() {
           return get(/databases/$(database)/documents/channels/$(channelId)).data;
         }
 
-        // เจ้าของเห็นทุกใบ คนอื่นเห็นเฉพาะใบที่อนุมัติแล้ว (widget แจ้งเตือน)
-        allow read: if isChannelOwner() || resource.data.status == 'approved';
+        // เจ้าของกับผู้ดูแลเห็นทุกใบ คนอื่นเห็นเฉพาะใบที่อนุมัติแล้ว (widget แจ้งเตือน)
+        allow read: if canManageChannel() || resource.data.status == 'approved';
 
         // ต้องล็อกอินก่อน (หน้าโดเนทล็อกอินแบบไม่ระบุตัวตนให้เอง)
         // และเปิดรับเฉพาะตอนเจ้าของเปิดระบบไว้
@@ -88,7 +122,7 @@ service cloud.firestore {
           && (request.resource.data.slip == null
               || request.resource.data.slip.size() <= 400000);
 
-        allow update, delete: if isChannelOwner();
+        allow update, delete: if canManageChannel();
       }
     }
 

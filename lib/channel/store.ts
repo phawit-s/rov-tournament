@@ -6,6 +6,7 @@ import {
   getDocs,
   limit,
   onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -84,18 +85,29 @@ export function channelCloudReady(): boolean {
   return hasBackend && !!getDb();
 }
 
-/** อัปโหลดช่องขึ้นคลาวด์ (public read) */
-export async function pushChannel(channel: Channel): Promise<void> {
+/**
+ * อัปโหลดช่องขึ้นคลาวด์ไปยัง doc ที่ระบุ (public read)
+ *
+ * แยกออกมาจาก pushChannel เพราะผู้ดูแลระบบแก้ช่องของคนอื่นได้
+ * ตอนนั้น id ปลายทางไม่ใช่ uid ของคนที่กดปุ่ม กติกา isAdmin() ใน firestore.rules อนุญาตไว้แล้ว
+ * ownerUid ในตัวเอกสารไม่ถูกแตะ เจ้าของเดิมยังเป็นเจ้าของอยู่
+ */
+export async function pushChannelAs(channel: Channel, targetId: string): Promise<void> {
   const db = getDb();
   if (!db) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
-  const slim: Channel = { ...channel };
+  const slim: Channel = { ...channel, id: targetId };
   // รูปใหญ่เกินโควตา doc ก็ตัดทิ้ง
   if (slim.cover && slim.cover.length > 500_000) delete slim.cover;
   await setDoc(
-    doc(db, COL, channel.ownerUid),
+    doc(db, COL, targetId),
     { ...slim, isPublic: true, syncedAt: serverTimestamp() },
     { merge: true },
   );
+}
+
+/** อัปโหลดช่องของตัวเอง — doc id คือ uid ของเจ้าของ */
+export async function pushChannel(channel: Channel): Promise<void> {
+  await pushChannelAs(channel, channel.ownerUid);
 }
 
 export function watchChannel(
@@ -112,6 +124,50 @@ export function watchChannel(
     doc(db, COL, id),
     (snap) => onChange(snap.exists() ? (snap.data() as Channel) : null),
     (err) => onError?.(err),
+  );
+}
+
+/**
+ * ฟังรายชื่อช่องทั้งหมด — ใช้ในแถบสลับช่องของผู้ดูแลระบบ
+ *
+ * กติกาเปิด read ของ channels เป็นสาธารณะอยู่แล้ว เลยไม่ต้องรอสิทธิ์อะไร
+ * แต่ฝั่ง UI ควรเรียกเฉพาะตอน useAccess() === 'verified' จะได้ไม่ดึงข้อมูลทิ้งเปล่า
+ * เรียงตาม updatedAt ล่าสุดขึ้นก่อน ช่องที่เพิ่งมีคนแก้จะอยู่ต้นแถว
+ */
+export function watchAllChannels(
+  onChange: (list: Channel[]) => void,
+  onError?: (e: Error) => void,
+): () => void {
+  const db = getDb();
+  if (!db) {
+    onChange([]);
+    return () => {};
+  }
+  return onSnapshot(
+    query(collection(db, COL), orderBy("updatedAt", "desc")),
+    (snap) =>
+      // id จาก doc เชื่อถือได้กว่าฟิลด์ในเอกสาร (เอกสารเก่าอาจไม่มี id)
+      onChange(snap.docs.map((d) => ({ ...(d.data() as Channel), id: d.id }))),
+    (err) => onError?.(err),
+  );
+}
+
+/**
+ * ติดธงว่าใบนี้ระบบอนุมัติเอง ไม่ใช่คนกด
+ *
+ * setChannelDonationStatus เขียนเฉพาะฟิลด์สถานะ ธงนี้เลยต้องเขียนแยกอีกครั้ง
+ * เรียกหลังอนุมัติสำเร็จเสมอ ถ้าอนุมัติพลาดจะได้ไม่มีใบ pending ที่ติดธงค้างไว้
+ */
+export async function markDonationAutoApproved(
+  channelId: string,
+  donationId: string,
+): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+  await setDoc(
+    doc(db, COL, channelId, "donations", donationId),
+    { autoApproved: true },
+    { merge: true },
   );
 }
 

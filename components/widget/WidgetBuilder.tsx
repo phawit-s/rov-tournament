@@ -76,7 +76,12 @@ const ACCENT_PRESETS = ["e6c894", "cfa765", "6f8fd8", "4db591", "a079d8", "e0566
 
 const OBS_STEPS: ReactNode[] = [
   <>
-    ในหน้าต่าง Sources กด <b>+</b> → เลือก <b>Browser</b> (Streamlabs ใช้ชื่อเดียวกัน)
+    ในหน้าต่าง Sources กด <b>+</b> → เลือก <b>Browser</b>
+    <br />
+    <span className="text-muted">
+      Streamlabs ใช้ชื่อเดียวกัน · TikTok LIVE Studio อยู่ที่ เพิ่มแหล่ง →{" "}
+      <b>เว็บเพจ / Web page</b>
+    </span>
   </>,
   <>
     วาง URL ที่คัดลอกมาในช่อง <b>URL</b> แล้วตั้ง <b>Width / Height</b>{" "}

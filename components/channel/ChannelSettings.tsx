@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import QRCode from "qrcode";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useAccess } from "@/hooks/useAdmin";
 import { recordActivity } from "@/lib/activity";
+import { recordAudit } from "@/lib/audit";
 import { authStore } from "@/lib/backend/firebase";
 import {
   setChannelDonationStatus,
@@ -12,7 +14,14 @@ import {
   watchChannelDonations,
   type ChannelDonation,
 } from "@/lib/channel/donations";
-import { channelStore, emptyChannel, pushChannel } from "@/lib/channel/store";
+import {
+  channelStore,
+  emptyChannel,
+  markDonationAutoApproved,
+  pushChannel,
+  pushChannelAs,
+  watchAllChannels,
+} from "@/lib/channel/store";
 import { normalizeHandle, type Channel } from "@/lib/channel/types";
 import { compressImage } from "@/lib/image";
 import { uid } from "@/lib/random";
@@ -31,6 +40,7 @@ import { toast } from "../ui/Toast";
 import { IconCheck, IconCopy, IconExternal, IconMonitor } from "../ui/icons";
 import {
   ArtShield,
+  Badge,
   EmptyState,
   Input,
   Label,
@@ -62,6 +72,60 @@ const ROW_ST: Record<string, string> = {
   approved: "var(--st-win)",
   rejected: "var(--st-live)",
 };
+
+type SlipCheck = NonNullable<ChannelDonation["slipCheck"]>;
+
+/**
+ * ผลตรวจสลิปต่อใบ — สีเดียวกับระบบสถานะทั้งเว็บ
+ * เขียวคือยืนยันกับธนาคารแล้ว แดงคือยอดไม่ตรง ทองคือยังไม่ได้ยืนยัน เทาคือระบบช่วยไม่ได้ ต้องดูเอง
+ */
+const SLIP_META: Record<
+  SlipCheck,
+  { label: string; rgb: string; hex: string; tone: "plain" | "done" }
+> = {
+  verified: { label: "ตรวจแล้ว ยอดตรง", rgb: "77 181 145", hex: "#4db591", tone: "done" },
+  mismatch: { label: "ยอดไม่ตรง", rgb: "224 86 107", hex: "#e0566b", tone: "plain" },
+  unique: {
+    label: "สลิปใหม่ ยังไม่ยืนยัน",
+    rgb: "221 175 100",
+    hex: "#ddaf64",
+    tone: "plain",
+  },
+  none: { label: "ไม่มี QR ตรวจด้วยตา", rgb: "146 151 172", hex: "#9297ac", tone: "plain" },
+  failed: { label: "ตรวจไม่สำเร็จ", rgb: "146 151 172", hex: "#9297ac", tone: "plain" },
+};
+
+/** อ้างอิงคงที่ ไม่งั้น setChannels([]) ตอน error จะทำให้รีเรนเดอร์ไม่จบ */
+const NO_CHANNELS: Channel[] = [];
+
+/**
+ * อนุมัติใบที่ระบบยืนยันแล้วให้อัตโนมัติ
+ *
+ * วางไว้นอกคอมโพเนนต์เพราะถูกเรียกจาก callback ของ onSnapshot
+ * ถ้าอยู่ข้างในจะกลายเป็น dependency ของ effect แล้ว subscribe ใหม่ทุกเรนเดอร์
+ * ลำดับสำคัญ: อนุมัติให้ผ่านก่อน แล้วค่อยติดธง ถ้าติดธงพลาดก็แค่ไม่มีป้าย ใบยังอนุมัติถูกต้อง
+ */
+async function autoApproveOne(channelId: string, d: ChannelDonation): Promise<void> {
+  try {
+    await setChannelDonationStatus(channelId, d.id, "approved", {
+      expiresAt: d.kind === "member" && d.months ? expiryFrom(d.months) : undefined,
+    });
+    await markDonationAutoApproved(channelId, d.id);
+    recordActivity(
+      d.kind === "member" ? "member.approve" : "donation.approve",
+      `${d.name} · ${formatMoney(d.amount)}`,
+      { actor: "ระบบตรวจสลิป" },
+    );
+    void recordAudit("donation.approve", {
+      id: d.id,
+      name: d.name,
+      detail: "อนุมัติอัตโนมัติ · สลิปยืนยันแล้ว",
+    });
+    toast(`อนุมัติอัตโนมัติ ${d.name} · สลิปยืนยันแล้ว`, "success");
+  } catch {
+    /* ยิงไม่ผ่านก็ปล่อยให้ผู้จัดกดเอง ไม่ต้องรบกวนด้วย toast แดง */
+  }
+}
 
 type Stats = {
   total: number;
@@ -120,6 +184,7 @@ export default function ChannelSettings() {
     channelStore.getServerSnapshot,
   );
 
+  const access = useAccess();
   const reduced = useReducedMotion();
   const [donations, setDonations] = useState<ChannelDonation[]>([]);
   const [stats, setStats] = useState<Stats>(NO_STATS);
@@ -129,27 +194,93 @@ export default function ChannelSettings() {
   // ใบที่เพิ่งอนุมัติ — วาบทองหนึ่งครั้งก่อนแถวจะย้ายกลุ่ม
   const [flash, setFlash] = useState<string[]>([]);
 
+  /**
+   * ผู้ดูแลระบบสลับไปแก้ช่องของคนอื่น — เก็บสำเนาแยกไว้ใน state
+   * ไม่ยัดลง channelStore เพราะนั่นคือ localStorage ของช่องตัวเอง เดี๋ยวงานที่ค้างอยู่หาย
+   * null = กำลังแก้ช่องตัวเองตามปกติ
+   */
+  const [remote, setRemote] = useState<{ id: string; draft: Channel } | null>(null);
+  const [channels, setChannels] = useState<Channel[]>(NO_CHANNELS);
+
+  /** ใบที่ยิงอนุมัติอัตโนมัติไปแล้ว — onSnapshot ยิงซ้ำได้เรื่อยๆ ต้องกันเอง */
+  const autoDone = useRef<Set<string>>(new Set());
+
+  const isAdmin = access === "verified";
+  const channel = remote ? remote.draft : stored;
+  const activeId = remote?.id ?? user?.uid ?? null;
+  const autoApprove = !!channel?.donate.autoApprove;
+  // แก้ช่องตัวเองได้เสมอ ช่องคนอื่นต้องเป็นผู้ดูแลที่ Firestore ยืนยันแล้ว
+  const canManage = !!user && !!activeId && (activeId === user.uid || isAdmin);
+
   // ยังไม่มีช่องในเครื่อง = สร้างโครงว่างให้จากบัญชีที่ล็อกอิน
   useEffect(() => {
     if (!user || stored) return;
     channelStore.set(emptyChannel({ uid: user.uid, email: user.email }));
   }, [user, stored]);
 
-  // สรุปยอดคิดใน callback ตอนข้อมูลมาถึง ไม่ใช่ตอนเรนเดอร์
+  // รายชื่อช่องทั้งหมดสำหรับแถบสลับช่อง — คนทั่วไปไม่ต้องดึง
   useEffect(() => {
-    if (!user) return;
-    return watchChannelDonations(user.uid, (list) => {
+    if (!isAdmin) return;
+    return watchAllChannels(setChannels, () => setChannels(NO_CHANNELS));
+  }, [isAdmin]);
+
+  /**
+   * สรุปยอด + อนุมัติอัตโนมัติ ทำใน callback ตอนข้อมูลมาถึง ไม่ใช่ตอนเรนเดอร์
+   * autoApprove กับ canManage อยู่ใน deps เลยไม่ต้องใช้ ref อ่านค่าล่าสุด
+   * (สลับสวิตช์ทีก็แค่ subscribe ใหม่รอบเดียว ไม่ได้ถี่พอให้เสียดาย)
+   */
+  useEffect(() => {
+    if (!activeId) return;
+    return watchChannelDonations(activeId, (list) => {
       setDonations(list);
       setStats(computeStats(list));
+      if (!autoApprove || !canManage) return;
+      for (const d of list) {
+        if (d.status !== "pending" || d.slipCheck !== "verified") continue;
+        if (autoDone.current.has(d.id)) continue;
+        autoDone.current.add(d.id);
+        void autoApproveOne(activeId, d);
+      }
     });
-  }, [user]);
+  }, [activeId, autoApprove, canManage]);
 
   if (!user) return null;
-  const channel = stored;
-  if (!channel) return null;
+  if (!channel || !activeId) return null;
 
-  const set = <K extends keyof Channel>(key: K, value: Channel[K]) =>
+  const editingOther = !!remote;
+  const otherName = channel.name || channel.handle || "ช่องนี้";
+
+  const set = <K extends keyof Channel>(key: K, value: Channel[K]) => {
+    if (remote) {
+      setRemote((prev) =>
+        prev
+          ? {
+              ...prev,
+              draft: {
+                ...prev.draft,
+                ...({ [key]: value } as Partial<Channel>),
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          : prev,
+      );
+      return;
+    }
     channelStore.update({ [key]: value } as Partial<Channel>);
+  };
+
+  /** สลับช่องที่กำลังแก้ — ส่ง null = กลับมาช่องตัวเอง */
+  const selectChannel = (next: Channel | null) => {
+    if (next && next.id === user.uid) {
+      setRemote(null);
+    } else {
+      setRemote(next ? { id: next.id, draft: next } : null);
+    }
+    // ใบของช่องเดิมต้องไม่ค้างอยู่ระหว่างรอ snapshot ชุดใหม่
+    setDonations([]);
+    setStats(NO_STATS);
+    setTab("all");
+  };
 
   const publish = async () => {
     if (!channel.handle) {
@@ -158,10 +289,16 @@ export default function ChannelSettings() {
     }
     setBusy(true);
     try {
-      await pushChannel({ ...channel, ownerEmail: user.email ?? undefined });
-      toast("เผยแพร่ช่องแล้ว", "success");
+      // แก้ช่องคนอื่นห้ามทับ ownerEmail ของเจ้าของด้วยอีเมลผู้ดูแล
+      if (remote) await pushChannelAs(channel, remote.id);
+      else await pushChannel({ ...channel, ownerEmail: user.email ?? undefined });
+      toast(editingOther ? `เผยแพร่ช่อง ${otherName} แล้ว` : "เผยแพร่ช่องแล้ว", "success");
       recordActivity("tournament.publish", `เผยแพร่ช่อง "${channel.name || channel.handle}"`, {
         actor: user.name,
+      });
+      void recordAudit("channel.publish", {
+        id: activeId,
+        name: channel.name || channel.handle,
       });
     } catch (err) {
       toast(err instanceof Error ? err.message : "เผยแพร่ไม่สำเร็จ", "error");
@@ -173,7 +310,7 @@ export default function ChannelSettings() {
   const approve = async (d: ChannelDonation) => {
     setWorking(d.id);
     try {
-      await setChannelDonationStatus(user.uid, d.id, "approved", {
+      await setChannelDonationStatus(activeId, d.id, "approved", {
         expiresAt:
           d.kind === "member" && d.months ? expiryFrom(d.months) : undefined,
       });
@@ -182,6 +319,7 @@ export default function ChannelSettings() {
         `${d.name} · ${formatMoney(d.amount)}`,
         { actor: user.name },
       );
+      void recordAudit("donation.approve", { id: d.id, name: d.name });
       toast(`อนุมัติ ${d.name} แล้ว · เด้งขึ้นจอ`, "success");
       if (!reduced) {
         setFlash((p) => [...p, d.id]);
@@ -200,10 +338,11 @@ export default function ChannelSettings() {
   const reject = async (d: ChannelDonation) => {
     setWorking(d.id);
     try {
-      await setChannelDonationStatus(user.uid, d.id, "rejected");
+      await setChannelDonationStatus(activeId, d.id, "rejected");
       recordActivity("donation.reject", `${d.name} · ${formatMoney(d.amount)}`, {
         actor: user.name,
       });
+      void recordAudit("donation.reject", { id: d.id, name: d.name });
       toast(`ปฏิเสธ ${d.name} แล้ว`, "info");
     } catch (err) {
       toast(err instanceof Error ? err.message : "ทำรายการไม่สำเร็จ", "error");
@@ -216,8 +355,8 @@ export default function ChannelSettings() {
     typeof window !== "undefined"
       ? `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}`
       : "";
-  const supportUrl = `${origin}/c/#h=${channel.handle || channel.id}`;
-  const alertUrl = `${origin}/widget/alert/#ch=${channel.id}`;
+  const supportUrl = `${origin}/c/#h=${channel.handle || activeId}`;
+  const alertUrl = `${origin}/widget/alert/#ch=${activeId}`;
 
   const COUNT: Record<Tab, number> = {
     all: donations.length,
@@ -237,9 +376,37 @@ export default function ChannelSettings() {
 
   return (
     <div className="space-y-6">
+      {/* แถบสลับช่อง — เห็นเฉพาะผู้ดูแลที่ Firestore ยืนยันสิทธิ์แล้ว */}
+      {isAdmin && (
+        <ChannelSwitcher
+          channels={channels}
+          activeId={activeId}
+          ownUid={user.uid}
+          ownName={stored?.name || stored?.handle || user.name}
+          ownAvatar={stored?.avatar}
+          onSelect={selectChannel}
+        />
+      )}
+
+      {editingOther && (
+        <div
+          className="tally flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl tile p-4"
+          style={{ ["--st"]: "var(--st-next)" } as CSSProperties}
+        >
+          <span className="slug" style={{ color: "rgb(var(--st-next))" }}>
+            โหมดผู้ดูแล
+          </span>
+          <p className="min-w-0 flex-1 text-sm text-ice/85">
+            กำลังแก้ช่องของ <strong className="text-champagne">{otherName}</strong> —
+            สิ่งที่แก้จะไม่ทับช่องของคุณ ต้องกด &ldquo;เผยแพร่ช่อง&rdquo; ถึงจะบันทึกขึ้นคลาวด์
+          </p>
+          <MiniBtn onClick={() => selectChannel(null)}>กลับไปช่องของคุณ</MiniBtn>
+        </div>
+      )}
+
       <PageHeading
         eyebrow="Channel"
-        title="ช่องของคุณ"
+        title={editingOther ? otherName : "ช่องของคุณ"}
         description="ตั้งพร้อมเพย์ แพ็กเกจสมาชิก และลิงก์สำหรับสตรีมที่เดียว ใช้ได้กับทุกทัวร์"
         meta={channel.handle ? `@${channel.handle}` : undefined}
         action={
@@ -439,8 +606,64 @@ export default function ChannelSettings() {
         </Panel>
       </Reveal>
 
-      {/* สมาชิก */}
+      {/* ตรวจสลิป */}
       <Reveal index={4}>
+        <Panel accent="77 181 145" className="p-6">
+          <Panel.Header
+            eyebrow="Verify"
+            title="ตรวจสลิปอัตโนมัติ"
+            action={
+              <Switch
+                label="อนุมัติอัตโนมัติเมื่อยืนยันผ่าน"
+                checked={!!channel.donate.autoApprove}
+                onChange={(v) => set("donate", { ...channel.donate, autoApprove: v })}
+              />
+            }
+          />
+
+          <div>
+            <Label hint="ลิงก์ Worker ที่คุณ deploy เอง คีย์ของผู้ให้บริการอยู่ในนั้น ไม่ได้อยู่ในหน้าเว็บ">
+              ลิงก์ตัวกลางตรวจสลิป
+            </Label>
+            <Input
+              value={channel.donate.verifyEndpoint ?? ""}
+              onChange={(e) =>
+                set("donate", { ...channel.donate, verifyEndpoint: e.target.value.trim() })
+              }
+              placeholder="https://slip-check.your-worker.workers.dev"
+            />
+          </div>
+
+          <p className="mt-3 text-xs text-muted">
+            เว้นว่างไว้ก็ใช้งานได้ทันที ไม่ต้องตั้งอะไรเลย —
+            ระบบจะอ่าน QR บนสลิปแล้วตรวจให้แค่ว่าเป็นสลิปใบที่เคยส่งมาแล้วหรือเปล่า
+            ใส่ลิงก์เมื่อไหร่ถึงจะยืนยันกับธนาคารได้ว่าเงินเข้าจริงและยอดตรง
+          </p>
+
+          {channel.donate.autoApprove && !channel.donate.verifyEndpoint && (
+            <p
+              className="mt-2 text-xs"
+              style={{ color: "rgb(var(--st-next))" }}
+            >
+              เปิดอนุมัติอัตโนมัติไว้แต่ยังไม่มีลิงก์ตัวกลาง
+              ใบจะไม่ถูกอนุมัติเองเพราะยังไม่มีอะไรยืนยันยอดให้
+            </p>
+          )}
+
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {(["verified", "mismatch", "unique", "none", "failed"] as SlipCheck[]).map(
+              (k) => (
+                <Badge key={k} rgb={SLIP_META[k].rgb} hex={SLIP_META[k].hex}>
+                  {SLIP_META[k].label}
+                </Badge>
+              ),
+            )}
+          </div>
+        </Panel>
+      </Reveal>
+
+      {/* สมาชิก */}
+      <Reveal index={5}>
         <Panel className="p-6">
           <Panel.Header
             eyebrow="Membership"
@@ -535,7 +758,7 @@ export default function ChannelSettings() {
       </Reveal>
 
       {/* กล่องสลิป */}
-      <Reveal index={5}>
+      <Reveal index={6}>
         <Panel className="p-6">
           <Panel.Header
             eyebrow="Inbox"
@@ -676,7 +899,22 @@ export default function ChannelSettings() {
                             <p className="num mt-1 text-xs text-muted/80">
                               {formatThaiDate(d.createdAt)}
                               {d.tournamentName && ` · สมทบทุน ${d.tournamentName}`}
+                              {d.slipBank && ` · ${d.slipBank}`}
                             </p>
+
+                            {(d.slipCheck || d.autoApproved) && (
+                              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                <SlipBadge
+                                  check={d.slipCheck}
+                                  amount={d.slipAmount}
+                                />
+                                {d.autoApproved && (
+                                  <Badge rgb="109 146 219" hex="#6d92db" tone="done">
+                                    อนุมัติอัตโนมัติ
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
 
                             {d.status === "pending" && (
                               <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -717,17 +955,158 @@ export default function ChannelSettings() {
     </div>
   );
 
+  // ผ่าน set() เสมอ ไม่งั้นตอนผู้ดูแลแก้ช่องคนอื่นจะไปเขียนทับช่องตัวเองในเครื่อง
   function updateTier(index: number, value: Partial<MemberTier>) {
     if (!channel) return;
-    channelStore.update({
-      member: {
-        ...channel.member,
-        tiers: channel.member.tiers.map((t, i) =>
-          i === index ? { ...t, ...value } : t,
-        ),
-      },
+    set("member", {
+      ...channel.member,
+      tiers: channel.member.tiers.map((t, i) =>
+        i === index ? { ...t, ...value } : t,
+      ),
     });
   }
+}
+
+/** ป้ายผลตรวจสลิป — ยอดไม่ตรงต้องบอกด้วยว่าอ่านได้เท่าไหร่ ผู้จัดจะได้ตัดสินใจเองได้ */
+function SlipBadge({
+  check,
+  amount,
+}: {
+  check?: SlipCheck;
+  amount?: number | null;
+}) {
+  if (!check) return null;
+  const meta = SLIP_META[check];
+  return (
+    <Badge rgb={meta.rgb} hex={meta.hex} tone={meta.tone}>
+      {meta.label}
+      {check === "mismatch" && typeof amount === "number" && (
+        <span className="num opacity-80">· สลิป {formatMoney(amount)}</span>
+      )}
+    </Badge>
+  );
+}
+
+/**
+ * แถบสลับช่องของผู้ดูแลระบบ
+ *
+ * ช่องตัวเองอยู่หัวแถวเสมอ แม้ยังไม่เคยเผยแพร่ขึ้นคลาวด์ (จะยังไม่มีใน channels)
+ * แถวเลื่อนแนวนอนแทน dropdown เพราะบนมือถือกดง่ายกว่าและเห็นรูปช่องไปด้วย
+ */
+function ChannelSwitcher({
+  channels,
+  activeId,
+  ownUid,
+  ownName,
+  ownAvatar,
+  onSelect,
+}: {
+  channels: Channel[];
+  activeId: string;
+  ownUid: string;
+  ownName: string;
+  ownAvatar?: string;
+  onSelect: (c: Channel | null) => void;
+}) {
+  const own = channels.find((c) => c.id === ownUid);
+  const others = channels.filter((c) => c.id !== ownUid);
+
+  return (
+    <Panel variant="quiet" className="p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="slug slug-2">Admin · สลับช่อง</span>
+        <span className="num text-eyebrow text-muted">{others.length + 1} ช่อง</span>
+      </div>
+
+      <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
+        <ChannelChip
+          name={own?.name || ownName}
+          handle={own?.handle}
+          avatar={own?.avatar ?? ownAvatar}
+          mine
+          active={activeId === ownUid}
+          onClick={() => onSelect(null)}
+        />
+        {others.map((c) => (
+          <ChannelChip
+            key={c.id}
+            name={c.name || c.handle || c.id.slice(0, 6)}
+            handle={c.handle}
+            avatar={c.avatar}
+            active={activeId === c.id}
+            onClick={() => onSelect(c)}
+          />
+        ))}
+      </div>
+
+      {others.length === 0 && (
+        <p className="mt-2 text-xs text-muted">
+          ยังไม่มีช่องอื่นบนคลาวด์ — ช่องจะโผล่ที่นี่หลังเจ้าของกดเผยแพร่ครั้งแรก
+        </p>
+      )}
+    </Panel>
+  );
+}
+
+function ChannelChip({
+  name,
+  handle,
+  avatar,
+  mine,
+  active,
+  onClick,
+}: {
+  name: string;
+  handle?: string;
+  avatar?: string;
+  mine?: boolean;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex min-h-11 shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors ${
+        active
+          ? "border-champagne/45 bg-[rgb(221_175_100/0.12)]"
+          : "border-hair hover-tile"
+      }`}
+    >
+      {avatar ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={safeImageSrc(avatar) ?? ""}
+          alt=""
+          className="h-8 w-8 shrink-0 rounded-full object-cover"
+        />
+      ) : (
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full tile font-display text-eyebrow text-muted">
+          {(name || "?").slice(0, 1).toUpperCase()}
+        </span>
+      )}
+
+      <span className="min-w-0">
+        <span
+          className={`block max-w-40 truncate text-sm ${
+            active ? "text-champagne" : "text-ice/85"
+          }`}
+        >
+          {name || "ยังไม่ตั้งชื่อ"}
+        </span>
+        <span className="num block text-eyebrow text-muted">
+          {handle ? `@${handle}` : "ยังไม่ตั้ง handle"}
+        </span>
+      </span>
+
+      {mine && (
+        <span className="shrink-0 rounded-full bg-[rgb(77_181_145/0.14)] px-2 py-0.5 font-display text-eyebrow text-[#4db591]">
+          ช่องของคุณ
+        </span>
+      )}
+    </button>
+  );
 }
 
 function ImagePicker({

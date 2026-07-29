@@ -12,6 +12,7 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
+import { recordAudit } from "@/lib/audit";
 import { getDb, hasBackend } from "@/lib/backend/firebase";
 import { stripContacts } from "@/lib/safe";
 import type { TeamEntry, Tournament } from "./types";
@@ -77,12 +78,20 @@ export async function pushTournament(
     },
     { merge: true },
   );
+  // จดประวัติหลังเขียนสำเร็จเท่านั้น จะได้ไม่มีบรรทัดหลอกตอนเขียนพัง
+  // recordAudit กลืน error ไว้เองแล้ว ตรงนี้จึงไม่ต้อง try/catch ซ้ำ
+  await recordAudit("tournament.publish", {
+    id: tournament.id,
+    name: tournament.name,
+    detail: isPublic ? "เผยแพร่สาธารณะ" : "เก็บเป็นส่วนตัว",
+  });
 }
 
 export async function removeTournament(id: string): Promise<void> {
   const db = getDb();
   if (!db) return;
   await deleteDoc(doc(db, COL, id));
+  await recordAudit("tournament.unpublish", { id });
 }
 
 /** ฟังทัวร์ตัวเดียวแบบเรียลไทม์ — widget กับหน้าคนดูใช้ตัวนี้ */

@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { recordActivity } from "@/lib/activity";
+import { AUDIT_META, watchAudit, type AuditEntry } from "@/lib/audit";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import {
   raisedForTournament,
@@ -25,7 +26,7 @@ import { tournamentStore } from "@/lib/tournament/store";
 import type { Tournament } from "@/lib/tournament/types";
 import Button from "../ui/Button";
 import Panel from "../ui/Panel";
-import { EmptyNote } from "./ui";
+import { Badge, EmptyNote } from "./ui";
 
 type Props = { tournament: Tournament; isAdmin: boolean };
 
@@ -50,6 +51,15 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
   const [donations, setDonations] = useState<ChannelDonation[]>([]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  /**
+   * ประวัติบนคลาวด์ — เริ่มที่ loading แล้วรอ onSnapshot เป็นคนเปลี่ยนสถานะ
+   * ถ้ากติกาปฏิเสธ (ไม่ใช่ผู้ดูแล) จะเข้า onError แล้วกลายเป็น denied
+   * แล้วเราซ่อนส่วนนี้ทิ้งไปเลย ไม่ต้องโชว์ error ให้คนดูงง
+   */
+  const [audit, setAudit] = useState<{
+    status: "loading" | "ok" | "denied";
+    items: AuditEntry[];
+  }>({ status: "loading", items: [] });
 
   const live = cloudReady() && !!user && !user.anonymous;
 
@@ -57,6 +67,15 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
     if (!live) return;
     return watchRegistrations(tournament.id, setRegistrations);
   }, [live, tournament.id]);
+
+  useEffect(() => {
+    if (!live) return;
+    // setState อยู่ใน callback ของ onSnapshot เท่านั้น ไม่มีการ set ตอน effect ทำงาน
+    return watchAudit((list) => setAudit({ status: "ok", items: list }), {
+      max: 80,
+      onError: () => setAudit({ status: "denied", items: [] }),
+    });
+  }, [live]);
 
   useEffect(() => {
     const channelId = tournament.channelId ?? user?.uid;
@@ -86,6 +105,12 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
   const supportUrl = channel?.handle
     ? `${origin}/c/#h=${channel.handle}&t=${tournament.id}`
     : null;
+
+  // ประวัติของทัวร์นี้เท่านั้น — watchAudit ดึงมาทั้งระบบ เลยต้องกรองเองที่นี่
+  const history =
+    audit.status === "ok"
+      ? audit.items.filter((e) => e.targetId === tournament.id).slice(0, 8)
+      : [];
 
   return (
     <div className="space-y-5">
@@ -157,13 +182,46 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
             )}
           </div>
         )}
+
+        {/* ประวัติการเผยแพร่ — ผู้ดูแลเท่านั้นที่อ่านได้ คนอื่นจะไม่เห็นบล็อกนี้เลย */}
+        {audit.status === "ok" && history.length > 0 && (
+          <div className="mt-5 border-t border-hair pt-4">
+            <p className="font-display text-eyebrow tracking-luxe text-muted uppercase">
+              ประวัติการเผยแพร่
+            </p>
+            <ul className="mt-3 space-y-2.5">
+              {history.map((entry) => {
+                const meta = AUDIT_META[entry.kind];
+                return (
+                  <li key={entry.id} className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                    <span className="num w-32 shrink-0 text-xs text-muted">
+                      {formatThaiDate(entry.at)}
+                    </span>
+                    {meta ? (
+                      <Badge rgb={meta.rgb}>{meta.label}</Badge>
+                    ) : (
+                      <Badge rgb="146 151 172">{entry.kind}</Badge>
+                    )}
+                    <span className="min-w-0 truncate text-xs text-ice/75">
+                      {entry.actorName}
+                      {entry.detail ? ` · ${entry.detail}` : ""}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="mt-3 text-xs text-muted">
+              ประวัติบนคลาวด์แก้หรือลบย้อนหลังไม่ได้
+            </p>
+          </div>
+        )}
       </Panel>
 
       {/* สมทบทุน */}
       <Panel accent="207 167 101" className="p-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase">
+            <p className="font-display text-eyebrow tracking-luxe text-champagne/70 uppercase">
               สมทบทุนเงินรางวัล
             </p>
             <p className="mt-2 font-display text-3xl font-light text-champagne">

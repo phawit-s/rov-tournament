@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useHashParam } from "@/hooks/useClient";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import {
+  claimSlipRef,
   submitChannelDonation,
+  verifySlipRemote,
   watchChannelDonations,
   type ChannelDonation,
 } from "@/lib/channel/donations";
@@ -14,16 +16,19 @@ import { findChannelByHandle, watchChannel } from "@/lib/channel/store";
 import type { Channel } from "@/lib/channel/types";
 import { compressImage } from "@/lib/image";
 import { formatPromptPayId, promptPayPayload } from "@/lib/promptpay";
+import { inspectSlip } from "@/lib/slip";
 import { formatMoney } from "@/lib/tournament/prize";
 import { safeImageSrc, safeUrl } from "@/lib/safe";
-import type { MemberTier } from "@/lib/tournament/types";
+import type { Donation, MemberTier } from "@/lib/tournament/types";
 import Button from "../ui/Button";
 import Corners from "../ui/Corners";
 import Panel from "../ui/Panel";
 import GoldDust from "../fx/GoldDust";
+import { toast } from "../ui/Toast";
 import { IconCheck } from "../ui/icons";
 import {
   ArtShield,
+  Badge,
   EmptyNote,
   EmptyState,
   Input,
@@ -34,6 +39,19 @@ import {
 
 type Mode = "tip" | "member";
 const MONTHS = [1, 3, 6, 12];
+
+/**
+ * ผลอ่าน QR บนสลิปที่ผู้ใช้เพิ่งเลือก
+ * เก็บ payload ไว้ด้วยเพราะตอนกดส่งต้องใช้ทั้งลายนิ้วมือ (กันซ้ำ) และตัว payload (ส่งไปตรวจ)
+ */
+type SlipScan =
+  | { state: "none" }
+  | { state: "reading" }
+  | { state: "no-qr" }
+  | { state: "ok"; payload: string; fingerprint: string };
+
+/** ยอดที่ธนาคารอ่านได้เทียบกับที่กรอก คลาดเคลื่อนได้ ±1 บาท (ค่าธรรมเนียม/ปัดเศษ) */
+const AMOUNT_TOLERANCE = 1;
 
 export default function ChannelSupport() {
   const idParam = useHashParam("ch");
@@ -50,11 +68,16 @@ export default function ChannelSupport() {
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [slip, setSlip] = useState<string | null>(null);
+  const [slipScan, setSlipScan] = useState<SlipScan>({ state: "none" });
   const [busy, setBusy] = useState(false);
+  /** ข้อความบอกว่าปุ่มกำลังทำอะไรอยู่ ตอนตรวจสลิปมันรอนานพอที่คนกดจะสงสัย */
+  const [phase, setPhase] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [qrCache, setQrCache] = useState<Record<string, string>>({});
   const [members, setMembers] = useState<ChannelDonation[]>([]);
+  // ป้ายสถานะสลิปสลับบ่อยกว่าอย่างอื่นในหน้านี้ คนที่ปิดแอนิเมชันไว้ให้เปลี่ยนแบบนิ่งๆ
+  const calm = useReducedMotion();
 
   // หาช่องจาก id หรือ handle — setState อยู่ใน callback ทั้งหมด ไม่ใช่ในตัว effect
   useEffect(() => {
@@ -153,8 +176,15 @@ export default function ChannelSupport() {
     null,
   )?.id;
 
+  // กันกดส่งตอน QR ยังอ่านไม่เสร็จ ไม่งั้นใบจะกลายเป็น "ไม่มี QR" ทั้งที่มี
   const canSubmit =
-    !!name.trim() && finalAmount > 0 && (mode === "tip" || !!tier) && !busy;
+    !!name.trim() &&
+    finalAmount > 0 &&
+    (mode === "tip" || !!tier) &&
+    !busy &&
+    slipScan.state !== "reading";
+
+  const verifyEndpoint = channel.donate.verifyEndpoint?.trim() ?? "";
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -162,6 +192,50 @@ export default function ChannelSupport() {
     setError(null);
     try {
       await authStore.ensureSignedIn();
+
+      // ไม่มี QR ก็ส่งได้ตามปกติ แค่ติดป้ายไว้ว่าผู้จัดต้องตรวจด้วยตา
+      let slipRef: string | null = null;
+      let slipCheck: Donation["slipCheck"] = "none";
+      let slipAmount: number | null = null;
+      let slipAt: string | null = null;
+      let slipBank: string | null = null;
+
+      if (slipScan.state === "ok") {
+        setPhase("กำลังตรวจสลิป…");
+        // จองลายนิ้วมือก่อนเสมอ — สลิปซ้ำต้องตกตั้งแต่ตรงนี้ ยังไม่มีใบเกิดขึ้น
+        const fresh = await claimSlipRef(slipScan.fingerprint, channel.id);
+        if (!fresh) {
+          setError(
+            "สลิปใบนี้ถูกใช้ไปแล้ว — ถ้าโอนมาจริงให้ทักหาเจ้าของช่องโดยตรง",
+          );
+          toast("สลิปใบนี้ถูกใช้ไปแล้ว", "error");
+          return;
+        }
+        slipRef = slipScan.fingerprint;
+        slipCheck = "unique";
+
+        if (verifyEndpoint) {
+          setPhase("กำลังยืนยันกับธนาคาร…");
+          const result = await verifySlipRemote(verifyEndpoint, slipScan.payload, {
+            amount: finalAmount,
+            account: promptPayId,
+          });
+          if (result.ok) {
+            slipAmount = typeof result.amount === "number" ? result.amount : null;
+            slipAt = result.at ?? null;
+            slipBank = result.bank ?? null;
+            // ไม่มียอดกลับมา = ปลายทางเช็คให้แล้วจาก expectAmount ที่ส่งไป ถือว่าตรง
+            const matched =
+              slipAmount === null ||
+              Math.abs(slipAmount - finalAmount) <= AMOUNT_TOLERANCE;
+            slipCheck = matched ? "verified" : "mismatch";
+          } else {
+            slipCheck = "failed";
+          }
+        }
+      }
+
+      setPhase("กำลังส่งใบ…");
       await submitChannelDonation(channel.id, {
         kind: mode,
         name: name.trim(),
@@ -172,12 +246,18 @@ export default function ChannelSupport() {
         tierName: tier?.name,
         months: mode === "member" ? months : undefined,
         tournamentId: tournamentId ?? undefined,
+        slipRef,
+        slipCheck,
+        slipAmount,
+        slipAt,
+        slipBank,
       });
       setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "ส่งไม่สำเร็จ ลองใหม่อีกครั้ง");
     } finally {
       setBusy(false);
+      setPhase(null);
     }
   };
 
@@ -207,6 +287,8 @@ export default function ChannelSupport() {
               onClick={() => {
                 setSent(false);
                 setSlip(null);
+                // ล้างผลอ่าน QR ด้วย ไม่งั้นใบถัดไปจะพกลายนิ้วมือของสลิปเก่าที่จองไปแล้ว
+                setSlipScan({ state: "none" });
                 setMessage("");
               }}
             >
@@ -440,7 +522,9 @@ export default function ChannelSupport() {
               />
             </div>
             <div>
-              <Label hint="ระบบย่อรูปให้อัตโนมัติ">แนบสลิปโอนเงิน</Label>
+              <Label hint="ระบบย่อรูปให้อัตโนมัติ แล้วอ่าน QR บนสลิปให้ด้วย">
+                แนบสลิปโอนเงิน
+              </Label>
               <div className="flex items-center gap-3">
                 {slip ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -463,14 +547,66 @@ export default function ChannelSupport() {
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
+                      // อ่าน QR จาก event handler ตรงนี้ ไม่ใช่ใน useEffect
+                      setError(null);
+                      setSlipScan({ state: "reading" });
                       try {
                         setSlip(await compressImage(file));
                       } catch {
                         setError("อ่านรูปไม่ได้ ลองรูปอื่น");
+                        setSlipScan({ state: "none" });
+                        return;
+                      }
+                      try {
+                        // อ่าน QR จากไฟล์ต้นฉบับ ไม่ใช่รูปที่ย่อแล้ว ย่อไปลายจะแตกจนอ่านไม่ออก
+                        const found = await inspectSlip(file);
+                        setSlipScan(
+                          found.state === "ok"
+                            ? {
+                                state: "ok",
+                                payload: found.payload,
+                                fingerprint: found.fingerprint,
+                              }
+                            : { state: "no-qr" },
+                        );
+                      } catch {
+                        setSlipScan({ state: "no-qr" });
                       }
                     }}
                   />
                 </label>
+              </div>
+
+              {/* สถานะการอ่าน QR — บอกล่วงหน้าว่าใบนี้จะตรวจอัตโนมัติได้ไหม */}
+              <div className="mt-3 min-h-7">
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    key={slipScan.state}
+                    initial={{ opacity: 0, y: calm ? 0 : 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: calm ? 0 : -4 }}
+                    transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    {slipScan.state === "reading" && (
+                      <span className="flex items-center gap-2.5">
+                        <Skeleton className="h-4 w-4 rounded-md" />
+                        <span className="text-xs text-muted">
+                          กำลังอ่าน QR บนสลิป…
+                        </span>
+                      </span>
+                    )}
+                    {slipScan.state === "no-qr" && (
+                      <Badge rgb="155 160 179">
+                        อ่าน QR ไม่เจอ — ผู้จัดจะตรวจด้วยตา
+                      </Badge>
+                    )}
+                    {slipScan.state === "ok" && (
+                      <Badge rgb="77 181 145" tone="done">
+                        อ่าน QR สลิปได้แล้ว
+                      </Badge>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
               </div>
             </div>
 
@@ -483,10 +619,13 @@ export default function ChannelSupport() {
               disabled={!canSubmit}
               className="w-full"
             >
-              {finalAmount > 0 ? `ส่งสลิป ${formatMoney(finalAmount)}` : "ส่งสลิป"}
+              {phase ??
+                (finalAmount > 0 ? `ส่งสลิป ${formatMoney(finalAmount)}` : "ส่งสลิป")}
             </Button>
             <p className="text-xs text-muted">
-              เจ้าของช่องจะตรวจสลิปเองก่อนอนุมัติ ระบบไม่ได้เช็คยอดกับธนาคารอัตโนมัติ
+              {verifyEndpoint
+                ? "ระบบอ่าน QR บนสลิปเพื่อกันสลิปซ้ำและยืนยันยอดให้อัตโนมัติ เจ้าของช่องยังตรวจซ้ำอีกชั้นก่อนอนุมัติ"
+                : "ระบบอ่าน QR บนสลิปเพื่อกันการส่งสลิปใบเดิมซ้ำ ส่วนยอดเงินเจ้าของช่องจะตรวจเองก่อนอนุมัติ"}
             </p>
           </Panel>
         </div>
