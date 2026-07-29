@@ -6,7 +6,6 @@ import {
   getDocs,
   limit,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -132,7 +131,11 @@ export function watchChannel(
  *
  * กติกาเปิด read ของ channels เป็นสาธารณะอยู่แล้ว เลยไม่ต้องรอสิทธิ์อะไร
  * แต่ฝั่ง UI ควรเรียกเฉพาะตอน useAccess() === 'verified' จะได้ไม่ดึงข้อมูลทิ้งเปล่า
- * เรียงตาม updatedAt ล่าสุดขึ้นก่อน ช่องที่เพิ่งมีคนแก้จะอยู่ต้นแถว
+ *
+ * ตั้งใจไม่ใช้ orderBy ใน query — Firestore จะ "ตัดเอกสารที่ไม่มีฟิลด์นั้นทิ้งเงียบๆ"
+ * ถ้าเรียงด้วย updatedAt แล้วมีช่องไหนไม่มีฟิลด์นี้ (เอกสารเก่า หรือถูกเขียนจาก
+ * ที่อื่น) ผู้ดูแลจะไม่เห็นช่องนั้นเลยและไม่มี error ให้จับด้วย
+ * คอลเลกชันนี้มีขนาดเท่าจำนวนผู้จัด เรียงในเครื่องเองถูกกว่ามาก
  */
 export function watchAllChannels(
   onChange: (list: Channel[]) => void,
@@ -144,10 +147,13 @@ export function watchAllChannels(
     return () => {};
   }
   return onSnapshot(
-    query(collection(db, COL), orderBy("updatedAt", "desc")),
-    (snap) =>
+    collection(db, COL),
+    (snap) => {
       // id จาก doc เชื่อถือได้กว่าฟิลด์ในเอกสาร (เอกสารเก่าอาจไม่มี id)
-      onChange(snap.docs.map((d) => ({ ...(d.data() as Channel), id: d.id }))),
+      const list = snap.docs.map((d) => ({ ...(d.data() as Channel), id: d.id }));
+      list.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+      onChange(list);
+    },
     (err) => onError?.(err),
   );
 }
