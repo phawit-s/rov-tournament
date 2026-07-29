@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   useEffect,
@@ -23,7 +23,6 @@ import { recordActivity } from "@/lib/activity";
 import { muteStore, sfx } from "@/lib/sound";
 import { themeStore } from "@/lib/theme";
 import Button from "@/components/ui/Button";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { toast } from "@/components/ui/Toast";
 import {
   IconClock,
@@ -156,7 +155,6 @@ export default function NavBar() {
   const pathname = usePathname();
   const reduced = useReducedMotion();
   const [condensed, setCondensed] = useState(false);
-  const [signOutOpen, setSignOutOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const { scrollYProgress } = useScroll();
 
@@ -280,10 +278,14 @@ export default function NavBar() {
           {hasBackend &&
             (user ? (
               <>
-                <button
-                  type="button"
-                  onClick={() => setSignOutOpen(true)}
-                  title={`${user.name} — กดเพื่อออกจากระบบ`}
+                {/*
+                  กดรูปโปรไฟล์แล้วไปหน้าบัญชี ไม่ใช่เด้งถามออกจากระบบทันที
+                  ปุ่มออกจากระบบย้ายไปอยู่ในหน้านั้นแล้ว ซึ่งตรงกับที่คนคาดหวังกว่า
+                */}
+                <Link
+                  href="/account/"
+                  title={`${user.name} — โปรไฟล์ของฉัน`}
+                  aria-label="โปรไฟล์ของฉัน"
                   className="relative ml-0.5 grid h-9 w-9 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-full border border-champagne/45 transition-transform hover:scale-105"
                 >
                   <span className="pointer-events-none absolute inset-0 animate-halo rounded-full" />
@@ -300,20 +302,7 @@ export default function NavBar() {
                       {user.name.slice(0, 1)}
                     </span>
                   )}
-                </button>
-
-                <ConfirmDialog
-                  open={signOutOpen}
-                  tone="danger"
-                  title={`ออกจากระบบ (${user.name})?`}
-                  description="ข้อมูลในเครื่องยังอยู่ครบ เข้าสู่ระบบใหม่เมื่อไหร่ก็ซิงก์ต่อได้"
-                  confirmText="ออกจากระบบ"
-                  onConfirm={() => {
-                    recordActivity("auth.signout", `ออกจากระบบ (${user.name})`);
-                    void authStore.signOut();
-                  }}
-                  onClose={() => setSignOutOpen(false)}
-                />
+                </Link>
               </>
             ) : (
               <Button

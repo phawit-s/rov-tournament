@@ -4,6 +4,7 @@ import { useSyncExternalStore } from "react";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { Skeleton } from "../tournament/ui";
 import AuthPanel from "./AuthPanel";
+import ProfileGate from "./ProfileGate";
 
 /**
  * บังคับล็อกอินก่อนเข้าถึงเนื้อหา
@@ -40,7 +41,13 @@ export default function AuthGate({
     );
   }
 
-  return <>{children}</>;
+  /*
+    ล็อกอินแล้วยังไม่พอ — ต้องรู้ด้วยว่าใครเป็นใคร
+    ProfileGate จะขอชื่อในเกมครั้งเดียวสำหรับคนที่ล็อกอินด้วย Google
+    (สมัครด้วยอีเมลกรอกไปแล้วตอนสมัคร จึงผ่านฉลุย)
+    วางไว้ตรงนี้ที่เดียวเพื่อให้ทุกหน้าที่ต้องล็อกอินได้เงื่อนไขเดียวกันหมด
+  */
+  return <ProfileGate>{children}</ProfileGate>;
 }
 
 function GateSkeleton() {

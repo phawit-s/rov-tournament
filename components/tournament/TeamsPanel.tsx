@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { recordActivity } from "@/lib/activity";
+import { authStore, hasBackend } from "@/lib/backend/firebase";
+import { profileStore, watchUsers, type UserProfile } from "@/lib/backend/users";
 import { compressImage } from "@/lib/image";
 import { rngFromSeed, shuffle, uid } from "@/lib/random";
 import { LANES as GAME_LANES, identityFor, laneByLabel } from "@/lib/game";
@@ -29,8 +31,70 @@ type Props = {
 /** ตัวเลือกตำแหน่ง ดึงจากรายการกลาง เพื่อไม่ให้ป้ายเพี้ยนกับไอคอนที่ใช้แสดงผล */
 const LANE_OPTIONS = [...GAME_LANES.map((l) => l.label), "ไม่ระบุ"];
 
+/**
+ * ใบสมัครที่ผูกกับบัญชีจะมี uid ติดมาด้วย
+ * เก็บเป็นฟิลด์เสริมบนโครงเดิม จะได้ไม่ต้องแก้ชนิดกลางใน lib/tournament/types
+ * และใบเก่าที่ไม่มี uid ก็ยังใช้งานได้เหมือนเดิม
+ */
+type AccountBound = { uid?: string };
+
+/** อ่าน uid ของเจ้าของใบแบบไม่พังกับใบเก่า */
+function accountUid(entry: TeamEntry | SoloEntry): string | null {
+  const value = (entry as { id: string; uid?: unknown }).uid;
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+/** ชื่อที่เอาไว้โชว์ — ชื่อในเกมมาก่อน แล้วค่อยไล่ลงมา ไม่โชว์ uid ให้คนอ่าน */
+function accountLabel(p: UserProfile): string {
+  return p.gameName?.trim() || p.name?.trim() || p.email?.trim() || "บัญชีผู้ใช้";
+}
+
+/** อ้างอิงเดิมตัวเดียว กัน setState ด้วย array ใหม่ทุกครั้งที่อ่านรายชื่อไม่ได้ */
+const NO_PROFILES: UserProfile[] = [];
+
+/**
+ * รายชื่อบัญชีทั้งระบบ แปลงเป็นตาราง uid → โปรไฟล์
+ * กติกา Firestore เปิด list ให้เฉพาะผู้ดูแล คนอื่นจะได้ตารางว่าง
+ * ทุกจุดที่ใช้จึงต้องมีทางสำรองเป็นข้อมูลที่กรอกมากับใบเสมอ
+ */
+function useAccountDirectory(): Map<string, UserProfile> {
+  const [list, setList] = useState<UserProfile[]>(NO_PROFILES);
+
+  useEffect(() => {
+    if (!hasBackend) return;
+    // setState อยู่ใน callback ของ subscription เท่านั้น ไม่ใช่ในตัว effect
+    return watchUsers(
+      (rows) => setList(rows),
+      () => setList(NO_PROFILES),
+    );
+  }, []);
+
+  return useMemo(() => new Map(list.map((p) => [p.uid, p])), [list]);
+}
+
 export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) {
   const solo = tournament.entryMode === "solo";
+
+  /*
+    ใบสมัครต้องผูกกับบัญชีจริง ผู้จัดถึงจะรู้ว่าใครสมัครและติดต่อกลับได้
+    จึงต้องฟังสถานะล็อกอิน (uid ที่จะแปะไปกับใบ) และโปรไฟล์ของตัวเอง (ไว้เติมฟอร์ม)
+  */
+  useSyncExternalStore(
+    authStore.subscribe,
+    authStore.getSnapshot,
+    authStore.getServerSnapshot,
+  );
+  useSyncExternalStore(
+    profileStore.subscribe,
+    profileStore.getSnapshot,
+    profileStore.getServerSnapshot,
+  );
+  const signedIn = authStore.user();
+  // บัญชีนิรนาม (มาจากหน้าโดเนท) ตามตัวกลับไม่ได้ ถือว่ายังไม่ผูกบัญชี
+  const account = signedIn && !signedIn.anonymous ? signedIn : null;
+  const myProfile = profileStore.profile();
+
+  const directory = useAccountDirectory();
 
   const [name, setName] = useState("");
   const [ign, setIgn] = useState("");
@@ -63,6 +127,23 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
     setError(null);
   };
 
+  /** เติมจากโปรไฟล์ของตัวเอง — คนสมัครหลายทัวร์จะได้ไม่ต้องพิมพ์ซ้ำ */
+  const fillFromProfile = () => {
+    if (!myProfile) return;
+    const gameName = myProfile.gameName?.trim();
+    if (gameName && solo) {
+      setIgn(gameName);
+      if (!name.trim()) setName(gameName);
+    }
+    const own = myProfile.contact?.trim();
+    if (own) setContact(own);
+  };
+
+  const canFillFromProfile =
+    canRegister &&
+    !!myProfile &&
+    !!((solo && myProfile.gameName?.trim()) || myProfile.contact?.trim());
+
   const pickImage = async (file: File | undefined) => {
     if (!file) return;
     try {
@@ -84,7 +165,7 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
       return setError("ชื่อทีมนี้สมัครไปแล้ว");
     }
 
-    const entry: TeamEntry = {
+    const entry: TeamEntry & AccountBound = {
       id: uid(),
       name: teamName,
       members: members
@@ -96,6 +177,8 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
       logo: image ?? undefined,
       registeredAt: new Date().toISOString(),
       approved: !tournament.adminPin,
+      // แปะเฉพาะตอนล็อกอินอยู่จริง ไม่งั้นจะได้ค่า undefined ซึ่ง Firestore ไม่รับ
+      ...(account ? { uid: account.uid } : {}),
     };
 
     tournamentStore.mutate(tournament.id, (t) => ({
@@ -122,7 +205,7 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
       return setError("ชื่อนี้สมัครไปแล้ว");
     }
 
-    const entry: SoloEntry = {
+    const entry: SoloEntry & AccountBound = {
       id: uid(),
       name: playerName,
       ign: ign.trim() || undefined,
@@ -131,6 +214,7 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
       avatar: image ?? undefined,
       registeredAt: new Date().toISOString(),
       approved: !tournament.adminPin,
+      ...(account ? { uid: account.uid } : {}),
     };
 
     tournamentStore.mutate(tournament.id, (t) => ({
@@ -183,6 +267,10 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
   const approvedTeams = tournament.teams.filter((t) => t.approved);
   const approvedSolo = tournament.soloPlayers.filter((p) => p.approved);
 
+  // ใบที่ตามตัวเจ้าของกลับได้จริง — ใบเก่าก่อนมีระบบบัญชีจะไม่มี uid
+  const boundTeams = tournament.teams.filter((t) => accountUid(t)).length;
+  const boundSolo = tournament.soloPlayers.filter((p) => accountUid(p)).length;
+
   const generateBracket = () => {
     if (approvedTeams.length < 2) return;
     const rounds = roundCount(approvedTeams.length);
@@ -226,6 +314,30 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
           tournament={tournament}
           solo={solo}
         />
+
+        {/* บอกให้ชัดว่าใบนี้จะไปผูกกับบัญชีไหน ไม่ใช่ส่งแล้วหายไปเฉยๆ */}
+        {hasBackend && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {account ? (
+              <>
+                <Badge rgb="77 181 145" tone="done">
+                  สมัครในนามบัญชีนี้
+                </Badge>
+                <span className="min-w-0 flex-1 truncate text-xs text-muted">
+                  {myProfile?.gameName?.trim() || account.name}
+                  {account.email ? ` · ${account.email}` : ""}
+                </span>
+              </>
+            ) : (
+              <>
+                <Badge rgb="146 151 172">ยังไม่ได้ล็อกอิน</Badge>
+                <span className="min-w-0 flex-1 text-xs text-muted">
+                  ใบนี้จะไม่ผูกกับบัญชี ผู้จัดตามตัวกลับยาก
+                </span>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="mt-5 space-y-4">
           <div>
@@ -337,6 +449,15 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
               disabled={!canRegister}
               maxLength={60}
             />
+            {canFillFromProfile && (
+              <button
+                type="button"
+                onClick={fillFromProfile}
+                className="mt-2 cursor-pointer text-xs text-champagne/85 transition-colors hover:text-champagne"
+              >
+                เติมจากโปรไฟล์ของฉัน
+              </button>
+            )}
           </div>
 
           {error && <p className="text-xs text-[#e79a9a]">{error}</p>}
@@ -373,6 +494,8 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
               }
             />
 
+            <AccountTally bound={boundSolo} total={tournament.soloPlayers.length} />
+
             {tournament.soloPlayers.length === 0 ? (
               <EmptyState
                 title="ยังไม่มีคนสมัคร"
@@ -388,6 +511,7 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
                       index={i}
                       isAdmin={isAdmin}
                       tournamentId={tournament.id}
+                      directory={directory}
                     />
                   ))}
                 </AnimatePresence>
@@ -429,6 +553,8 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
             </div>
           )}
 
+          <AccountTally bound={boundTeams} total={tournament.teams.length} />
+
           {tournament.teams.length === 0 ? (
             <EmptyState
               art={<ArtShield />}
@@ -450,6 +576,7 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
                     isAdmin={isAdmin}
                     tournamentId={tournament.id}
                     hasBracket={tournament.bracket !== null}
+                    directory={directory}
                   />
                 ))}
               </AnimatePresence>
@@ -534,20 +661,119 @@ function MemberCount({ raw, size }: { raw: string; size: number }) {
   );
 }
 
+/** แถบสรุปว่าใบไหนตามตัวเจ้าของกลับได้บ้าง — ผู้จัดจะได้รู้ว่าเหลือใบที่ตามยากกี่ใบ */
+function AccountTally({ bound, total }: { bound: number; total: number }) {
+  if (total === 0) return null;
+  const missing = total - bound;
+
+  return (
+    <div className="sunken mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-3.5 py-2.5">
+      <span className="slug slug-2">บัญชี</span>
+      <span className="num text-xs text-ice">
+        ผูกกับบัญชีแล้ว <span className="text-champagne">{bound}</span>
+        <span className="text-muted">/{total}</span>
+      </span>
+      {missing > 0 && (
+        <span className="text-xs text-muted">
+          — อีก {missing} ใบไม่มีบัญชี ตามตัวยาก
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * บอกว่าใบนี้เป็นของบัญชีไหน แทนการโชว์รหัสยาวๆ (หรือไม่โชว์อะไรเลย)
+ * ผู้จัดที่เป็นผู้ดูแลจะได้โปรไฟล์จริงมาจับคู่ คนอื่นได้ตารางว่าง
+ * จึงต้องมีทางสำรองเป็นข้อมูลที่กรอกมากับใบเสมอ
+ * อีเมล/ช่องทางติดต่อโชว์เฉพาะผู้จัด เหมือนที่ช่องติดต่อเดิมทำอยู่
+ */
+function AccountLine({
+  uid: accountId,
+  profile,
+  isAdmin,
+  fallbackContact,
+  className = "",
+}: {
+  uid: string | null;
+  profile: UserProfile | null;
+  isAdmin: boolean;
+  fallbackContact?: string;
+  className?: string;
+}) {
+  const contact = profile?.contact?.trim() || fallbackContact?.trim() || "";
+  const detail = isAdmin
+    ? [profile?.email, contact].filter(Boolean).join(" · ")
+    : "";
+
+  if (!accountId || !profile) {
+    return (
+      <div className={`flex flex-wrap items-center gap-2 ${className}`}>
+        {accountId ? (
+          <Badge rgb="221 175 100" tone="done">
+            ผูกกับบัญชีแล้ว
+          </Badge>
+        ) : (
+          <Badge rgb="146 151 172">ไม่มีบัญชี</Badge>
+        )}
+        {isAdmin && contact && (
+          <span className="min-w-0 flex-1 truncate text-xs text-muted">
+            ติดต่อ: {contact}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex items-center gap-2 ${className}`}>
+      <span className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full border border-hair">
+        {profile.photo ? (
+          // next/image ใช้กับ static export ไม่ได้ — no-referrer กันรูป Google โดน 429
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={profile.photo}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <span className="font-display text-[11px] text-champagne">
+            {accountLabel(profile).slice(0, 1).toUpperCase()}
+          </span>
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs text-ice/85">
+          {accountLabel(profile)}
+        </span>
+        {detail && (
+          <span className="block truncate text-[11px] text-muted">
+            {detail}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
 /** แถวผู้สมัครเดี่ยว */
 function SoloRow({
   player,
   index,
   isAdmin,
   tournamentId,
+  directory,
 }: {
   player: SoloEntry;
   index: number;
   isAdmin: boolean;
   tournamentId: string;
+  directory: Map<string, UserProfile>;
 }) {
   const laneMeta = laneByLabel(player.lane);
   const LaneIcon = laneMeta ? LANE_ICON[laneMeta.key] : null;
+  const ownerId = accountUid(player);
 
   return (
     <motion.li
@@ -584,6 +810,13 @@ function SoloRow({
           {player.ign ? `${player.ign} · ` : ""}
           {player.lane ?? "ไม่ระบุเลน"}
         </p>
+        <AccountLine
+          uid={ownerId}
+          profile={ownerId ? (directory.get(ownerId) ?? null) : null}
+          isAdmin={isAdmin}
+          fallbackContact={player.contact}
+          className="mt-1.5"
+        />
       </div>
 
       {isAdmin && (
@@ -621,14 +854,17 @@ function TeamRow({
   isAdmin,
   tournamentId,
   hasBracket,
+  directory,
 }: {
   team: TeamEntry;
   index: number;
   isAdmin: boolean;
   tournamentId: string;
   hasBracket: boolean;
+  directory: Map<string, UserProfile>;
 }) {
   const identity = identityFor(index);
+  const ownerId = accountUid(team);
 
   return (
     <motion.li
@@ -699,9 +935,14 @@ function TeamRow({
         </div>
       )}
 
-      {team.contact && isAdmin && (
-        <p className="mt-2.5 text-xs text-muted">ติดต่อ: {team.contact}</p>
-      )}
+      {/* ใครเป็นคนส่งใบนี้ — แทนที่บรรทัด "ติดต่อ:" เดิม ซึ่งตอนนี้เป็นทางสำรองข้างใน */}
+      <AccountLine
+        uid={ownerId}
+        profile={ownerId ? (directory.get(ownerId) ?? null) : null}
+        isAdmin={isAdmin}
+        fallbackContact={team.contact}
+        className="mt-3"
+      />
 
       {isAdmin && (
         <div className="mt-3 flex items-center gap-1.5 border-t border-hair pt-3">

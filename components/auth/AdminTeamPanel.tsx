@@ -1,23 +1,34 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { adminClaimStore } from "@/lib/backend/admin";
 import { authStore } from "@/lib/backend/firebase";
+import { watchUsers, type UserProfile } from "@/lib/backend/users";
 import { useAccess } from "@/hooks/useAdmin";
 import Panel, { PanelHeader } from "@/components/ui/Panel";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { toast } from "@/components/ui/Toast";
 import { IconCheck, IconCopy } from "@/components/ui/icons";
-import { EmptyState, Input, Label } from "@/components/tournament/ui";
+import { EmptyState } from "@/components/tournament/ui";
+import UserPicker, { displayName } from "./UserPicker";
 
 /**
  * รายชื่อผู้ดูแลระบบ — เพิ่ม/ถอดสิทธิ์ได้จากหน้าเว็บ ไม่ต้องเข้า Firebase Console
  * โชว์เฉพาะคนที่ Firestore ยืนยันสิทธิ์แล้ว (โหมดรหัสในเครื่องแตะตรงนี้ไม่ได้)
+ *
+ * แยกไส้ในออกมาเป็นอีก component เพื่อไม่ให้คนที่ไม่ใช่ผู้ดูแล
+ * ไปเปิด listener รายชื่อผู้ใช้ทิ้งไว้เปล่าๆ แล้วโดนกติกาปฏิเสธ
  */
 export default function AdminTeamPanel() {
   const access = useAccess();
+  // โหมดรหัสในเครื่องไม่มีสิทธิ์แตะข้อมูลบนคลาวด์ ไม่ต้องโชว์ให้สับสน
+  if (access !== "verified") return null;
+  return <TeamPanel />;
+}
+
+function TeamPanel() {
   useSyncExternalStore(
     adminClaimStore.subscribe,
     adminClaimStore.getSnapshot,
@@ -32,24 +43,33 @@ export default function AdminTeamPanel() {
   const me = authStore.user();
   const roster = adminClaimStore.roster();
 
-  const [uid, setUid] = useState("");
-  const [label, setLabel] = useState("");
+  const [picked, setPicked] = useState<UserProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [users, setUsers] = useState<UserProfile[]>([]);
 
-  // โหมดรหัสในเครื่องไม่มีสิทธิ์แตะข้อมูลบนคลาวด์ ไม่ต้องโชว์ให้สับสน
-  if (access !== "verified") return null;
+  // ดึงรายชื่อทั้งหมดครั้งเดียว แล้วจับคู่กับ roster เอง
+  // (ยิง getProfile ทีละคนจะกลายเป็นคำขอเป็นสิบตอนผู้ดูแลเยอะ)
+  useEffect(() => {
+    return watchUsers((rows) => setUsers(rows));
+  }, []);
+
+  const byUid = useMemo(() => {
+    const map = new Map<string, UserProfile>();
+    users.forEach((u) => map.set(u.uid, u));
+    return map;
+  }, [users]);
 
   const add = async () => {
+    if (!picked) return;
     setBusy(true);
     try {
-      await adminClaimStore.addAdmin(uid, label);
-      setUid("");
-      setLabel("");
+      await adminClaimStore.addAdmin(picked.uid, displayName(picked));
+      setPicked(null);
       toast("เพิ่มผู้ดูแลแล้ว", "success");
     } catch {
-      toast("เพิ่มไม่สำเร็จ — ตรวจรหัสผู้ใช้อีกครั้ง", "error");
+      toast("เพิ่มไม่สำเร็จ — ลองใหม่อีกครั้ง", "error");
     } finally {
       setBusy(false);
     }
@@ -110,34 +130,57 @@ export default function AdminTeamPanel() {
         ) : (
           <ul className="space-y-2">
             <AnimatePresence initial={false}>
-              {roster.map((entry) => (
-                <motion.li
-                  key={entry.uid}
-                  layout
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="tile flex items-center gap-3 rounded-xl px-4 py-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm text-ice">{entry.label}</p>
-                    <code className="num block truncate text-xs text-muted">
-                      {entry.uid}
-                    </code>
-                  </div>
-                  {entry.uid === me?.uid ? (
-                    <span className="slug slug-2 shrink-0">คุณ</span>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() => setRemoving(entry.uid)}
-                    >
-                      ถอดสิทธิ์
-                    </Button>
-                  )}
-                </motion.li>
-              ))}
+              {roster.map((entry) => {
+                const profile = byUid.get(entry.uid);
+                // ไม่มีโปรไฟล์ (ยังไม่เคยล็อกอิน/อ่านไม่ได้) ค่อยใช้ชื่อที่เก็บไว้ตอนเพิ่ม
+                const name = profile ? displayName(profile) : entry.label;
+                return (
+                  <motion.li
+                    key={entry.uid}
+                    layout
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="tile flex items-center gap-3 rounded-xl px-4 py-3"
+                  >
+                    <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-hair">
+                      {profile?.photo ? (
+                        // static export ใช้ next/image ไม่ได้ · no-referrer กันรูป Google โดน 429
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={profile.photo}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="font-display text-xs text-champagne">
+                          {name.slice(0, 1).toUpperCase()}
+                        </span>
+                      )}
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-ice">{name}</p>
+                      <p className="truncate text-xs text-muted">
+                        {profile?.email ?? entry.uid}
+                      </p>
+                    </div>
+
+                    {entry.uid === me?.uid ? (
+                      <span className="slug slug-2 shrink-0">คุณ</span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => setRemoving(entry.uid)}
+                      >
+                        ถอดสิทธิ์
+                      </Button>
+                    )}
+                  </motion.li>
+                );
+              })}
             </AnimatePresence>
           </ul>
         )}
@@ -145,24 +188,18 @@ export default function AdminTeamPanel() {
 
       {/* ---- เพิ่มคนใหม่ ---- */}
       <div className="mt-6 border-t border-hair pt-5">
-        <Label hint="ให้เขาล็อกอินเข้าเว็บก่อน แล้วคัดลอกรหัสผู้ใช้จากหน้าที่ล็อกอยู่มาให้">
-          เพิ่มผู้ดูแล
-        </Label>
-        <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-          <Input
-            value={uid}
-            placeholder="รหัสผู้ใช้ (uid)"
-            onChange={(e) => setUid(e.target.value)}
-          />
-          <Input
-            value={label}
-            placeholder="ชื่อที่ใช้เรียก (ไม่บังคับ)"
-            onChange={(e) => setLabel(e.target.value)}
-          />
+        <UserPicker
+          label="เพิ่มผู้ดูแล"
+          hint="เลือกจากคนที่เคยล็อกอินเข้าเว็บแล้ว"
+          value={picked?.uid ?? null}
+          onChange={setPicked}
+          exclude={roster.map((r) => r.uid)}
+        />
+        <div className="mt-3 flex justify-end">
           <Button
             loading={busy}
-            disabled={!uid.trim()}
-            className="sm:w-auto"
+            disabled={!picked}
+            className="w-full sm:w-auto"
             onClick={() => void add()}
           >
             เพิ่ม

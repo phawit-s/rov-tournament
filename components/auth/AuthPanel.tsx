@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import { recordActivity } from "@/lib/activity";
 import { authErrorMessage } from "@/lib/backend/authErrors";
 import { authStore } from "@/lib/backend/firebase";
+import { profileStore } from "@/lib/backend/users";
 import Button from "../ui/Button";
 import Panel from "../ui/Panel";
 import { toast } from "../ui/Toast";
@@ -21,6 +22,7 @@ export default function AuthPanel({
 }) {
   const [mode, setMode] = useState<Mode>("signin");
   const [name, setName] = useState("");
+  const [gameName, setGameName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   // แยกว่ากำลังทำอะไรอยู่ เพื่อให้สปินเนอร์ขึ้นเฉพาะปุ่มที่ถูกกด
@@ -60,7 +62,22 @@ export default function AuthPanel({
     } else {
       void run(
         "form",
-        () => authStore.registerWithPassword(email, password, name),
+        async () => {
+          const game = gameName.trim();
+          /*
+            ถ้าไม่ได้ตั้งชื่อที่แสดง ใช้ชื่อในเกมแทน
+            นอกจากได้ชื่อที่อ่านออกแล้ว registerWithPassword ยังอัปเดตผู้ใช้ปัจจุบัน
+            ให้ทันทีเมื่อมีชื่อส่งไป ทำให้ save() ข้างล่างเขียนได้เลยไม่ต้องรอ authState
+          */
+          await authStore.registerWithPassword(email, password, name.trim() || game);
+          if (!game) return;
+          try {
+            // เก็บชื่อในเกมตั้งแต่ตอนสมัคร จะได้ไม่ต้องไปกรอกซ้ำที่ ProfileGate
+            await profileStore.save({ gameName: game });
+          } catch {
+            // เขียนไม่ทัน/ไม่ผ่านก็ไม่เป็นไร เดี๋ยว ProfileGate ถามให้อีกที
+          }
+        },
         "สมัครบัญชีใหม่",
       );
     }
@@ -108,15 +125,29 @@ export default function AuthPanel({
 
         <div className="mt-5 space-y-4">
           {mode === "signup" && (
-            <div>
-              <Label>ชื่อที่จะแสดง</Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="ชื่อผู้จัด"
-                maxLength={40}
-              />
-            </div>
+            <>
+              <div>
+                <Label>ชื่อที่จะแสดง</Label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="ชื่อผู้จัด"
+                  maxLength={40}
+                />
+              </div>
+
+              <div>
+                <Label hint="ผู้จัดใช้ชื่อนี้หาคุณเจอในสาย — ไม่ใส่ตอนนี้ก็ได้ เดี๋ยวถามอีกที">
+                  ชื่อในเกม
+                </Label>
+                <Input
+                  value={gameName}
+                  onChange={(e) => setGameName(e.target.value)}
+                  placeholder="เช่น Violet"
+                  maxLength={40}
+                />
+              </div>
+            </>
           )}
 
           <div>
@@ -192,6 +223,11 @@ export default function AuthPanel({
         >
           เข้าสู่ระบบด้วย Google
         </Button>
+
+        {/* บอกล่วงหน้าว่ายังมีอีกจอ คนจะได้ไม่คิดว่ากดแล้วค้าง */}
+        <p className="mt-3 text-center text-xs leading-relaxed text-muted">
+          ล็อกอินด้วย Google แล้วจะให้กรอกชื่อในเกมอีกนิดเดียว
+        </p>
       </Panel>
     </motion.div>
   );
