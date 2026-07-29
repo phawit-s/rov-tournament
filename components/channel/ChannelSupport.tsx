@@ -50,9 +50,6 @@ type SlipScan =
   | { state: "no-qr" }
   | { state: "ok"; payload: string; fingerprint: string };
 
-/** ยอดที่ธนาคารอ่านได้เทียบกับที่กรอก คลาดเคลื่อนได้ ±1 บาท (ค่าธรรมเนียม/ปัดเศษ) */
-const AMOUNT_TOLERANCE = 1;
-
 export default function ChannelSupport() {
   const idParam = useHashParam("ch");
   const handleParam = useHashParam("h");
@@ -73,6 +70,8 @@ export default function ChannelSupport() {
   /** ข้อความบอกว่าปุ่มกำลังทำอะไรอยู่ ตอนตรวจสลิปมันรอนานพอที่คนกดจะสงสัย */
   const [phase, setPhase] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  /** ระบบยืนยันสลิปแล้วอนุมัติให้เอง — บอกคนโอนว่าไม่ต้องรอผู้จัดกด */
+  const [autoApproved, setAutoApproved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [qrCache, setQrCache] = useState<Record<string, string>>({});
   const [members, setMembers] = useState<ChannelDonation[]>([]);
@@ -193,12 +192,13 @@ export default function ChannelSupport() {
     try {
       await authStore.ensureSignedIn();
 
-      // ไม่มี QR ก็ส่งได้ตามปกติ แค่ติดป้ายไว้ว่าผู้จัดต้องตรวจด้วยตา
+      /*
+        ไม่มี QR ก็ส่งได้ตามปกติ แค่ติดป้ายไว้ว่าผู้จัดต้องตรวจด้วยตา
+        ใบที่สร้างจากตรงนี้ยังไม่มีผลตรวจจากธนาคาร เพราะ Worker เป็นคนเติมให้
+        ทีหลังพร้อมกับพลิกสถานะเป็น approved — ฝั่งเบราว์เซอร์เขียนเองไม่ได้
+      */
       let slipRef: string | null = null;
       let slipCheck: Donation["slipCheck"] = "none";
-      let slipAmount: number | null = null;
-      let slipAt: string | null = null;
-      let slipBank: string | null = null;
 
       if (slipScan.state === "ok") {
         setPhase("กำลังตรวจสลิป…");
@@ -218,29 +218,16 @@ export default function ChannelSupport() {
           slipCheck = "unique";
         }
 
-        if (verifyEndpoint) {
-          setPhase("กำลังยืนยันกับธนาคาร…");
-          const result = await verifySlipRemote(verifyEndpoint, slipScan.payload, {
-            amount: finalAmount,
-            account: promptPayId,
-          });
-          if (result.ok) {
-            slipAmount = typeof result.amount === "number" ? result.amount : null;
-            slipAt = result.at ?? null;
-            slipBank = result.bank ?? null;
-            // ไม่มียอดกลับมา = ปลายทางเช็คให้แล้วจาก expectAmount ที่ส่งไป ถือว่าตรง
-            const matched =
-              slipAmount === null ||
-              Math.abs(slipAmount - finalAmount) <= AMOUNT_TOLERANCE;
-            slipCheck = matched ? "verified" : "mismatch";
-          } else {
-            slipCheck = "failed";
-          }
-        }
       }
 
+      /*
+        ต้องสร้างใบก่อนแล้วค่อยให้ Worker ตรวจ ไม่ใช่ตรวจก่อนสร้าง
+        เพราะคนที่อนุมัติคือ Worker ไม่ใช่เบราว์เซอร์ — มันต้องมีใบให้แก้สถานะ
+        (ถ้าให้เบราว์เซอร์เขียน approved เอง ใครก็แก้โค้ดหน้าเว็บแล้วอนุมัติ
+         ให้ตัวเองได้โดยไม่ต้องโอนจริง)
+      */
       setPhase("กำลังส่งใบ…");
-      await submitChannelDonation(channel.id, {
+      const donationId = await submitChannelDonation(channel.id, {
         kind: mode,
         name: name.trim(),
         amount: finalAmount,
@@ -252,10 +239,22 @@ export default function ChannelSupport() {
         tournamentId: tournamentId ?? undefined,
         slipRef,
         slipCheck,
-        slipAmount,
-        slipAt,
-        slipBank,
       });
+
+      if (slipScan.state === "ok" && verifyEndpoint) {
+        setPhase("กำลังยืนยันกับธนาคาร…");
+        // ผลจากตรงนี้ไม่ได้เอามาเขียนใบเอง Worker เป็นคนเขียนให้ถ้าผ่าน
+        // เรารู้ผลไว้เฉยๆ เพื่อบอกคนโอนว่าตรวจผ่านแล้วหรือรอผู้จัดตรวจ
+        const result = await verifySlipRemote(verifyEndpoint, slipScan.payload, {
+          amount: finalAmount,
+          account: promptPayId,
+          channelId: channel.id,
+          donationId,
+        });
+        // ตรวจผ่านและ Worker อนุมัติให้แล้ว = ขึ้นจอสตรีมทันที ไม่ต้องรอผู้จัด
+        setAutoApproved(result.ok && result.approved === true);
+      }
+
       setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "ส่งไม่สำเร็จ ลองใหม่อีกครั้ง");
@@ -282,14 +281,29 @@ export default function ChannelSupport() {
           <p className="num mt-4 font-display text-2xl text-champagne">
             {formatMoney(finalAmount)}
           </p>
-          <p className="mt-4 text-sm text-muted">
-            รอเจ้าของช่องกดยืนยัน พอยืนยันแล้วชื่อจะเด้งขึ้นหน้าจอสตรีมทันที
-          </p>
+          {autoApproved ? (
+            <>
+              <p
+                className="slug mt-4"
+                style={{ color: "rgb(var(--st-win))" }}
+              >
+                ยืนยันสลิปแล้ว
+              </p>
+              <p className="mt-2 text-sm text-muted">
+                ระบบตรวจสลิปกับธนาคารเรียบร้อย ชื่อของคุณขึ้นหน้าจอสตรีมแล้ว
+              </p>
+            </>
+          ) : (
+            <p className="mt-4 text-sm text-muted">
+              รอเจ้าของช่องกดยืนยัน พอยืนยันแล้วชื่อจะเด้งขึ้นหน้าจอสตรีมทันที
+            </p>
+          )}
           <div className="mt-7">
             <Button
               variant="ghost"
               onClick={() => {
                 setSent(false);
+                setAutoApproved(false);
                 setSlip(null);
                 // ล้างผลอ่าน QR ด้วย ไม่งั้นใบถัดไปจะพกลายนิ้วมือของสลิปเก่าที่จองไปแล้ว
                 setSlipScan({ state: "none" });

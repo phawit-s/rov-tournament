@@ -353,6 +353,120 @@ function accountMatches(expect, actual) {
 }
 
 /* ------------------------------------------------------------------ *
+ * อนุมัติใบให้เองหลังตรวจสลิปผ่าน
+ *
+ * ทำไมต้องให้ Worker เป็นคนอนุมัติ ไม่ใช่หน้าเว็บ:
+ * เว็บเป็น static ไม่มีเซิร์ฟเวอร์ ถ้าให้เบราว์เซอร์ของผู้จัดเป็นคนอนุมัติ
+ * มันจะทำงานเฉพาะตอนผู้จัดเปิดหน้าตั้งค่าค้างไว้ ซึ่งตอนไลฟ์จริงไม่มีใครเปิด
+ * ใบเลยค้าง pending แล้ว widget ไม่เด้ง ทั้งที่สลิปผ่านการตรวจแล้ว
+ *
+ * ส่วนจะให้เบราว์เซอร์ของ "คนโอน" เขียนสถานะเองก็ไม่ได้ เพราะใครก็แก้โค้ด
+ * ฝั่งหน้าเว็บให้เขียน approved โดยไม่โอนจริงได้ ต้องมีตัวที่เชื่อถือได้เป็นคนเขียน
+ * Worker คือตัวนั้น เพราะมันถือความลับและผู้ใช้แก้โค้ดมันไม่ได้
+ *
+ * วิธีให้สิทธิ์: ใช้บัญชี Firebase ธรรมดาหนึ่งบัญชี ("บอท") แล้วใส่ uid ของมัน
+ * ลงคอลเลกชัน admins กติกาเดิมจะปล่อยให้มันแก้ใบโดเนทของทุกช่องได้เอง
+ * ไม่ต้องใช้ service account และไม่ต้องเซ็น JWT เอง
+ *
+ * ไม่ตั้ง BOT_EMAIL/BOT_PASSWORD ก็ยังใช้งานได้ Worker จะแค่ตรวจแล้วตอบผลกลับ
+ * ปล่อยให้ผู้จัดกดอนุมัติเองเหมือนเดิม
+ * ------------------------------------------------------------------ */
+
+/** เก็บ token ไว้ใช้ซ้ำ ไม่ต้องล็อกอินใหม่ทุกใบ (idToken ของ Firebase อยู่ได้ 1 ชม.) */
+let botToken = null;
+let botExpiry = 0;
+
+async function botLogin(env) {
+  const now = Date.now();
+  if (botToken && now < botExpiry) return botToken;
+
+  const r = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${env.FIREBASE_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: env.BOT_EMAIL,
+        password: env.BOT_PASSWORD,
+        returnSecureToken: true,
+      }),
+      signal: AbortSignal.timeout(10000),
+    },
+  );
+  const j = await r.json();
+  if (!j.idToken) throw new Error("bot-login-failed");
+
+  botToken = j.idToken;
+  // เผื่อเวลาไว้ 5 นาที กันหมดอายุกลางคัน
+  botExpiry = now + (Number(j.expiresIn || 3600) - 300) * 1000;
+  return botToken;
+}
+
+const fsUrl = (env, path) =>
+  `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT}/databases/(default)/documents/${path}`;
+
+/**
+ * อนุมัติใบ — คืนเหตุผลถ้าทำไม่ได้ ไม่ throw ออกไป
+ *
+ * อ่านใบก่อนเสมอ แล้วเทียบยอดกับที่เพิ่งตรวจได้จริง
+ * เพราะคนเรียก Worker เป็นเบราว์เซอร์ของคนโอน ซึ่งจะส่ง donationId อะไรมาก็ได้
+ * ถ้าไม่เทียบ ก็เท่ากับใครก็สั่งอนุมัติใบของคนอื่นได้ด้วยสลิปของตัวเอง
+ */
+async function approveDonation(env, channelId, donationId, verified) {
+  if (!env.BOT_EMAIL || !env.BOT_PASSWORD || !env.FIREBASE_API_KEY || !env.FIREBASE_PROJECT) {
+    return "no-bot";
+  }
+  if (!channelId || !donationId) return "no-target";
+
+  const token = await botLogin(env);
+  const auth = { Authorization: `Bearer ${token}` };
+  const path = `channels/${encodeURIComponent(channelId)}/donations/${encodeURIComponent(donationId)}`;
+
+  const cur = await fetch(fsUrl(env, path), { headers: auth }).then((r) => r.json());
+  if (!cur.fields) return "donation-not-found";
+  if (cur.fields.status?.stringValue !== "pending") return "not-pending";
+
+  const claimed = toAmount(
+    cur.fields.amount?.integerValue ?? cur.fields.amount?.doubleValue,
+  );
+  if (claimed === null || Math.abs(claimed - verified.amount) > AMOUNT_TOLERANCE) {
+    return "amount-mismatch";
+  }
+
+  // เขียนเฉพาะฟิลด์ที่ตั้งใจ updateMask กันเผลอทับฟิลด์อื่นทั้งเอกสาร
+  const mask = [
+    "status",
+    "autoApproved",
+    "slipCheck",
+    "slipAmount",
+    "slipAt",
+    "slipBank",
+    "slip",
+  ]
+    .map((f) => `updateMask.fieldPaths=${f}`)
+    .join("&");
+
+  const w = await fetch(`${fsUrl(env, path)}?${mask}`, {
+    method: "PATCH",
+    headers: { ...auth, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fields: {
+        status: { stringValue: "approved" },
+        autoApproved: { booleanValue: true },
+        slipCheck: { stringValue: "verified" },
+        slipAmount: { doubleValue: verified.amount },
+        slipAt: verified.at ? { stringValue: verified.at } : { nullValue: null },
+        slipBank: verified.bank ? { stringValue: verified.bank } : { nullValue: null },
+        // ใบที่อนุมัติแล้วอ่านได้แบบสาธารณะ (widget ไม่ล็อกอิน) รูปสลิปต้องไม่ติดไปด้วย
+        slip: { nullValue: null },
+      },
+    }),
+  });
+
+  return w.ok ? "approved" : `write-failed-${w.status}`;
+}
+
+/* ------------------------------------------------------------------ *
  * rate limit แบบง่าย
  *
  * นับในหน่วยความจำของ instance เดียว
@@ -598,11 +712,36 @@ const handler = {
           return reply({ ok: false, reason: "account-mismatch", ...base }, cors);
         }
         if (match === null) {
-          return reply({ ok: true, reason: "account-unchecked", ...base }, cors);
+          return reply(
+            { ok: true, reason: "account-unchecked", ...base, ...(await tryApprove()) },
+            cors,
+          );
         }
       }
 
-      return reply({ ok: true, ...base }, cors);
+      return reply({ ok: true, ...base, ...(await tryApprove()) }, cors);
+
+      /**
+       * ตรวจผ่านแล้วก็อนุมัติให้เลย ไม่ต้องรอผู้จัดเปิดหน้าเว็บ
+       * ถ้าไม่ได้ตั้งบัญชีบอทไว้ หรืออนุมัติไม่สำเร็จ ก็แค่ไม่อนุมัติ
+       * ผลการตรวจยังส่งกลับให้หน้าเว็บครบเหมือนเดิม ผู้จัดกดเองได้อยู่
+       */
+      async function tryApprove() {
+        try {
+          const outcome = await approveDonation(
+            env,
+            typeof body.channelId === "string" ? body.channelId : "",
+            typeof body.donationId === "string" ? body.donationId : "",
+            info,
+          );
+          return { approved: outcome === "approved", approveNote: outcome };
+        } catch (e) {
+          return {
+            approved: false,
+            approveNote: e && e.message ? String(e.message) : "approve-error",
+          };
+        }
+      }
     } catch (err) {
       // ตาข่ายชั้นสุดท้าย — อะไรหลุดมาถึงตรงนี้ก็ยังตอบ 200 เพื่อไม่ให้เว็บพัง
       return fail("worker-error", cors, {

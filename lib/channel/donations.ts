@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   addDoc,
@@ -33,8 +33,10 @@ export type ChannelDonation = Donation & {
  *
  * ผลการตรวจสลิป (slipRef / slipCheck / …) แนบมากับใบได้เลย แต่ **สถานะต้องเป็น
  * pending เสมอ** เพราะกติกา create ของ Firestore บังคับไว้ และคนโอนก็ไม่มีสิทธิ์
- * update ใบของตัวเองด้วย ดังนั้นถึงจะตรวจผ่านและเจ้าของช่องเปิด autoApprove ไว้
- * การพลิกเป็น approved ก็เป็นงานฝั่งผู้จัด (ที่มีสิทธิ์ update) ไม่ใช่ฝั่งนี้
+ * update ใบของตัวเองด้วย
+ *
+ * คืน id ของใบที่สร้าง เพื่อส่งต่อให้ Worker ไปพลิกเป็น approved หลังตรวจสลิปผ่าน
+ * — Worker เป็นตัวเดียวที่เชื่อถือได้พอจะเขียนสถานะ เพราะผู้ใช้แก้โค้ดมันไม่ได้
  */
 export async function submitChannelDonation(
   channelId: string,
@@ -56,10 +58,10 @@ export async function submitChannelDonation(
     slipAt?: string | null;
     slipBank?: string | null;
   },
-): Promise<void> {
+): Promise<string> {
   const db = getDb();
   if (!db) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
-  await addDoc(collection(db, COL, channelId, DON), {
+  const ref = await addDoc(collection(db, COL, channelId, DON), {
     channelId,
     kind: data.kind,
     name: data.name.slice(0, 40),
@@ -80,6 +82,7 @@ export async function submitChannelDonation(
     createdAt: new Date().toISOString(),
     status: "pending",
   });
+  return ref.id;
 }
 
 /**
@@ -137,8 +140,21 @@ export async function claimSlipRef(
 export async function verifySlipRemote(
   endpoint: string,
   payload: string,
-  expect: { amount: number; account?: string },
-): Promise<{ ok: boolean; amount?: number; at?: string; bank?: string }> {
+  expect: {
+    amount: number;
+    account?: string;
+    /** ส่งไปให้ Worker รู้ว่าต้องไปพลิกสถานะใบไหน ถ้าตรวจผ่าน */
+    channelId?: string;
+    donationId?: string;
+  },
+): Promise<{
+  ok: boolean;
+  amount?: number;
+  at?: string;
+  bank?: string;
+  /** Worker อนุมัติใบให้แล้วหรือยัง (ต้องตั้งบัญชีบอทใน Worker ก่อน) */
+  approved?: boolean;
+}> {
   const url = endpoint.trim();
   if (!url) return { ok: false };
   try {
@@ -149,9 +165,11 @@ export async function verifySlipRemote(
         payload,
         expectAmount: expect.amount,
         expectAccount: expect.account ?? "",
+        channelId: expect.channelId ?? "",
+        donationId: expect.donationId ?? "",
       }),
-      // สลิปตรวจช้ากว่านี้ก็ไม่ต้องรอ ปล่อยให้ผู้จัดตรวจเองเร็วกว่า
-      signal: AbortSignal.timeout(8000),
+      // ต้องรอนานกว่าเดิมเพราะ Worker ทำสองงาน: ตรวจกับธนาคาร แล้วอนุมัติใบให้
+      signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) return { ok: false };
     const data = (await res.json()) as {
@@ -159,6 +177,7 @@ export async function verifySlipRemote(
       amount?: number;
       at?: string;
       bank?: string;
+      approved?: boolean;
     };
     if (!data?.ok) return { ok: false };
     return {
@@ -166,6 +185,7 @@ export async function verifySlipRemote(
       amount: typeof data.amount === "number" ? data.amount : undefined,
       at: typeof data.at === "string" ? data.at : undefined,
       bank: typeof data.bank === "string" ? data.bank : undefined,
+      approved: data.approved === true,
     };
   } catch {
     return { ok: false };
