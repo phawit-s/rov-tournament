@@ -19,7 +19,7 @@ service cloud.firestore {
     // บัญชีนี้เป็นผู้ดูแลทันทีโดยไม่ต้องสร้างเอกสารอะไรด้วยมือ
     // ใส่ได้หลายอีเมล คั่นด้วยจุลภาค เช่น ['a@gmail.com', 'b@gmail.com']
     function ownerEmails() {
-      return ['phawit.ps@gmail.com'];
+       return ['phawit.ps@gmail.com', 'warissaramala@gmail.com'];
     }
 
     function isRootOwner() {

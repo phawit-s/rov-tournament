@@ -605,16 +605,26 @@ const handler = {
         คืนแค่ว่า "ตั้งแล้วหรือยัง" กับ "ล็อกอินบอทผ่านไหม" ไม่คืนค่าความลับใดๆ
       */
       if (new URL(request.url).searchParams.get("health") === "1") {
+        /*
+          รายงานความยาวกับอักขระหัวท้ายด้วย ไม่ใช่แค่ "มีค่าไหม"
+          เพราะเคยเจอว่าเครื่องมือบางตัวใส่ newline ต่อท้ายค่าที่ pipe เข้ามา
+          แล้วรหัสผ่านกลายเป็นคนละตัวโดยไม่มีอะไรฟ้อง — ไม่เปิดเผยค่าจริง
+        */
+        const shape = (v) =>
+          typeof v === "string"
+            ? { len: v.length, clean: v === v.trim() }
+            : { len: 0, clean: true };
+
         const botVars = {
-          BOT_EMAIL: !!env.BOT_EMAIL,
-          BOT_PASSWORD: !!env.BOT_PASSWORD,
-          FIREBASE_API_KEY: !!env.FIREBASE_API_KEY,
+          BOT_EMAIL: shape(env.BOT_EMAIL),
+          BOT_PASSWORD: shape(env.BOT_PASSWORD),
+          FIREBASE_API_KEY: shape(env.FIREBASE_API_KEY),
           FIREBASE_PROJECT: env.FIREBASE_PROJECT || null,
         };
         const complete =
-          botVars.BOT_EMAIL &&
-          botVars.BOT_PASSWORD &&
-          botVars.FIREBASE_API_KEY &&
+          botVars.BOT_EMAIL.len > 0 &&
+          botVars.BOT_PASSWORD.len > 0 &&
+          botVars.FIREBASE_API_KEY.len > 0 &&
           !!botVars.FIREBASE_PROJECT;
 
         let botLogin = "ไม่ได้ตั้งค่า";
