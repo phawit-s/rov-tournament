@@ -1,9 +1,17 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useHashParam } from "@/hooks/useClient";
+import { useAccess } from "@/hooks/useAdmin";
+import { authStore } from "@/lib/backend/firebase";
+import {
+  cloudReady,
+  watchAllTournaments,
+  watchMyTournaments,
+  type CloudTournament,
+} from "@/lib/tournament/cloud";
 import { emptyTournament, tournamentStore } from "@/lib/tournament/store";
 import { decodeTournament } from "@/lib/tournament/share";
 import type { Tournament } from "@/lib/tournament/types";
@@ -17,6 +25,9 @@ import TournamentCard from "./TournamentCard";
 import TournamentForm from "./TournamentForm";
 import { ArtShield, EmptyState } from "./ui";
 
+/** อ้างอิงคงที่ ไม่งั้น setCloud([]) ตอน error จะทำให้รีเรนเดอร์ไม่จบ */
+const NO_CLOUD: CloudTournament[] = [];
+
 export default function TournamentsView() {
   const all = useSyncExternalStore(
     tournamentStore.subscribe,
@@ -26,6 +37,28 @@ export default function TournamentsView() {
   const [editing, setEditing] = useState<Tournament | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Tournament | null>(null);
+
+  /* ---- ทัวร์จากคลาวด์ ---- */
+  const access = useAccess();
+  useSyncExternalStore(
+    authStore.subscribe,
+    authStore.getSnapshot,
+    authStore.getServerSnapshot,
+  );
+  const user = authStore.user();
+  const [cloud, setCloud] = useState<CloudTournament[]>(NO_CLOUD);
+
+  const uid = user && !user.anonymous ? user.uid : null;
+  const seesAll = access === "verified";
+
+  useEffect(() => {
+    if (!cloudReady() || !uid) return;
+    // ผู้ดูแลเห็นทุกอัน คนอื่นเห็นเฉพาะของตัวเอง (กติกาก็อนุญาตแค่นั้น)
+    const stop = seesAll
+      ? watchAllTournaments(setCloud, () => setCloud(NO_CLOUD))
+      : watchMyTournaments(uid, setCloud, () => setCloud(NO_CLOUD));
+    return stop;
+  }, [uid, seesAll]);
 
   // เปิดมาจากลิงก์แชร์ -> ถามก่อนว่าจะบันทึกลงเครื่องไหม
   const sharedRaw = useHashParam("s");
@@ -40,6 +73,13 @@ export default function TournamentsView() {
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   const running = list.filter((t) => t.status === "running").length;
+
+  /*
+    ทัวร์อยู่ใน localStorage ของเครื่องคนสร้าง หน้านี้เลยเห็นแต่ของเครื่องตัวเอง
+    ดึงจากคลาวด์มาเติมด้วย ไม่งั้นผู้ดูแลอีกคน (หรือคนเดิมแต่คนละเครื่อง)
+    จะไม่เห็นทัวร์ที่จัดไว้เลย ทั้งที่เผยแพร่ขึ้นคลาวด์แล้ว
+  */
+  const onlyOnCloud = cloud.filter((c) => !all.some((t) => t.id === c.id));
 
   if (editing) {
     return (
@@ -97,7 +137,7 @@ export default function TournamentsView() {
         </Panel>
       )}
 
-      {list.length === 0 ? (
+      {list.length === 0 && onlyOnCloud.length === 0 ? (
         <EmptyState
           no="03"
           art={<ArtShield />}
@@ -133,6 +173,40 @@ export default function TournamentsView() {
             ))}
           </AnimatePresence>
         </div>
+      )}
+
+      {/* ทัวร์ที่อยู่บนคลาวด์แต่ไม่มีในเครื่องนี้ — เปิดดูได้ แต่จะแก้ต้องบันทึกลงเครื่องก่อน */}
+      {onlyOnCloud.length > 0 && (
+        <section className="space-y-4 pt-2">
+          <div className="flex items-baseline justify-between gap-4 border-t border-hair pt-4">
+            <p className="slug">
+              {seesAll ? "บนคลาวด์ · ทุกผู้จัด" : "บนคลาวด์ · ของคุณ"}
+            </p>
+            <p className="slug slug-2 num">{onlyOnCloud.length} รายการ</p>
+          </div>
+          <p className="text-sm text-muted">
+            ทัวร์เหล่านี้ถูกเผยแพร่ไว้แต่ยังไม่มีสำเนาในเครื่องนี้ —
+            กดเปิดดูได้ ถ้าจะแก้ให้กด &ldquo;บันทึกลงเครื่อง&rdquo; ในหน้าทัวร์ก่อน
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {onlyOnCloud.map((t, i) => (
+              <Reveal key={t.id} index={i} from="scale">
+                <TournamentCard
+                  tournament={t}
+                  href={`/tournament/#t=${t.id}`}
+                  actions={
+                    <Link
+                      href={`/tournament/#t=${t.id}`}
+                      className="font-display text-xs text-champagne hover:underline"
+                    >
+                      เปิดดู →
+                    </Link>
+                  }
+                />
+              </Reveal>
+            ))}
+          </div>
+        </section>
       )}
 
       <ConfirmDialog

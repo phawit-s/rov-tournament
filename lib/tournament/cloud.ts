@@ -112,6 +112,13 @@ export function watchTournament(
   );
 }
 
+/** เรียงใหม่สุดขึ้นก่อน — ทำในเครื่องแทน orderBy เพราะ orderBy ตัดเอกสารที่ไม่มีฟิลด์นั้นทิ้งเงียบๆ */
+function byNewest(list: CloudTournament[]): CloudTournament[] {
+  return list
+    .slice()
+    .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+}
+
 /** ฟังทัวร์ทั้งหมดของเจ้าของคนนี้ */
 export function watchMyTournaments(
   uid: string,
@@ -123,14 +130,35 @@ export function watchMyTournaments(
     onChange([]);
     return () => {};
   }
-  const q = query(
-    collection(db, COL),
-    where("ownerUid", "==", uid),
-    orderBy("updatedAt", "desc"),
-  );
   return onSnapshot(
-    q,
-    (snap) => onChange(snap.docs.map((d) => d.data() as CloudTournament)),
+    query(collection(db, COL), where("ownerUid", "==", uid)),
+    (snap) => onChange(byNewest(snap.docs.map((d) => d.data() as CloudTournament))),
+    (err) => onError?.(err),
+  );
+}
+
+/**
+ * ฟังทัวร์ทุกอันบนคลาวด์ — สำหรับผู้ดูแลระบบ
+ *
+ * ทัวร์เก็บอยู่ใน localStorage ของเครื่องคนสร้าง หน้ารายการจึงเห็นแต่ของเครื่องตัวเอง
+ * ผู้ดูแลคนอื่น (หรือคนเดิมแต่คนละเครื่อง) เลยไม่เห็นทัวร์ที่จัดไว้เลย
+ * ตัวนี้ดึงจากคลาวด์มาเติมให้ครบ
+ *
+ * ไม่ใส่ where เพราะกติกาให้สิทธิ์ผู้ดูแลอ่านได้ทุกเอกสารอยู่แล้ว
+ * (isAdmin ไม่ได้ขึ้นกับตัวเอกสาร ทุกใบจึงผ่านเหมือนกันหมด)
+ */
+export function watchAllTournaments(
+  onChange: (list: CloudTournament[]) => void,
+  onError?: (e: Error) => void,
+): () => void {
+  const db = getDb();
+  if (!db) {
+    onChange([]);
+    return () => {};
+  }
+  return onSnapshot(
+    collection(db, COL),
+    (snap) => onChange(byNewest(snap.docs.map((d) => d.data() as CloudTournament))),
     (err) => onError?.(err),
   );
 }
