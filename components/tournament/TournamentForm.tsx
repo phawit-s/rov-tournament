@@ -91,9 +91,9 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
       <div className="grid gap-5 lg:grid-cols-[1fr_minmax(280px,21rem)] lg:items-start">
         <Panel className="p-6 sm:p-7">
           <div className="space-y-10">
-            {/* ---------- 01 ตัวตนทัวร์ ---------- */}
+            {/* ---------- 01 ข้อมูลทั่วไป ---------- */}
             <section>
-              <SectionHead no="01" eyebrow="Identity" title="ตัวตนทัวร์" />
+              <SectionHead no="01" eyebrow="Identity" title="ข้อมูลทั่วไป" />
 
               <div className="mt-6 space-y-5">
                 <div>
@@ -204,9 +204,8 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
                           className="px-4 py-3 text-left"
                         >
                           <p
-                            className={`flex items-center gap-1.5 font-display text-sm ${
-                              active ? "text-champagne" : "text-ice"
-                            }`}
+                            className={`flex items-center gap-1.5 font-display text-sm ${active ? "text-champagne" : "text-ice"
+                              }`}
                           >
                             {active && <IconCheck className="h-3.5 w-3.5" strokeWidth={2} />}
                             {opt.title}
@@ -228,8 +227,8 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
                       onChange={(teamSize) => set("teamSize", teamSize)}
                     />
                   </div>
-                  <div>
-                    <Label hint="0 = ไม่จำกัด">รับกี่ทีม</Label>
+                  <div className="col-span-2 sm:col-span-1">
+                    <Label >รับกี่ทีม</Label>
                     <NumberInput
                       min={0}
                       max={64}
@@ -500,9 +499,8 @@ function Choice({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`hover-tile relative cursor-pointer rounded-xl transition-colors ${
-        active ? "" : "tile"
-      } ${className}`}
+      className={`hover-tile relative cursor-pointer rounded-xl transition-colors ${active ? "" : "tile"
+        } ${className}`}
     >
       {active &&
         (reduced ? (

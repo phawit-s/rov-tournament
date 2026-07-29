@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ตัวกลางตรวจสลิป (Cloudflare Worker)
  * ------------------------------------------------------------------
  * ทำไมต้องมีไฟล์นี้
@@ -391,34 +391,62 @@ function allow(key, maxPerMin) {
  * HTTP
  * ------------------------------------------------------------------ */
 
-function corsHeaders(env) {
+/**
+ * เลือก Access-Control-Allow-Origin
+ *
+ * ALLOWED_ORIGIN ใส่ได้หลายโดเมนคั่นด้วยจุลภาค เช่น
+ *   "https://phawit-s.github.io,http://localhost:3000"
+ * เพราะเว็บจริงกับตอนพัฒนาในเครื่องคนละ origin กัน แต่สเปก CORS
+ * ให้ตอบกลับได้ทีละหนึ่งค่าเท่านั้น จึงต้องสะท้อน origin ที่ยิงเข้ามา
+ * เฉพาะตัวที่อยู่ในรายการ ที่เหลือปฏิเสธ
+ *
+ * ไม่ตั้งค่าไว้เลย = "*" ซึ่งแปลว่าเว็บไหนก็เรียก Worker เราได้
+ * และเอาโควตาที่เราจ่ายไปใช้ฟรี — ห้ามปล่อยแบบนั้นตอนใช้จริง
+ */
+function pickOrigin(request, env) {
+  const raw = (env.ALLOWED_ORIGIN || "*").trim();
+  if (raw === "*") return "*";
+
+  const list = raw
+    .split(",")
+    .map((s) => s.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+  const origin = (request.headers.get("Origin") || "").replace(/\/+$/, "");
+
+  if (origin && list.includes(origin)) return origin;
+  // ไม่ตรงสักอัน — ตอบโดเมนแรกไป เบราว์เซอร์จะบล็อกให้เอง
+  return list[0] || "*";
+}
+
+function corsHeaders(request, env) {
   return {
-    // ค่าเริ่มต้นเปิดให้ทุกโดเมนเพื่อให้ลองใช้ได้ทันที
-    // แต่ก่อนใช้จริง "ต้อง" ตั้ง ALLOWED_ORIGIN เป็นโดเมนเว็บของเรา
-    // ไม่งั้นใครก็เอา Worker (และโควตาที่เราจ่าย) ไปใช้ฟรี
-    "Access-Control-Allow-Origin": env.ALLOWED_ORIGIN || "*",
+    "Access-Control-Allow-Origin": pickOrigin(request, env),
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
-    // บอก cache ว่าคำตอบขึ้นกับ Origin เผื่ออนาคตตั้งหลายโดเมน
+    // คำตอบขึ้นกับ Origin ต้องบอก cache ไม่งั้นโดเมนหนึ่งจะได้ header ของอีกโดเมน
     Vary: "Origin",
   };
 }
 
-/** ตอบกลับเป็น JSON status 200 เสมอ (ดูเหตุผลที่หัวไฟล์) */
-function reply(body, env) {
+/**
+ * ตอบกลับเป็น JSON status 200 เสมอ (ดูเหตุผลที่หัวไฟล์)
+ * รับ cors ที่คำนวณไว้แล้วแทน env เพราะการเลือก origin ต้องดู request
+ * ซึ่งเก็บไว้ในตัวแปรระดับโมดูลไม่ได้ — Worker รับหลายคำขอพร้อมกัน
+ */
+function reply(body, cors) {
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
-      ...corsHeaders(env),
+      ...cors,
     },
   });
 }
 
 /** รูปแบบ "ไม่ผ่าน" มาตรฐาน ฟิลด์ครบเหมือนกรณีผ่าน ฝั่งเว็บจะได้ไม่ต้องเช็ค undefined */
-function fail(reason, env, extra) {
+function fail(reason, cors, extra) {
   return reply(
     {
       ok: false,
@@ -430,47 +458,50 @@ function fail(reason, env, extra) {
       raw: null,
       ...extra,
     },
-    env,
+    cors,
   );
 }
 
 const handler = {
   async fetch(request, env) {
+    // คำนวณครั้งเดียวต่อคำขอ แล้วส่งต่อให้ทุกทางออก จะได้ไม่มีทางลืมใส่ CORS
+    const cors = corsHeaders(request, env);
+
     // จับทุกอย่างไว้ชั้นนอกสุด ห้ามให้หลุดเป็น 500 เปล่าๆ
     try {
       if (request.method === "OPTIONS") {
         // preflight — ไม่มี body
-        return new Response(null, { status: 204, headers: corsHeaders(env) });
+        return new Response(null, { status: 204, headers: cors });
       }
 
       if (request.method !== "POST") {
-        return fail("method-not-allowed", env);
+        return fail("method-not-allowed", cors);
       }
 
       // ---- rate limit ----
       const ip = request.headers.get("CF-Connecting-IP") || "unknown";
       const maxPerMin = Number(env.MAX_PER_MIN || 0);
-      if (!allow(ip, maxPerMin)) return fail("rate-limited", env);
+      if (!allow(ip, maxPerMin)) return fail("rate-limited", cors);
 
       // ---- อ่าน body ----
       let body;
       try {
         body = await request.json();
       } catch {
-        return fail("bad-json", env);
+        return fail("bad-json", cors);
       }
-      if (!body || typeof body !== "object") return fail("bad-json", env);
+      if (!body || typeof body !== "object") return fail("bad-json", cors);
 
       const payload = typeof body.payload === "string" ? body.payload.trim() : "";
-      if (!payload) return fail("no-payload", env);
+      if (!payload) return fail("no-payload", cors);
 
       // ---- เลือก adapter ----
       const providerKey = String(env.PROVIDER || "").trim().toLowerCase();
       const adapter = ADAPTERS[providerKey];
-      if (!adapter) return fail("unknown-provider", env);
+      if (!adapter) return fail("unknown-provider", cors);
       if (!env.API_KEY) {
         // ลืม `wrangler secret put API_KEY`
-        return fail("not-configured", env);
+        return fail("not-configured", cors);
       }
 
       // ---- ยิงหาผู้ให้บริการ ----
@@ -489,7 +520,7 @@ const handler = {
           err && err.message === "missing-branch-id"
             ? "missing-branch-id"
             : "network-error";
-        return fail(reason, env);
+        return fail(reason, cors);
       }
 
       // ---- อ่านผล ----
@@ -508,10 +539,10 @@ const handler = {
         // 404 ของหลายเจ้าแปลว่า "หาสลิปนี้ไม่เจอ" ไม่ใช่ระบบพัง
         const reason =
           upstream.status === 404 ? "slip-not-found" : `provider-${upstream.status}`;
-        return fail(reason, env, { message });
+        return fail(reason, cors, { message });
       }
 
-      if (!json) return fail("provider-bad-response", env);
+      if (!json) return fail("provider-bad-response", cors);
 
       // บางเจ้าคืน 200 แต่ในตัว body บอกว่าไม่สำเร็จ
       const flagged = firstOf(
@@ -526,19 +557,19 @@ const handler = {
       if (bodySaysFail) {
         const message =
           firstOf(json, MESSAGE_PATHS, isNonEmptyString) ?? null;
-        return fail("provider-rejected", env, { message });
+        return fail("provider-rejected", cors, { message });
       }
 
       // Thunder ตอบ isDuplicate มาให้ตอนเปิด checkDuplicate ไว้ ถ้าเจอก็ตัดจบเลย
       if (at(json, "data.isDuplicate") === true) {
-        return fail("duplicate-slip", env, { raw: json });
+        return fail("duplicate-slip", cors, { raw: json });
       }
 
       const info = normalize(json);
 
       // อ่านยอดไม่ได้เลย = ตรวจไม่ได้ ให้คนดูเอง ดีกว่าเดาว่าผ่าน
       if (info.amount === null) {
-        return fail("no-amount", env, { raw: json });
+        return fail("no-amount", cors, { raw: json });
       }
 
       const base = {
@@ -553,7 +584,7 @@ const handler = {
       const expectAmount = toAmount(body.expectAmount);
       if (expectAmount !== null) {
         if (Math.abs(info.amount - expectAmount) > AMOUNT_TOLERANCE) {
-          return reply({ ok: false, reason: "amount-mismatch", ...base }, env);
+          return reply({ ok: false, reason: "amount-mismatch", ...base }, cors);
         }
       }
 
@@ -564,20 +595,17 @@ const handler = {
         const match = accountMatches(expectAccount, info.receiverAccount);
         // match === null คือข้อมูลไม่พอเทียบ ปล่อยผ่านแต่ติดธงไว้ให้ผู้จัดรู้
         if (match === false) {
-          return reply({ ok: false, reason: "account-mismatch", ...base }, env);
+          return reply({ ok: false, reason: "account-mismatch", ...base }, cors);
         }
         if (match === null) {
-          return reply(
-            { ok: true, reason: "account-unchecked", ...base },
-            env,
-          );
+          return reply({ ok: true, reason: "account-unchecked", ...base }, cors);
         }
       }
 
-      return reply({ ok: true, ...base }, env);
+      return reply({ ok: true, ...base }, cors);
     } catch (err) {
       // ตาข่ายชั้นสุดท้าย — อะไรหลุดมาถึงตรงนี้ก็ยังตอบ 200 เพื่อไม่ให้เว็บพัง
-      return fail("worker-error", env, {
+      return fail("worker-error", cors, {
         message: err && err.message ? String(err.message) : null,
       });
     }
