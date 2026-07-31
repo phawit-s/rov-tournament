@@ -1,33 +1,58 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { useHashParam } from "@/hooks/useClient";
 import { authStore } from "@/lib/backend/firebase";
+import {
+  claimPlayerLock,
+  playerInstanceId,
+  type LockHandle,
+  type LockState,
+} from "@/lib/song/player-lock";
 import { setSongStatus, splitQueue, watchSongQueue } from "@/lib/song/store";
 import { thumbUrl } from "@/lib/song/youtube";
 import type { SongRequest } from "@/lib/song/types";
 import Button from "../ui/Button";
 import Panel, { PanelHeader } from "../ui/Panel";
 import { PageHeading } from "../ui/Reveal";
-import { toast } from "../ui/Toast";
 import { EmptyState, Skeleton } from "../tournament/ui";
 
 /**
- * หน้าเล่นเพลงของสตรีมเมอร์
+ * ตัวเล่นเพลงตามคิว — เดินเอง ไม่ต้องมีใครกด
  *
- * ทำไมต้องเป็นหน้าเว็บธรรมดา ไม่ใช่ widget ใน OBS:
- * OBS Browser Source มีคุกกี้แยกของตัวเอง ไม่ได้ล็อกอิน YouTube จึงมีโฆษณาคั่น
- * และ Google มักเด้งหน้ายืนยันตัวตนเวลาพยายามล็อกอินในนั้น
- * เปิดหน้านี้ในเบราว์เซอร์ปกติที่ล็อกอิน Premium อยู่แล้วจะไม่เจอทั้งสองปัญหา
- * แล้วค่อยดึงเสียงเข้า OBS ด้วย Desktop Audio หรือจับหน้าต่างนี้เป็น Window Capture
+ * คิวมาถึง = เล่นเลย เพลงจบ = ต่อเพลงถัดไปเอง คลิปเสียก็ข้ามให้
+ * ปุ่มที่เหลือ (ข้าม/หยุด) เป็นทางออกฉุกเฉิน ไม่ใช่ทางเดินปกติ
  *
- * หน้านี้เป็นตัวเดียวที่แตะสถานะเพลง — พอคลิปจบมันจะปิดเพลงเดิมแล้วเปิดเพลงถัดไปเอง
+ * ข้อจำกัดเดียวที่เลี่ยงไม่ได้คือกฎ autoplay ของเบราว์เซอร์ —
+ * ถ้ายังไม่เคยมีใครคลิกอะไรในหน้านั้นเลย เบราว์เซอร์จะไม่ยอมให้เล่นมีเสียง
+ * ตรงนั้นเลยต้องมีแผ่นให้แตะหนึ่งครั้ง หลังจากนั้นทั้งแท็บเดินเองยาว
+ *
+ * ห้ามเปิดใน OBS Browser Source — มันมีคุกกี้แยก ไม่ได้ล็อกอิน YouTube เลยมีโฆษณาคั่น
+ * ให้เปิดในเบราว์เซอร์ปกติแล้วดึงเสียงเข้า OBS ทาง Desktop Audio
  */
 
 const EMPTY: SongRequest[] = [];
+const VOLUME_KEY = "tourney-hub/song/volume";
 
 /* ---------- YouTube IFrame API ---------- */
+
+/** สถานะจาก YouTube — ประกาศเองเพราะต้องใช้ก่อน YT โหลดเสร็จ */
+const YT_STATE = {
+  UNSTARTED: -1,
+  ENDED: 0,
+  PLAYING: 1,
+  PAUSED: 2,
+  BUFFERING: 3,
+  CUED: 5,
+} as const;
 
 type YTPlayer = {
   loadVideoById: (id: string) => void;
@@ -52,7 +77,6 @@ type YTNamespace = {
       };
     },
   ) => YTPlayer;
-  PlayerState: { ENDED: number; PLAYING: number; PAUSED: number };
 };
 
 declare global {
@@ -86,40 +110,61 @@ function loadYouTubeApi(): Promise<YTNamespace> {
   return apiPromise;
 }
 
-export default function SongPlayer() {
-  useSyncExternalStore(
-    authStore.subscribe,
-    authStore.getSnapshot,
-    authStore.getServerSnapshot,
-  );
-  const user = authStore.user();
-  const reduced = useReducedMotion();
+function readVolume(): number {
+  if (typeof window === "undefined") return 70;
+  const raw = Number(localStorage.getItem(VOLUME_KEY));
+  return Number.isFinite(raw) && raw >= 0 && raw <= 100 ? raw : 70;
+}
 
-  // ผู้ดูแลเปิดคิวของช่องอื่นได้ด้วยการใส่ #ch= ไม่งั้นใช้ช่องตัวเอง
-  const chParam = useHashParam("ch");
-  const channelId = chParam ?? (user && !user.anonymous ? user.uid : null);
+/* =========================================================================
+   ตัวเล่น — ใช้ได้ทั้งฝังในหน้าช่องและเปิดเป็นหน้าเต็ม
+   ========================================================================= */
+
+export function SongPlayerCore({
+  channelId,
+  compact = false,
+}: {
+  channelId: string;
+  /** true = ฝังอยู่ในหน้าอื่น ไม่ต้องโชว์คิวซ้ำกับที่หน้านั้นมีอยู่แล้ว */
+  compact?: boolean;
+}) {
+  const reduced = useReducedMotion();
 
   const [queue, setQueue] = useState<SongRequest[]>(EMPTY);
   const [ready, setReady] = useState(false);
   const [apiError, setApiError] = useState(false);
-  const [auto, setAuto] = useState(true);
-  const [volume, setVolume] = useState(70);
+  /** เบราว์เซอร์ไม่ยอมให้เล่นเองเพราะยังไม่มีใครแตะหน้านี้ */
+  const [blocked, setBlocked] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [volume, setVolume] = useState(readVolume);
+  /** มีอีกแท็บเล่นอยู่ไหม — ถ้ามี แท็บนี้ต้องเงียบ ไม่งั้นเสียงซ้อนกันออกไลฟ์ */
+  const [lock, setLock] = useState<LockState>("leader");
 
+  const lockRef = useRef<LockHandle | null>(null);
   const mountRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<YTPlayer | null>(null);
-  /** วิดีโอที่สั่งเล่นไปแล้ว กันสั่งซ้ำทุกครั้งที่คิวอัปเดต */
-  const loadedRef = useRef<string | null>(null);
   /**
-   * อ่านค่าล่าสุดจากใน callback ของ YouTube ที่ผูกไว้ครั้งเดียวตอนสร้าง player
-   * ต้องอัปเดตใน effect ไม่ใช่ตอนเรนเดอร์ — เขียน ref ระหว่างเรนเดอร์ทำให้ผลลัพธ์
-   * ไม่แน่นอนเมื่อ React เรนเดอร์ซ้ำแล้วทิ้งผลนั้น
+   * คำขอที่สั่งเล่นไปแล้ว — เก็บ id ของ "ใบคำขอ" ไม่ใช่ videoId
+   *
+   * ถ้าเก็บ videoId พอมีคนขอคลิปเดิมซ้ำ (ซึ่งทำได้ เพราะด่านกันซ้ำนับเฉพาะ
+   * เพลงที่ยังอยู่ในคิว) ระบบจะเห็นว่า "ก็เพลงเดิม" แล้วไม่สั่งเล่นใหม่
+   * ตัวเล่นค้างที่จอจบของรอบก่อน ไม่มี ENDED ยิงอีก คิวหยุดเดินถาวร
    */
-  const stateRef = useRef({ channelId, queue, auto });
-  useEffect(() => {
-    stateRef.current = { channelId, queue, auto };
-  }, [channelId, queue, auto]);
+  const loadedRef = useRef<string | null>(null);
+  /** คนกดหยุดเอง — ต่างจากโดนสั่งหยุดเพราะเสียสิทธิ์ ต้องไม่ไปสั่งเล่นต่อทับเจตนา */
+  const manualPauseRef = useRef(false);
+  /** เพลงที่กำลังยิงคำสั่งโปรโมตอยู่ กัน snapshot ยิงซ้ำแล้วเขียนซ้ำ */
+  const promotingRef = useRef<string | null>(null);
+  const blockTimerRef = useRef<number | null>(null);
 
-  const { playing, queued, done } = splitQueue(queue);
+  const stateRef = useRef({ channelId, queue, active: true });
+  useEffect(() => {
+    stateRef.current = { channelId, queue, active: lock === "leader" };
+  }, [channelId, queue, lock]);
+
+  const { playing, queued, done } = useMemo(() => splitQueue(queue), [queue]);
+  /** แท็บนี้เป็นคนคุมคิวจริงไหม ผู้ชมห้ามทั้งเล่นและห้ามเดินคิว */
+  const active = lock === "leader";
 
   /* ---------- คิว ---------- */
   useEffect(() => {
@@ -129,15 +174,53 @@ export default function SongPlayer() {
     });
   }, [channelId]);
 
-  /* ---------- ตัวเล่น ---------- */
-  const advance = useCallback(async () => {
-    const { channelId: ch, queue: list, auto: on } = stateRef.current;
-    if (!ch) return;
-    const { playing: cur, queued: next } = splitQueue(list);
-    if (cur) await setSongStatus(ch, cur.id, "played");
-    if (on && next.length > 0) await setSongStatus(ch, next[0].id, "playing", list);
+  /* ---------- ใครเป็นคนเล่น ---------- */
+  useEffect(() => {
+    // อ่านชื่อในนี้ ไม่ใช่ตอนเรนเดอร์ — Math.random/sessionStorage ตอนเรนเดอร์ผิดกฎ purity
+    const handle = claimPlayerLock(playerInstanceId(), setLock);
+    lockRef.current = handle;
+    return () => {
+      handle.stop();
+      lockRef.current = null;
+    };
   }, []);
 
+  /* ---------- เดินคิวเอง ---------- */
+
+  /**
+   * ปิดเพลงที่จบแล้วและดันเพลงถัดไปขึ้นมา
+   *
+   * endedId คือ id ใบคำขอที่เพิ่งจบ ถ้าตอนนี้ใบที่กำลังเล่นไม่ใช่ตัวนั้นแล้ว
+   * แปลว่ามีคนอื่น (อีกแท็บ หรือหน้า /player/ ที่เปิดค้างไว้) เดินคิวไปก่อนแล้ว
+   * ต้องไม่เดินซ้ำ ไม่งั้นเพลงถัดไปจะโดนข้ามทิ้งโดยไม่มีใครได้ฟัง
+   *
+   * เทียบด้วย id ของใบ ไม่ใช่ videoId เพราะคลิปเดียวกันถูกขอซ้ำได้หลายใบ
+   */
+  const advance = useCallback(async (endedId?: string) => {
+    const { channelId: ch, queue: list, active: on } = stateRef.current;
+    if (!ch || !on) return;
+    const { playing: cur, queued: next } = splitQueue(list);
+    if (endedId && cur?.id !== endedId) return;
+    if (cur) await setSongStatus(ch, cur.id, "played");
+    if (next.length > 0) await setSongStatus(ch, next[0].id, "playing", list);
+  }, []);
+
+  /** ไม่มีเพลงเล่นอยู่แต่มีคนรอคิว = ดันขึ้นมาเล่นเลย ไม่ต้องรอใครกด */
+  useEffect(() => {
+    if (!channelId || !active || playing) {
+      promotingRef.current = null;
+      return;
+    }
+    const next = queued[0];
+    if (!next || promotingRef.current === next.id) return;
+    promotingRef.current = next.id;
+    void setSongStatus(channelId, next.id, "playing", queue).catch(() => {
+      // เขียนไม่ผ่าน (เน็ตหลุด/สิทธิ์) — ปลดล็อกไว้ให้ลองใหม่รอบหน้า
+      promotingRef.current = null;
+    });
+  }, [channelId, active, playing, queued, queue]);
+
+  /* ---------- ตัวเล่น ---------- */
   useEffect(() => {
     const el = mountRef.current;
     if (!el) return;
@@ -149,15 +232,33 @@ export default function SongPlayer() {
         playerRef.current = new YT.Player(el, {
           height: "100%",
           width: "100%",
-          playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 },
+          playerVars: {
+            autoplay: 1,
+            rel: 0,
+            modestbranding: 1,
+            playsinline: 1,
+            enablejsapi: 1,
+            origin: window.location.origin,
+          },
           events: {
             onReady: () => setReady(true),
             onStateChange: (e) => {
+              if (e.data === YT_STATE.PLAYING) {
+                setBlocked(false);
+                setPaused(false);
+                if (blockTimerRef.current) {
+                  window.clearTimeout(blockTimerRef.current);
+                  blockTimerRef.current = null;
+                }
+              }
+              if (e.data === YT_STATE.PAUSED) setPaused(true);
               // คลิปจบเอง = ไปเพลงถัดไป (ไม่ใช่ตอนกดหยุดหรือโหลดคลิปใหม่)
-              if (e.data === YT.PlayerState.ENDED) void advance();
+              if (e.data === YT_STATE.ENDED) void advance(loadedRef.current ?? undefined);
             },
-            // คลิปเสีย/ฝังไม่ได้ ก็ข้ามไปเลย ไม่ให้คิวค้าง
-            onError: () => void advance(),
+            // คลิปเสีย/เจ้าของปิดการฝัง ก็ข้ามไปเลย ไม่ให้คิวค้าง
+            onError: () => void advance(loadedRef.current ?? undefined),
+            /* หมายเหตุ: loadedRef เก็บ id ใบคำขอ ไม่ใช่ videoId
+               advance จึงเทียบใบต่อใบได้ตรงตัว แม้คลิปเดียวกันถูกขอซ้ำ */
           },
         });
       })
@@ -165,41 +266,325 @@ export default function SongPlayer() {
 
     return () => {
       cancelled = true;
+      if (blockTimerRef.current) window.clearTimeout(blockTimerRef.current);
       playerRef.current?.destroy();
       playerRef.current = null;
     };
   }, [advance]);
 
-  // สั่งเล่นเมื่อเพลงที่ควรเล่นเปลี่ยนไป
+  /*
+    ปรับตัวเล่นให้ตรงกับคิวเสมอ
+
+    ตัวนี้ไม่ใช่แค่ "สั่งเล่นตอนเพลงเปลี่ยน" แต่เป็นตัวที่ทำให้สิ่งที่ได้ยิน
+    ตรงกับสิ่งที่คิวบอกทุกกรณี — รวมถึงกรณีที่เพลงไม่เปลี่ยนแต่บริบทเปลี่ยน
+    (เพิ่งได้สิทธิ์คืนแล้วคลิปยังค้าง pause อยู่ / คิวว่างแล้วแต่เสียงยังดังต่อ)
+  */
   useEffect(() => {
     const p = playerRef.current;
     if (!ready || !p) return;
-    const id = playing?.videoId ?? null;
-    if (!id || id === loadedRef.current) return;
-    loadedRef.current = id;
-    p.loadVideoById(id);
-  }, [ready, playing?.videoId]);
+
+    // แท็บผู้ชมต้องเงียบสนิท ไม่งั้นเสียงซ้อนกับแท็บที่กำลังเล่นจริง
+    if (!active) {
+      p.pauseVideo();
+      return;
+    }
+
+    // ไม่มีเพลงที่ควรเล่น = ต้องหยุดจริง ไม่ใช่ปล่อยคลิปเดิมดังต่อออกไลฟ์
+    if (!playing) {
+      if (loadedRef.current !== null) {
+        loadedRef.current = null;
+        manualPauseRef.current = false;
+        p.pauseVideo();
+      }
+      return;
+    }
+
+    // ใบเดิม แต่คลิปอาจถูกสั่งหยุดไว้ตอนเสียสิทธิ์ — สั่งเล่นต่อให้เอง
+    if (playing.id === loadedRef.current) {
+      if (manualPauseRef.current) return;
+      const state = p.getPlayerState();
+      const moving = state === YT_STATE.PLAYING || state === YT_STATE.BUFFERING;
+      if (!moving && state !== YT_STATE.ENDED) p.playVideo();
+      return;
+    }
+
+    loadedRef.current = playing.id;
+    manualPauseRef.current = false;
+    p.loadVideoById(playing.videoId);
+
+    /*
+      กฎ autoplay: ถ้าคนยังไม่เคยแตะอะไรในหน้านี้ เบราว์เซอร์จะเงียบไปเฉยๆ
+      ไม่มี error ให้จับ ต้องดูสถานะเองว่าผ่านไปสองวินาทีแล้วขยับไหม
+    */
+    if (blockTimerRef.current) window.clearTimeout(blockTimerRef.current);
+    blockTimerRef.current = window.setTimeout(() => {
+      if (manualPauseRef.current) return;
+      const state = playerRef.current?.getPlayerState();
+      const moving = state === YT_STATE.PLAYING || state === YT_STATE.BUFFERING;
+      if (!moving) setBlocked(true);
+    }, 2200);
+  }, [ready, active, playing]);
 
   useEffect(() => {
     if (ready) playerRef.current?.setVolume(volume);
+    try {
+      localStorage.setItem(VOLUME_KEY, String(volume));
+    } catch {
+      /* โหมดส่วนตัวเขียนไม่ได้ ไม่ใช่เรื่องคอขาดบาดตาย */
+    }
   }, [ready, volume]);
 
-  /* ---------- ปุ่ม ---------- */
-  const playNext = async () => {
-    if (!channelId) return;
-    if (queued.length === 0) {
-      toast("คิวว่างแล้ว", "info");
-      return;
-    }
-    if (playing) await setSongStatus(channelId, playing.id, "played");
-    await setSongStatus(channelId, queued[0].id, "playing", queue);
+  /* ---------- ทางออกฉุกเฉิน ---------- */
+  const start = () => {
+    setBlocked(false);
+    manualPauseRef.current = false;
+    playerRef.current?.playVideo();
+  };
+
+  const togglePause = () => {
+    const p = playerRef.current;
+    if (!p) return;
+    // จำเจตนาไว้ ไม่งั้นตัวปรับให้ตรงกับคิวจะสั่งเล่นต่อทับทันที
+    manualPauseRef.current = !paused;
+    if (paused) p.playVideo();
+    else p.pauseVideo();
   };
 
   const skip = async () => {
-    if (!channelId || !playing) return;
+    if (!playing) return;
     await setSongStatus(channelId, playing.id, "rejected");
-    if (queued.length > 0) await setSongStatus(channelId, queued[0].id, "playing", queue);
+    if (queued.length > 0) {
+      await setSongStatus(channelId, queued[0].id, "playing", queue);
+    }
   };
+
+  const stage = (
+    <div className="relative aspect-video w-full overflow-hidden bg-black">
+      {/* ตัวเล่นต้องอยู่ใน DOM ตลอด ไม่งั้นสร้าง player ใหม่ทุกครั้งที่เปลี่ยนเพลง */}
+      <div ref={mountRef} className="absolute inset-0" />
+
+      {!playing && !apiError && active && (
+        <div className="absolute inset-0 grid place-items-center bg-black/70 px-6 text-center">
+          <div>
+            <p className="slug">รอเพลง</p>
+            <p className="mt-2 text-sm text-muted">
+              คิวว่างอยู่ — มีคนขอเพลงเข้ามาเมื่อไหร่ ตัวเล่นจะเริ่มเองทันที
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* อีกแท็บถือสิทธิ์เล่นอยู่ — แท็บนี้เงียบไว้ กันเสียงซ้อน */}
+      {!active && !apiError && (
+        <div className="absolute inset-0 grid place-items-center bg-black/85 px-6 text-center">
+          <div>
+            <p className="slug">อีกหน้าต่างกำลังเล่นอยู่</p>
+            <p className="mx-auto mt-2 max-w-xs text-sm text-muted">
+              ปิดเสียงตรงนี้ไว้ไม่ให้ซ้อนกัน — คิวยังเดินตามปกติจากหน้าต่างนั้น
+            </p>
+            {/* ต้องผ่าน takeOver ของตัวคุมล็อก ไม่ใช่ setLock เอง
+                ไม่งั้นสถานะข้างในโมดูลกับบนจอจะไม่ตรงกัน แล้วสองแท็บจะเล่นซ้อน */}
+            <Button
+              size="sm"
+              className="mt-4"
+              onClick={() => lockRef.current?.takeOver()}
+            >
+              ย้ายมาเล่นที่นี่
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* แผ่นแตะครั้งเดียว โผล่เฉพาะตอนเบราว์เซอร์ไม่ยอมให้เล่นเอง */}
+      {blocked && playing && active && !apiError && (
+        <button
+          type="button"
+          onClick={start}
+          className="absolute inset-0 grid cursor-pointer place-items-center bg-black/85 px-6 text-center backdrop-blur-sm"
+        >
+          <span>
+            <span
+              className="mx-auto grid h-16 w-16 place-items-center rounded-full"
+              style={{ background: "rgb(var(--st-live) / 0.9)" }}
+            >
+              <svg viewBox="0 0 24 24" className="ml-1 h-7 w-7 fill-black" aria-hidden>
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </span>
+            <span className="mt-4 block font-display text-base text-ice">
+              แตะครั้งเดียวเพื่อเริ่ม
+            </span>
+            <span className="mx-auto mt-1.5 block max-w-xs text-xs text-muted">
+              เบราว์เซอร์ไม่ยอมให้เล่นเสียงเองจนกว่าจะมีคนแตะหน้านี้สักครั้ง
+              หลังจากนี้เดินเองยาว ไม่ต้องกดอีก
+            </span>
+          </span>
+        </button>
+      )}
+
+      {apiError && (
+        <div className="absolute inset-0 grid place-items-center bg-black/85 p-6 text-center">
+          <div>
+            <p className="slug" style={{ color: "rgb(var(--st-live))" }}>
+              โหลดตัวเล่นไม่ได้
+            </p>
+            <p className="mt-2 max-w-sm text-sm text-muted">
+              ตัวบล็อกโฆษณาหรือส่วนขยายบางตัวบล็อกสคริปต์ของ YouTube ไว้ —
+              ปิดเฉพาะเว็บนี้แล้วรีเฟรช
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const controls = (
+    <>
+      {playing ? (
+        <>
+          <p className="slug" style={{ color: "rgb(var(--st-live))" }}>
+            กำลังเล่น
+          </p>
+          <h2
+            className={`mt-1.5 font-display leading-snug font-light text-ice ${
+              compact ? "text-base" : "text-xl"
+            }`}
+          >
+            {playing.title}
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            {playing.author} · ขอโดย {playing.byName}
+          </p>
+          {playing.message && (
+            <p className="mt-2 text-sm text-champagne/80">
+              &ldquo;{playing.message}&rdquo;
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-muted">
+          {queued.length > 0 ? "กำลังเริ่มเพลงถัดไป…" : "ยังไม่มีใครขอเพลงเข้ามา"}
+        </p>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="ghost" disabled={!playing} onClick={togglePause}>
+          {paused ? "เล่นต่อ" : "หยุดชั่วคราว"}
+        </Button>
+        <Button size="sm" variant="ghost" disabled={!playing} onClick={() => void skip()}>
+          ข้ามเพลงนี้
+        </Button>
+        {playing && (
+          <a
+            href={playing.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="font-display text-xs text-champagne hover:underline"
+          >
+            เปิดใน YouTube →
+          </a>
+        )}
+      </div>
+
+      <div className="mt-4 flex items-center gap-3">
+        <span className="slug slug-2 shrink-0">เสียง</span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={volume}
+          onChange={(e) => setVolume(Number(e.target.value))}
+          className="flex-1"
+          aria-label="ระดับเสียง"
+        />
+        <span className="num w-9 text-right text-xs text-muted">{volume}</span>
+      </div>
+    </>
+  );
+
+  /* ---------- ฝังในหน้าอื่น ---------- */
+  if (compact) {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-hair">
+        {stage}
+        <div className="p-5">{controls}</div>
+      </div>
+    );
+  }
+
+  /* ---------- หน้าเต็ม ---------- */
+  return (
+    <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+      <Panel variant="feature" className="overflow-hidden p-0">
+        {stage}
+        <div className="p-5">{controls}</div>
+      </Panel>
+
+      <Panel className="p-5">
+        <PanelHeader eyebrow="Queue" title="คิวถัดไป" count={queued.length} />
+
+        {!ready && !apiError && <Skeleton className="h-16 w-full" />}
+
+        {queued.length === 0 ? (
+          <EmptyState
+            title="คิวว่าง"
+            description="ส่งลิงก์หน้าขอเพลงให้คนดู แล้วเพลงจะเข้ามาเล่นเองที่นี่"
+          />
+        ) : (
+          <ul className="space-y-2">
+            {queued.map((s, i) => (
+              <motion.li
+                key={s.id}
+                layout={!reduced}
+                className="tile flex items-center gap-3 rounded-xl p-2.5"
+              >
+                <span className="fig text-outline w-6 shrink-0 text-center text-lg">
+                  {i + 1}
+                </span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={thumbUrl(s.videoId)}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                  className="h-9 w-16 shrink-0 rounded object-cover"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-ice">{s.title}</span>
+                  <span className="block truncate text-xs text-muted">
+                    ขอโดย {s.byName}
+                  </span>
+                </span>
+              </motion.li>
+            ))}
+          </ul>
+        )}
+
+        {done.length > 0 && (
+          <p className="mt-4 text-xs text-muted">เล่นจบแล้ว {done.length} เพลง</p>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+/* =========================================================================
+   หน้า /player/ — ตัวเล่นเต็มจอ ไว้เปิดทิ้งไว้อีกจอ
+   ========================================================================= */
+
+export default function SongPlayer() {
+  useSyncExternalStore(
+    authStore.subscribe,
+    authStore.getSnapshot,
+    authStore.getServerSnapshot,
+  );
+  const user = authStore.user();
+
+  // ผู้ดูแลเปิดคิวของช่องอื่นได้ด้วยการใส่ #ch= ไม่งั้นใช้ช่องตัวเอง
+  const chParam = useHashParam("ch");
+  const channelId = chParam ?? (user && !user.anonymous ? user.uid : null);
 
   if (!channelId) {
     return (
@@ -216,151 +601,9 @@ export default function SongPlayer() {
         no="09"
         eyebrow="Player"
         title="เล่นเพลงตามคิว"
-        description="เปิดหน้านี้ในเบราว์เซอร์ที่ล็อกอิน YouTube Premium อยู่ แล้วดึงเสียงเข้า OBS — จะได้ไม่มีโฆษณาคั่นกลางไลฟ์"
-        meta={`คิว ${queued.length} เพลง`}
+        description="เดินเอง — คนดูขอเพลงเข้ามาแล้วเล่นเลย เพลงจบก็ต่อเพลงถัดไปให้ เปิดหน้านี้ในเบราว์เซอร์ที่ล็อกอิน YouTube Premium ไว้ แล้วดึงเสียงเข้า OBS ทาง Desktop Audio"
       />
-
-      <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
-        <Panel variant="feature" className="overflow-hidden p-0">
-          {/* ตัวเล่นต้องอยู่ใน DOM ตลอด ไม่งั้นสร้าง player ใหม่ทุกครั้งที่เปลี่ยนเพลง */}
-          <div className="relative aspect-video w-full bg-black">
-            <div ref={mountRef} className="absolute inset-0" />
-
-            {!playing && !apiError && (
-              <div className="absolute inset-0 grid place-items-center bg-black/70 text-center">
-                <div>
-                  <p className="slug">Idle</p>
-                  <p className="mt-2 text-sm text-muted">
-                    ยังไม่มีเพลงที่กำลังเล่น — กด &ldquo;เล่นเพลงถัดไป&rdquo;
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {apiError && (
-              <div className="absolute inset-0 grid place-items-center bg-black/80 p-6 text-center">
-                <div>
-                  <p className="slug" style={{ color: "rgb(var(--st-live))" }}>
-                    โหลดตัวเล่นไม่ได้
-                  </p>
-                  <p className="mt-2 max-w-sm text-sm text-muted">
-                    ตัวบล็อกโฆษณาหรือส่วนขยายบางตัวบล็อกสคริปต์ของ YouTube ไว้ —
-                    ปิดเฉพาะเว็บนี้แล้วรีเฟรช หรือกดเปิดใน YouTube เอาเอง
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="p-5">
-            {playing ? (
-              <>
-                <p className="slug" style={{ color: "rgb(var(--st-live))" }}>
-                  กำลังเล่น
-                </p>
-                <h2 className="mt-1.5 font-display text-xl leading-snug font-light text-ice">
-                  {playing.title}
-                </h2>
-                <p className="mt-1 text-sm text-muted">
-                  {playing.author} · ขอโดย {playing.byName}
-                </p>
-                {playing.message && (
-                  <p className="mt-2 text-sm text-champagne/80">
-                    &ldquo;{playing.message}&rdquo;
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-muted">รอเพลงแรก</p>
-            )}
-
-            <div className="mt-5 flex flex-wrap items-center gap-2">
-              <Button onClick={() => void playNext()}>เล่นเพลงถัดไป</Button>
-              <Button variant="ghost" disabled={!playing} onClick={() => void skip()}>
-                ข้ามเพลงนี้
-              </Button>
-              <a
-                href={playing?.url ?? "https://www.youtube.com"}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="font-display text-xs text-champagne hover:underline"
-              >
-                เปิดใน YouTube →
-              </a>
-            </div>
-
-            <div className="mt-5 flex items-center gap-3">
-              <span className="slug slug-2 shrink-0">เสียง</span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={volume}
-                onChange={(e) => setVolume(Number(e.target.value))}
-                className="flex-1"
-                aria-label="ระดับเสียง"
-              />
-              <span className="num w-9 text-right text-xs text-muted">{volume}</span>
-            </div>
-
-            <label className="mt-4 flex cursor-pointer items-center gap-2.5 text-sm text-muted">
-              <input
-                type="checkbox"
-                checked={auto}
-                onChange={(e) => setAuto(e.target.checked)}
-              />
-              เล่นเพลงถัดไปอัตโนมัติเมื่อเพลงจบ
-            </label>
-          </div>
-        </Panel>
-
-        <Panel className="p-5">
-          <PanelHeader eyebrow="Queue" title="คิวถัดไป" count={queued.length} />
-
-          {!ready && !apiError && <Skeleton className="h-16 w-full" />}
-
-          {queued.length === 0 ? (
-            <EmptyState
-              title="คิวว่าง"
-              description="ส่งลิงก์หน้าขอเพลงให้คนดู แล้วเพลงจะเข้ามาที่นี่เอง"
-            />
-          ) : (
-            <ul className="space-y-2">
-              {queued.map((s, i) => (
-                <motion.li
-                  key={s.id}
-                  layout={!reduced}
-                  className="tile flex items-center gap-3 rounded-xl p-2.5"
-                >
-                  <span className="fig text-outline w-6 shrink-0 text-center text-lg">
-                    {i + 1}
-                  </span>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={thumbUrl(s.videoId)}
-                    alt=""
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                    }}
-                    className="h-9 w-16 shrink-0 rounded object-cover"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-ice">{s.title}</span>
-                    <span className="block truncate text-xs text-muted">
-                      ขอโดย {s.byName}
-                    </span>
-                  </span>
-                </motion.li>
-              ))}
-            </ul>
-          )}
-
-          {done.length > 0 && (
-            <p className="mt-4 text-xs text-muted">เล่นจบแล้ว {done.length} เพลง</p>
-          )}
-        </Panel>
-      </div>
+      <SongPlayerCore channelId={channelId} />
     </div>
   );
 }

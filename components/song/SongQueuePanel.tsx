@@ -20,6 +20,7 @@ import { toast } from "../ui/Toast";
 import { StatTile } from "../ui/hud";
 import { IconCheck, IconChevronDown, IconCopy, IconExternal } from "../ui/icons";
 import { ArtCalendar, EmptyState, Label, NumberInput, Textarea } from "../tournament/ui";
+import { SongPlayerCore } from "./SongPlayer";
 
 /** อ้างอิงคงที่ ไม่งั้นคิวว่างจะเป็นอาร์เรย์ใหม่ทุกเรนเดอร์แล้ววนไม่จบ */
 const NO_SONGS: SongRequest[] = [];
@@ -64,6 +65,8 @@ export default function SongQueuePanel({
   const [showDone, setShowDone] = useState(false);
   const [askClear, setAskClear] = useState(false);
   const [copied, setCopied] = useState(false);
+  /** ตัวเล่นฝังอยู่ในหน้านี้เลย จะได้ไม่ต้องเปิดหน้าอื่น ซ่อนได้ถ้าเปิดแยกหน้าต่างไว้แล้ว */
+  const [showPlayer, setShowPlayer] = useState(true);
 
   useEffect(() => {
     if (!channelId) return;
@@ -233,31 +236,47 @@ export default function SongQueuePanel({
           </p>
         )}
 
-        {/*
-          หน้าเล่นเพลงคือปลายทางจริงของระบบนี้ ต้องมีทางไปให้เห็นตั้งแต่ตรงนี้
-          ย้ำว่าให้เปิดในเบราว์เซอร์ตัวเอง ไม่ใช่ใน OBS เพราะ Browser Source
-          มีคุกกี้แยกของมันเอง ไม่ได้ล็อกอิน YouTube ก็เลยมีโฆษณาคั่น
-        */}
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl tile p-4">
-          <div className="min-w-0 flex-1">
-            <p className="font-display text-sm text-ice">เปิดเพลงจากหน้าเล่นเพลง</p>
-            <p className="mt-0.5 text-xs text-muted">
-              ไล่คิวให้เอง เพลงจบแล้วต่อเพลงถัดไปทันที —
-              เปิดในเบราว์เซอร์ที่ล็อกอิน YouTube ไว้ (จะได้ไม่มีโฆษณาถ้ามี Premium)
-              แล้วดึงเสียงเข้า OBS ทาง Desktop Audio อย่าเปิดใน Browser Source
-            </p>
-          </div>
-          <a
-            href={playerUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl bg-[linear-gradient(180deg,#f2dcb0_0%,#d9b273_52%,#bd9350_100%)] px-4 py-2.5 font-display text-xs font-medium text-[#1b1509] transition-all duration-300 hover:brightness-105"
-          >
-            <IconExternal className="h-3.5 w-3.5" />
-            เปิดหน้าเล่นเพลง
-          </a>
-        </div>
       </Panel>
+
+      {/* ---------- ตัวเล่น ---------- */}
+      {songs.enabled && (
+        <Panel variant="feature" className="p-6">
+          <Panel.Header
+            eyebrow="Player"
+            title="เล่นอัตโนมัติ"
+            action={
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <MiniBtn onClick={() => setShowPlayer(!showPlayer)}>
+                  {showPlayer ? "ซ่อนตัวเล่น" : "แสดงตัวเล่น"}
+                </MiniBtn>
+                <a
+                  href={playerUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-hair px-2.5 py-1.5 text-xs text-muted transition-colors hover:text-champagne"
+                >
+                  <IconExternal className="h-3 w-3" />
+                  แยกหน้าต่าง
+                </a>
+              </div>
+            }
+          />
+
+          {showPlayer ? (
+            <SongPlayerCore channelId={channelId} compact />
+          ) : (
+            <p className="text-sm text-muted">
+              ตัวเล่นถูกซ่อนไว้ — เปิดไว้อีกหน้าต่างแทนก็ได้ กดแสดงตัวเล่นเพื่อเล่นตรงนี้
+            </p>
+          )}
+
+          <p className="mt-4 text-xs text-muted">
+            มีคนขอเพลงเข้ามาแล้วเริ่มเล่นเอง เพลงจบก็ต่อเพลงถัดไปเอง คลิปที่ฝังไม่ได้ก็ข้ามให้
+            — ถ้าต้องการเสียงเข้าไลฟ์ให้ดึงจาก Desktop Audio ใน OBS อย่าเอาลิงก์ไปใส่ Browser Source
+            เพราะตรงนั้นไม่ได้ล็อกอิน YouTube จะมีโฆษณาคั่น
+          </p>
+        </Panel>
+      )}
 
       {/* ---------- คิว ---------- */}
       <Panel className="p-6">
@@ -266,18 +285,9 @@ export default function SongQueuePanel({
           title="คิวเพลง"
           count={total || null}
           action={
-            <div className="flex flex-wrap justify-end gap-1.5">
-              <Button
-                size="sm"
-                disabled={queued.length === 0 || working !== null}
-                onClick={() => queued[0] && void play(queued[0])}
-              >
-                เล่นเพลงถัดไป
-              </Button>
-              {done.length > 0 && (
-                <MiniBtn onClick={() => setAskClear(true)}>ล้างที่เล่นจบแล้ว</MiniBtn>
-              )}
-            </div>
+            done.length > 0 ? (
+              <MiniBtn onClick={() => setAskClear(true)}>ล้างที่เล่นจบแล้ว</MiniBtn>
+            ) : undefined
           }
         />
 
