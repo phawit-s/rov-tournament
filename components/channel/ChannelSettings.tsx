@@ -36,6 +36,7 @@ import Figure, { FigureRow } from "../ui/Figure";
 import Panel from "../ui/Panel";
 import Reveal, { PageHeading } from "../ui/Reveal";
 import AdminTeamPanel from "../auth/AdminTeamPanel";
+import SongQueuePanel from "../song/SongQueuePanel";
 import { toast } from "../ui/Toast";
 import { IconCheck, IconCopy, IconExternal, IconMonitor } from "../ui/icons";
 import {
@@ -951,6 +952,15 @@ export default function ChannelSettings() {
       {/* รายชื่อผู้ดูแลระบบ — โผล่เฉพาะบัญชีที่ Firestore ยืนยันสิทธิ์แล้ว */}
       <Reveal>
         <AdminTeamPanel />
+      </Reveal>
+
+      {/* ระบบขอเพลง — ตั้งค่าแล้วต้องกด "เผยแพร่ช่อง" เหมือนค่าอื่น ส่วนคิวเขียนทันที */}
+      <Reveal>
+        <SongQueuePanel
+          channelId={activeId ?? ""}
+          channel={channel}
+          onConfigChange={(songs) => set("songs", songs)}
+        />
       </Reveal>
     </div>
   );

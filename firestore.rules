@@ -149,6 +149,48 @@ service cloud.firestore {
 
         allow update, delete: if canManageChannel();
       }
+
+      /*
+        ---------- คิวขอเพลง ----------
+        คิวต้องเปิดให้อ่านสาธารณะ เพราะ widget ใน OBS ไม่ได้ล็อกอิน
+        และคนขอเพลงอยากเห็นว่าคิวถึงไหนแล้วโดยไม่ต้องสมัครอะไร
+        ในเอกสารไม่มีข้อมูลติดต่อ มีแค่ชื่อที่คนขอพิมพ์เอง จึงเปิดอ่านได้
+
+        คนขอสร้างได้อย่างเดียว แก้สถานะไม่ได้ ไม่งั้นก็ดันเพลงตัวเองขึ้นเป็น
+        "กำลังเล่น" ได้เอง — การจัดคิวเป็นสิทธิ์ของเจ้าของช่องกับผู้ดูแลเท่านั้น
+      */
+      match /songRequests/{songId} {
+        function isChannelOwner() {
+          return request.auth != null && request.auth.uid == channelId;
+        }
+        function canManageChannel() {
+          return isChannelOwner() || isAdmin();
+        }
+        function channel() {
+          return get(/databases/$(database)/documents/channels/$(channelId)).data;
+        }
+
+        allow read: if true;
+
+        // ต้องล็อกอินก่อน (หน้าขอเพลงล็อกอินแบบไม่ระบุตัวตนให้เอง)
+        // และเปิดรับเฉพาะตอนเจ้าของช่องเปิดระบบไว้
+        allow create: if request.auth != null
+          && channel().songs.enabled == true
+          && request.resource.data.status == 'queued'
+          && request.resource.data.byUid == request.auth.uid
+          && request.resource.data.videoId is string
+          && request.resource.data.videoId.size() == 11
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 140
+          && request.resource.data.byName is string
+          && request.resource.data.byName.size() > 0
+          && request.resource.data.byName.size() <= 40
+          && (request.resource.data.message == null
+              || request.resource.data.message.size() <= 120);
+
+        allow update, delete: if canManageChannel();
+      }
     }
 
     /*

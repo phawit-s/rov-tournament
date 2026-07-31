@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { uid } from "./random";
 
@@ -18,6 +18,8 @@ export type ActivityType =
   | "member.approve"
   | "draw.finish"
   | "wheel.spin"
+  | "song.play"
+  | "song.skip"
   | "auth.signin"
   | "auth.signout";
 
@@ -111,6 +113,8 @@ export const ACTIVITY_META: Record<
   "member.approve": { label: "รับสมาชิกใหม่", glyph: "✦", rgb: "160 121 216" },
   "draw.finish": { label: "สุ่มแบ่งทีมเสร็จ", glyph: "◈", rgb: "109 146 219" },
   "wheel.spin": { label: "หมุนวงล้อ", glyph: "◐", rgb: "104 184 197" },
+  "song.play": { label: "เปิดเพลง", glyph: "▶", rgb: "160 121 216" },
+  "song.skip": { label: "ข้ามเพลง", glyph: "⤳", rgb: "146 151 172" },
   "auth.signin": { label: "เข้าสู่ระบบ", glyph: "→", rgb: "155 160 179" },
   "auth.signout": { label: "ออกจากระบบ", glyph: "←", rgb: "155 160 179" },
 };

@@ -1,4 +1,5 @@
 import type { DonateConfig, LiveInfo, MemberConfig } from "@/lib/tournament/types";
+import { DEFAULT_SONG_CONFIG, type SongConfig } from "@/lib/song/types";
 
 /**
  * ช่อง = โปรไฟล์ของผู้จัด/สตรีมเมอร์ หนึ่งบัญชีหนึ่งช่อง
@@ -23,6 +24,8 @@ export type Channel = {
   live: LiveInfo;
   donate: DonateConfig;
   member: MemberConfig;
+  /** ระบบขอเพลง YouTube — ช่องเก่าที่ยังไม่มีฟิลด์นี้ให้ถือว่าปิดอยู่ */
+  songs?: SongConfig;
 
   ownerUid: string;
   ownerEmail?: string;
@@ -52,6 +55,7 @@ export const DEFAULT_CHANNEL: Omit<Channel, "id" | "ownerUid" | "createdAt" | "u
       tiers: [],
       showMemberList: true,
     },
+    songs: { ...DEFAULT_SONG_CONFIG },
   };
 
 /** ทำ handle ให้ปลอดภัยสำหรับใส่ใน URL */

@@ -20,6 +20,7 @@ import { inspectSlip } from "@/lib/slip";
 import { formatMoney } from "@/lib/tournament/prize";
 import { safeImageSrc, safeUrl } from "@/lib/safe";
 import type { Donation, MemberTier } from "@/lib/tournament/types";
+import SongRequestPanel from "../song/SongRequestPanel";
 import Button from "../ui/Button";
 import Corners from "../ui/Corners";
 import Panel from "../ui/Panel";
@@ -732,6 +733,9 @@ export default function ChannelSupport() {
               </ul>
             </Panel>
           )}
+
+          {/* ขอเพลง — ตัวมันเองซ่อนเองถ้าช่องยังไม่เปิดระบบนี้ */}
+          <SongRequestPanel channel={channel} />
         </div>
       </div>
     </div>
