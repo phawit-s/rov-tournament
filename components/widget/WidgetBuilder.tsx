@@ -11,6 +11,7 @@ import {
 import { motion } from "motion/react";
 import { hasBackend } from "@/lib/backend/firebase";
 import { tournamentStore } from "@/lib/tournament/store";
+import { channelStore } from "@/lib/channel/store";
 import Panel from "../ui/Panel";
 import Button from "../ui/Button";
 import { PageHeading } from "../ui/Reveal";
@@ -25,6 +26,11 @@ type WidgetDef = {
   /** ขนาด Browser Source ที่แนะนำ ต้องตรงกับที่กราฟิกออกแบบไว้จริง */
   w: number;
   h: number;
+  /**
+   * widget ผูกกับอะไร — ตัวที่ผูกกับช่องต้องส่ง #ch= รหัสช่อง ไม่ใช่ #c= รหัสทัวร์
+   * ใส่ผิดคีย์แล้ว widget จะเปิดมาว่างเปล่าโดยไม่ฟ้องอะไรเลย
+   */
+  scope: "tournament" | "channel";
   detail: string;
 };
 
@@ -35,6 +41,7 @@ const WIDGETS: WidgetDef[] = [
     path: "/widget/scoreboard/",
     w: 700,
     h: 240,
+    scope: "tournament",
     detail: "ชื่อทีมสองฝั่ง เม็ดคะแนนซีรีส์ และสกอร์ อัปเดตเองเมื่อผู้จัดกรอกผล",
   },
   {
@@ -43,6 +50,7 @@ const WIDGETS: WidgetDef[] = [
     path: "/widget/upnext/",
     w: 620,
     h: 390,
+    scope: "tournament",
     detail: "คิวแรกเป็นการ์ดใหญ่พร้อมนับถอยหลัง อีกสามคู่เป็นรายการเตี้ย",
   },
   {
@@ -51,6 +59,7 @@ const WIDGETS: WidgetDef[] = [
     path: "/widget/timer/",
     w: 500,
     h: 280,
+    scope: "tournament",
     detail: "วงแหวนบอกเวลาที่เหลือ ใส่ ?mins=5 ทำเป็นตัวจับเวลาพักเบรกก็ได้",
   },
   {
@@ -59,6 +68,7 @@ const WIDGETS: WidgetDef[] = [
     path: "/widget/champion/",
     w: 820,
     h: 580,
+    scope: "tournament",
     detail: "หน้าไตเติลตอนจบรายการ มีทีม สมาชิก เงินรางวัล และสกอร์นัดชิง",
   },
   {
@@ -67,7 +77,8 @@ const WIDGETS: WidgetDef[] = [
     path: "/widget/alert/",
     w: 760,
     h: 380,
-    detail: "เด้งทันทีที่ผู้จัดกดอนุมัติสลิป มีเหรียญ tier และเสียงด้วย",
+    scope: "channel",
+    detail: "เด้งทันทีที่สลิปผ่านการตรวจ มีเหรียญ tier และเสียงด้วย",
   },
   {
     key: "song",
@@ -75,8 +86,8 @@ const WIDGETS: WidgetDef[] = [
     path: "/widget/song/",
     w: 620,
     h: 300,
-    detail:
-      "ชื่อเพลงที่คนดูขอมาพร้อมคิวถัดไป — ใช้ #ch= รหัสช่อง ไม่ใช่รหัสทัวร์",
+    scope: "channel",
+    detail: "ชื่อเพลงที่คนดูขอมาพร้อมคิวถัดไปอีกสามเพลง อัปเดตเองตอนกดเล่น",
   },
 ];
 
@@ -122,6 +133,11 @@ export default function WidgetBuilder() {
     tournamentStore.getSnapshot,
     tournamentStore.getServerSnapshot,
   );
+  const channel = useSyncExternalStore(
+    channelStore.subscribe,
+    channelStore.getSnapshot,
+    channelStore.getServerSnapshot,
+  );
 
   const [tournamentId, setTournamentId] = useState("");
   const [useCloud, setUseCloud] = useState(hasBackend);
@@ -146,10 +162,23 @@ export default function WidgetBuilder() {
       if (scale !== 1) params.set("scale", String(scale));
       if (solid) params.set("solid", "1");
       const query = params.toString() ? `?${params.toString()}` : "";
-      const hash = selected ? `#${useCloud ? "c" : "t"}=${selected.id}` : "";
+      const hash =
+        widget.scope === "channel"
+          ? channel
+            ? `#ch=${channel.id}`
+            : ""
+          : selected
+            ? `#${useCloud ? "c" : "t"}=${selected.id}`
+            : "";
       return `${origin}${widget.path}${query}${hash}`;
     },
-    [origin, scale, selected, useCloud],
+    [channel, origin, scale, selected, useCloud],
+  );
+
+  /* ตัวที่ผูกกับช่องโผล่ก็ต่อเมื่อมีช่องแล้ว ตัวที่ผูกกับทัวร์ก็ต่อเมื่อมีทัวร์
+     ไม่งั้นจะแจกลิงก์ที่ไม่มีรหัสห้อยท้าย ซึ่งเปิดมาแล้วว่างเปล่า */
+  const usable = WIDGETS.filter((w) =>
+    w.scope === "channel" ? !!channel : tournaments.length > 0,
   );
 
   const copy = (url: string, key: string) => {
@@ -165,7 +194,7 @@ export default function WidgetBuilder() {
         eyebrow="Stream widgets"
         title="Widget สำหรับ OBS / Streamlabs"
         description="ปรับสีกับขนาดแล้วเห็นผลทันทีในพรีวิว จากนั้นคัดลอกลิงก์ไปวางเป็น Browser Source พื้นหลังโปร่งใสพร้อมทับภาพเกม"
-        meta={`${WIDGETS.length} ตัว`}
+        meta={`${usable.length}/${WIDGETS.length} ตัว`}
       />
 
       {/* ตั้งค่า */}
@@ -279,16 +308,16 @@ export default function WidgetBuilder() {
       </Panel>
 
       {/* รายการ widget */}
-      {tournaments.length === 0 ? (
+      {usable.length === 0 ? (
         <EmptyState
           art={<ArtShield />}
           no="06"
-          title="ยังไม่มีทัวร์ให้ผูกกับ widget"
-          description="สร้างทัวร์นาเมนต์ก่อน แล้วกลับมาที่นี่เพื่อสร้างลิงก์ Browser Source ทั้งห้าตัว"
+          title="ยังไม่มีอะไรให้ผูกกับ widget"
+          description="สร้างทัวร์นาเมนต์ก่อน (ได้สกอร์บอร์ด คิวถัดไป นับถอยหลัง ป้ายแชมป์) หรือเปิดหน้าช่องสักครั้ง (ได้แจ้งเตือนโดเนทกับเพลงที่กำลังเล่น) แล้วกลับมาที่นี่"
         />
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          {WIDGETS.map((widget, i) => {
+          {usable.map((widget, i) => {
             const url = makeUrl(widget, accent);
             const preview = makeUrl(widget, previewAccent, true);
 

@@ -40,11 +40,37 @@ const LEGACY_KEY = "tourney-hub/tournaments/v1";
 /** ต้องเป็นตัวเดิมทุกครั้ง ไม่งั้น useSyncExternalStore จะวนไม่จบ */
 const EMPTY: Tournament[] = [];
 
+/** ทัวร์ที่เราเป็นเจ้าของ/ดูแล มาจาก drafts บนคลาวด์ (หรือในเครื่องถ้าไม่มี Firebase) */
 let items: Tournament[] = EMPTY;
+
+/**
+ * ทัวร์ที่เปิดมาจากลิงก์ — ของคนอื่น เราแค่ "ดู" ไม่ได้เป็นเจ้าของ
+ *
+ * ต้องแยกกอง เพราะเขียนลง drafts ไม่ได้ (กติกาให้เขียนเฉพาะเจ้าของ)
+ * ก่อนหน้านี้ยัดรวมกันแล้วให้ persist() เป็นคนเขียน ซึ่ง persist() มี
+ * `if (!owner) return` อยู่ต้นทาง ผลคือคนที่ยังไม่ล็อกอินเปิดลิงก์ทัวร์
+ * แล้วไม่เห็นอะไรเลย ขึ้นว่า "ไม่พบทัวร์นาเมนต์นี้ในเครื่อง" ทั้งที่ข้อมูลมาถึงแล้ว
+ */
+const viewed = new Map<string, Tournament>();
+
+/** รวมสองกองไว้ล่วงหน้า getSnapshot ต้องคืนตัวเดิมถ้าไม่มีอะไรเปลี่ยน */
+let snapshot: Tournament[] = EMPTY;
 let snapshotVersion = 0;
 const listeners = new Set<() => void>();
 
+function rebuild() {
+  if (viewed.size === 0) {
+    snapshot = items;
+    return;
+  }
+  // ของที่เราเป็นเจ้าของชนะเสมอ เพราะสำเนาสาธารณะถูกตัดเบอร์ติดต่อกับ PIN ออกไปแล้ว
+  const owned = new Set(items.map((t) => t.id));
+  const extra = [...viewed.values()].filter((t) => !owned.has(t.id));
+  snapshot = extra.length ? [...items, ...extra] : items;
+}
+
 function emit() {
+  rebuild();
   snapshotVersion++;
   listeners.forEach((l) => l());
 }
@@ -261,20 +287,20 @@ export const tournamentStore = {
       }
     };
   },
-  getSnapshot: () => items,
+  getSnapshot: () => snapshot,
   getServerSnapshot: (): Tournament[] => EMPTY,
   /** ใช้ตอนอยากรู้แค่ว่ามีการเปลี่ยนแปลง */
   version: () => snapshotVersion,
 
   list(): Tournament[] {
-    return items
+    return snapshot
       .slice()
       .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
   },
 
   get(id: string | null): Tournament | null {
     if (!id) return null;
-    return items.find((t) => t.id === id) ?? null;
+    return snapshot.find((t) => t.id === id) ?? null;
   },
 
   create(partial?: Partial<Tournament>): Tournament {
@@ -357,8 +383,27 @@ export const tournamentStore = {
     return copy;
   },
 
-  /** นำเข้าจากลิงก์แชร์ — ถ้า id ซ้ำจะเขียนทับ */
+  /**
+   * รับทัวร์ที่เปิดมาจากลิงก์เข้ามาแสดงผล
+   *
+   * ไม่พยายามเขียนลงคลาวด์เลย เพราะคนเปิดลิงก์ส่วนใหญ่ไม่ใช่เจ้าของ
+   * และไม่ได้ล็อกอินด้วยซ้ำ — หน้าที่ของฟังก์ชันนี้คือ "ให้เห็น" อย่างเดียว
+   */
+  adopt(tournament: Tournament) {
+    const current = viewed.get(tournament.id);
+    // ข้ามถ้าเนื้อในเหมือนเดิม กัน onSnapshot ยิงซ้ำแล้ว re-render ทั้งหน้า
+    if (current && current.updatedAt === tournament.updatedAt) return;
+    viewed.set(tournament.id, migrate(tournament));
+    emit();
+  },
+
+  /** นำเข้าของเราเอง (สร้าง/แก้/นำเข้าไฟล์) — ถ้า id ซ้ำจะเขียนทับ */
   upsert(tournament: Tournament) {
+    if (!ownerOf() && hasBackend) {
+      // ยังไม่ล็อกอินก็เขียนคลาวด์ไม่ได้ อย่างน้อยให้เห็นบนจอไว้ก่อน
+      tournamentStore.adopt(tournament);
+      return;
+    }
     const exists = items.some((t) => t.id === tournament.id);
     persist(
       exists

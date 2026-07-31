@@ -86,6 +86,8 @@ export default function SongQueuePanel({
       ? `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}`
       : "";
   const requestUrl = `${origin}/c/#h=${channel.handle || channelId}`;
+  // ใส่ #ch= ไปด้วย ผู้ดูแลที่กำลังแก้ช่องคนอื่นจะได้เปิดคิวของช่องนั้นถูกตัว
+  const playerUrl = `${origin}/player/#ch=${channelId}`;
 
   /** ทุกปุ่มในคิวเดินผ่านตัวนี้ จะได้มีสถานะกำลังทำงานและ toast แบบเดียวกันหมด */
   const run = async (id: string, job: () => Promise<void>, ok: string) => {
@@ -230,6 +232,31 @@ export default function SongQueuePanel({
             เปิดสวิตช์แล้วอย่าลืมกด &ldquo;เผยแพร่ช่อง&rdquo; ค่าถึงจะขึ้นคลาวด์
           </p>
         )}
+
+        {/*
+          หน้าเล่นเพลงคือปลายทางจริงของระบบนี้ ต้องมีทางไปให้เห็นตั้งแต่ตรงนี้
+          ย้ำว่าให้เปิดในเบราว์เซอร์ตัวเอง ไม่ใช่ใน OBS เพราะ Browser Source
+          มีคุกกี้แยกของมันเอง ไม่ได้ล็อกอิน YouTube ก็เลยมีโฆษณาคั่น
+        */}
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl tile p-4">
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-sm text-ice">เปิดเพลงจากหน้าเล่นเพลง</p>
+            <p className="mt-0.5 text-xs text-muted">
+              ไล่คิวให้เอง เพลงจบแล้วต่อเพลงถัดไปทันที —
+              เปิดในเบราว์เซอร์ที่ล็อกอิน YouTube ไว้ (จะได้ไม่มีโฆษณาถ้ามี Premium)
+              แล้วดึงเสียงเข้า OBS ทาง Desktop Audio อย่าเปิดใน Browser Source
+            </p>
+          </div>
+          <a
+            href={playerUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl bg-[linear-gradient(180deg,#f2dcb0_0%,#d9b273_52%,#bd9350_100%)] px-4 py-2.5 font-display text-xs font-medium text-[#1b1509] transition-all duration-300 hover:brightness-105"
+          >
+            <IconExternal className="h-3.5 w-3.5" />
+            เปิดหน้าเล่นเพลง
+          </a>
+        </div>
       </Panel>
 
       {/* ---------- คิว ---------- */}

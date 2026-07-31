@@ -15,7 +15,7 @@ import {
 import { recordAudit } from "@/lib/audit";
 import { getDb, hasBackend } from "@/lib/backend/firebase";
 import { stripContacts } from "@/lib/safe";
-import type { TeamEntry, Tournament } from "./types";
+import type { SoloEntry, TeamEntry, Tournament } from "./types";
 
 export type CloudTournament = Tournament & {
   ownerUid: string;
@@ -27,13 +27,23 @@ export type CloudTournament = Tournament & {
 export type Registration = {
   id: string;
   tournamentId: string;
+  /** ชื่อทีม หรือชื่อผู้เล่นในโหมดเดี่ยว — กติกาบังคับให้มีเสมอ */
   teamName: string;
   members: string[];
-  contact?: string;
+  contact?: string | null;
   byUid: string;
   byName: string;
   createdAt: string;
   status: "pending" | "approved" | "rejected";
+
+  /* ---- ของที่เพิ่มมาทีหลัง ใบเก่าจะไม่มี ต้องอ่านแบบเผื่อ undefined ---- */
+  /** ทีมหรือเดี่ยว ใบเก่าไม่มีฟิลด์นี้ ถือเป็นทีม */
+  kind?: "team" | "solo";
+  ign?: string | null;
+  lane?: string | null;
+  /** โลโก้ทีม / รูปโปรไฟล์ ย่อแล้วเป็น data URL */
+  image?: string | null;
+  note?: string | null;
 };
 
 const COL = "tournaments";
@@ -165,23 +175,86 @@ export function watchAllTournaments(
 
 /* ---------------- การสมัครข้ามเครื่อง ---------------- */
 
+/**
+ * ส่งใบสมัคร — ปลายทางคือ subcollection ของทัวร์ ไม่ใช่ตัวทัวร์
+ *
+ * ตัวทัวร์เขียนได้เฉพาะเจ้าของ คนสมัครจึงเขียนลงตรงนั้นไม่ได้
+ * ที่นี่คือทางเดียวที่ใบจะไปถึงผู้จัดจริง เขียนสำเร็จ = ผู้จัดเห็นแน่นอน
+ *
+ * คืน id ของใบกลับไป เผื่อคนสมัครกดถอนทันทีโดยยังไม่ทันได้ snapshot
+ */
 export async function submitRegistration(
   tournamentId: string,
-  entry: { teamName: string; members: string[]; contact?: string },
+  entry: {
+    teamName: string;
+    members: string[];
+    contact?: string;
+    kind?: "team" | "solo";
+    ign?: string;
+    lane?: string;
+    image?: string;
+    note?: string;
+  },
   by: { uid: string; name: string },
-): Promise<void> {
+): Promise<string> {
   const db = getDb();
   if (!db) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
-  await addDoc(collection(db, COL, tournamentId, REG), {
+  const ref = await addDoc(collection(db, COL, tournamentId, REG), {
     tournamentId,
     teamName: entry.teamName,
-    members: entry.members,
+    // กติกาจำกัดไว้ 12 คน ตัดตั้งแต่ตรงนี้จะได้ไม่โดนปฏิเสธทั้งใบ
+    members: entry.members.slice(0, 12),
     contact: entry.contact ?? null,
+    kind: entry.kind ?? "team",
+    ign: entry.ign ?? null,
+    lane: entry.lane ?? null,
+    image: entry.image ?? null,
+    note: entry.note ?? null,
     byUid: by.uid,
     byName: by.name,
     createdAt: new Date().toISOString(),
     status: "pending",
   });
+  return ref.id;
+}
+
+/**
+ * ฟังใบของตัวเองในทัวร์นี้ — คนสมัครจะได้เห็นสถานะขยับเองโดยไม่ต้องรีเฟรช
+ *
+ * กติกาเปิด read ให้เจ้าของใบ (byUid == uid) อยู่แล้ว จึง query ด้วย where ตัวเดียวกันได้
+ * ไม่ใส่ orderBy เพราะ orderBy ตัดเอกสารที่ไม่มีฟิลด์นั้นทิ้งเงียบๆ เรียงในเครื่องแทน
+ */
+export function watchMyRegistrations(
+  tournamentId: string,
+  uid: string,
+  onChange: (list: Registration[]) => void,
+  onError?: (e: Error) => void,
+): () => void {
+  const db = getDb();
+  if (!db) {
+    onChange([]);
+    return () => {};
+  }
+  return onSnapshot(
+    query(collection(db, COL, tournamentId, REG), where("byUid", "==", uid)),
+    (snap) =>
+      onChange(
+        snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }) as Registration)
+          .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")),
+      ),
+    (err) => onError?.(err),
+  );
+}
+
+/** ถอนใบของตัวเอง — กติกาให้ลบได้เฉพาะใบที่ยังไม่ถูกตัดสิน */
+export async function withdrawRegistration(
+  tournamentId: string,
+  registrationId: string,
+): Promise<void> {
+  const db = getDb();
+  if (!db) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
+  await deleteDoc(doc(db, COL, tournamentId, REG, registrationId));
 }
 
 export function watchRegistrations(
@@ -216,14 +289,37 @@ export async function setRegistrationStatus(
   );
 }
 
-/** แปลงใบสมัครที่อนุมัติแล้วเป็นทีมในทัวร์ */
+/**
+ * แปลงใบสมัครที่อนุมัติแล้วเป็นทีมในทัวร์
+ *
+ * แปะ uid ของคนส่งไว้ด้วย ผู้จัดจะได้ตามตัวกลับได้
+ * และเจ้าตัวเปิดหน้าทัวร์แล้วเห็นว่า "ใบของคุณผ่านแล้ว" แทนที่จะเห็นฟอร์มเปล่า
+ * ค่าที่ไม่มีต้องไม่ใส่คีย์เลย เพราะ Firestore ไม่รับ undefined
+ */
 export function registrationToTeam(reg: Registration): TeamEntry {
   return {
     id: reg.id,
     name: reg.teamName,
-    members: reg.members,
-    contact: reg.contact,
+    members: reg.members ?? [],
     registeredAt: reg.createdAt,
     approved: true,
+    ...(reg.contact ? { contact: reg.contact } : {}),
+    ...(reg.image ? { logo: reg.image } : {}),
+    ...(reg.byUid ? { uid: reg.byUid } : {}),
+  };
+}
+
+/** แปลงใบสมัครเป็นผู้เล่นเดี่ยว ใช้กับทัวร์ที่ผู้จัดสุ่มแบ่งทีมเอง */
+export function registrationToSolo(reg: Registration): SoloEntry {
+  return {
+    id: reg.id,
+    name: reg.teamName,
+    registeredAt: reg.createdAt,
+    approved: true,
+    ...(reg.ign ? { ign: reg.ign } : {}),
+    ...(reg.lane ? { lane: reg.lane } : {}),
+    ...(reg.contact ? { contact: reg.contact } : {}),
+    ...(reg.image ? { avatar: reg.image } : {}),
+    ...(reg.byUid ? { uid: reg.byUid } : {}),
   };
 }

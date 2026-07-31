@@ -4,7 +4,7 @@ import { safeImageSrc } from "@/lib/safe";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useHashParam, useHydrated } from "@/hooks/useClient";
+import { useHashParam, useHydrated, useNow } from "@/hooks/useClient";
 import { useAccess } from "@/hooks/useAdmin";
 import { adminStore } from "@/lib/tournament/admin";
 import { authStore } from "@/lib/backend/firebase";
@@ -13,6 +13,7 @@ import { cloudReady, watchTournament } from "@/lib/tournament/cloud";
 import { championId, standings } from "@/lib/tournament/bracket";
 import { calcPrizes, formatMoney } from "@/lib/tournament/prize";
 import { tournamentStore } from "@/lib/tournament/store";
+import { findMyEntry, registerGate, slotsLeft } from "@/lib/tournament/registration";
 import {
   decodeTournament,
   formatThaiDate,
@@ -33,6 +34,7 @@ import PrizePanel from "./PrizePanel";
 import SchedulePanel, { Countdown } from "./SchedulePanel";
 import AccessPanel from "./AccessPanel";
 import CloudPanel from "./CloudPanel";
+import RegisterPanel from "./RegisterPanel";
 import TeamsPanel from "./TeamsPanel";
 import TournamentForm from "./TournamentForm";
 import { EmptyNote, Input, LiveBadge, Stat, StatRow, StatusBadge } from "./ui";
@@ -40,7 +42,8 @@ import { EmptyNote, Input, LiveBadge, Stat, StatRow, StatusBadge } from "./ui";
 /** manage = true คือแท็บที่เปิดให้เฉพาะเจ้าของกับทีมงาน */
 const TABS = [
   { key: "overview", label: "ภาพรวม", manage: false },
-  { key: "teams", label: "ทีม / สมัคร", manage: false },
+  { key: "register", label: "สมัคร", manage: false },
+  { key: "teams", label: "ทีม", manage: false },
   { key: "bracket", label: "สายแข่ง", manage: false },
   { key: "schedule", label: "ตารางแข่ง", manage: false },
   { key: "prize", label: "เงินรางวัล", manage: false },
@@ -77,6 +80,8 @@ export default function TournamentDetail() {
 
   // อ่าน id จาก hash — รองรับทั้ง #t=<id> และลิงก์แชร์ #s=<data>
   const hydrated = useHydrated();
+  // ต้องเรียกก่อน early return ด้านล่าง ลำดับ hook ห้ามเปลี่ยนระหว่าง render
+  const now = useNow();
   const sharedRaw = useHashParam("s");
   const hashId = useHashParam("t");
   const cloudId = useHashParam("c");
@@ -86,16 +91,16 @@ export default function TournamentDetail() {
   );
   const id = shared?.id ?? cloudId ?? hashId;
 
-  // เปิดจากลิงก์แชร์ = บันทึกลงเครื่องให้เลย จะได้ดูสายและกรอกผลต่อได้
+  // เปิดจากลิงก์แชร์ = เอาข้อมูลในลิงก์มาแสดงเลย คนดูไม่ต้องล็อกอิน
   useEffect(() => {
-    if (shared) tournamentStore.upsert(shared);
+    if (shared) tournamentStore.adopt(shared);
   }, [shared]);
 
   // เปิดจากคลาวด์ = ฟังสด ผลอัปเดตเองไม่ต้องรีเฟรช
   useEffect(() => {
     if (!cloudId || !cloudReady()) return;
     return watchTournament(cloudId, (data) => {
-      if (data) tournamentStore.upsert(data);
+      if (data) tournamentStore.adopt(data);
     });
   }, [cloudId]);
 
@@ -156,6 +161,11 @@ export default function TournamentDetail() {
 
   const pending = tournament.teams.filter((t) => !t.approved).length;
   const noBracket = tournament.bracket === null;
+
+  /* สถานะการสมัครของคนที่กำลังดูอยู่ — ใช้ตัดสินว่าปุ่มใหญ่ควรพูดว่าอะไร */
+  const gate = registerGate(tournament, now, cloudReady() && !!tournament.ownerUid);
+  const myEntry = findMyEntry(tournament, user?.uid);
+  const left = slotsLeft(tournament);
   const cover = tournament.cover ? safeImageSrc(tournament.cover) : null;
   const finished = tournament.status === "finished";
 
@@ -260,6 +270,25 @@ export default function TournamentDetail() {
                 </>
               )}
             </div>
+
+            {/* ปุ่มสมัครอยู่บนโปสเตอร์เลย — คนมาจากลิงก์แชร์จะได้ไม่ต้องไล่หาแท็บ */}
+            {(gate.open || myEntry) && (
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <Button size="lg" onClick={() => setTab("register")}>
+                  {myEntry ? "ดูใบสมัครของคุณ" : "สมัครเข้าแข่ง"}
+                </Button>
+                {!myEntry && left !== null && (
+                  <span className="num text-xs text-muted">
+                    เหลืออีก {left} {tournament.entryMode === "solo" ? "ที่" : "ทีม"}
+                  </span>
+                )}
+                {myEntry && (
+                  <span className="text-xs text-muted">
+                    {myEntry.entry.approved ? "ผ่านแล้ว" : "รอผู้จัดตรวจ"}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="absolute right-5 bottom-5 z-10 hidden md:block">
@@ -460,6 +489,19 @@ export default function TournamentDetail() {
                     style={{ background: "rgb(var(--st-next))" }}
                   />
                 )}
+                {/* จุดบนแท็บสมัคร — เขียวคือผ่านแล้ว เหลืองคือรอตรวจ แดงคือยังไม่ได้สมัครแต่เปิดอยู่ */}
+                {item.key === "register" && (myEntry || gate.open) && (
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{
+                      background: myEntry
+                        ? myEntry.entry.approved
+                          ? "rgb(var(--st-win))"
+                          : "rgb(var(--st-next))"
+                        : "rgb(var(--st-live))",
+                    }}
+                  />
+                )}
               </span>
             </button>
           );
@@ -477,12 +519,14 @@ export default function TournamentDetail() {
           {tab === "overview" && (
             <Overview tournament={tournament} champName={champName} />
           )}
+          {tab === "register" && <RegisterPanel tournament={tournament} />}
           {tab === "teams" && (
             /* สุ่มสายเสร็จคือโมเมนต์ใหญ่สุดของทัวร์ — พาไปดูสายให้เลย ไม่ต้องกดเอง */
             <TeamsPanel
               tournament={tournament}
               isAdmin={isAdmin}
               onGenerated={() => setTab("bracket")}
+              onGoRegister={() => setTab("register")}
             />
           )}
           {tab === "bracket" && (

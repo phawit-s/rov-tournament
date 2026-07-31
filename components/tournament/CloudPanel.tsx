@@ -12,9 +12,11 @@ import {
   type ChannelDonation,
 } from "@/lib/channel/donations";
 import { channelStore } from "@/lib/channel/store";
+import { safeImageSrc } from "@/lib/safe";
 import {
   cloudReady,
   pushTournament,
+  registrationToSolo,
   registrationToTeam,
   setRegistrationStatus,
   watchRegistrations,
@@ -26,7 +28,7 @@ import { tournamentStore } from "@/lib/tournament/store";
 import type { Tournament } from "@/lib/tournament/types";
 import Button from "../ui/Button";
 import Panel from "../ui/Panel";
-import { Badge, EmptyNote } from "./ui";
+import { Badge, EmptyNote, RegStatusBadge } from "./ui";
 
 type Props = { tournament: Tournament; isAdmin: boolean };
 
@@ -296,26 +298,55 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
                   exit={{ opacity: 0, scale: 0.97 }}
                   className="flex flex-wrap items-center gap-3 rounded-xl tile px-4 py-3"
                 >
+                  {reg.image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={safeImageSrc(reg.image) ?? ""}
+                      alt=""
+                      className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-ice">{reg.teamName}</p>
                     <p className="mt-0.5 truncate text-xs text-muted">
-                      {reg.members.join(" · ")} · โดย {reg.byName} ·{" "}
-                      {formatThaiDate(reg.createdAt)}
+                      {[
+                        reg.kind === "solo"
+                          ? [reg.ign, reg.lane].filter(Boolean).join(" · ")
+                          : reg.members.join(" · "),
+                        `โดย ${reg.byName}`,
+                        formatThaiDate(reg.createdAt),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </p>
+                    {/* ช่องติดต่อกับข้อความถึงผู้จัดต้องอ่านได้ก่อนกดรับ ไม่ใช่ต้องไปหาทีหลัง */}
+                    {(reg.contact || reg.note) && (
+                      <p className="mt-1 truncate text-xs text-champagne/80">
+                        {[reg.contact, reg.note].filter(Boolean).join(" — ")}
+                      </p>
+                    )}
                   </div>
-                  <span className="font-display text-xs text-muted">{reg.status}</span>
+                  <RegStatusBadge status={reg.status} />
                   {isAdmin && reg.status === "pending" && (
                     <div className="flex gap-1.5">
                       <MiniBtn
                         onClick={async () => {
-                          tournamentStore.mutate(tournament.id, (t) => ({
-                            ...t,
-                            teams: [...t.teams, registrationToTeam(reg)],
-                          }));
+                          /* โหมดเดี่ยวต้องลงกองผู้เล่น ไม่ใช่กองทีม
+                             ไม่งั้นทีมที่ผู้จัดสุ่มแบ่งทีหลังจะถูกทับ */
+                          const asSolo =
+                            tournament.entryMode === "solo" || reg.kind === "solo";
+                          tournamentStore.mutate(tournament.id, (t) =>
+                            asSolo
+                              ? {
+                                  ...t,
+                                  soloPlayers: [...t.soloPlayers, registrationToSolo(reg)],
+                                }
+                              : { ...t, teams: [...t.teams, registrationToTeam(reg)] },
+                          );
                           await setRegistrationStatus(tournament.id, reg.id, "approved");
                           recordActivity(
                             "registration.approve",
-                            `อนุมัติทีม "${reg.teamName}"`,
+                            `อนุมัติ "${reg.teamName}"`,
                             {
                               tournamentId: tournament.id,
                               tournamentName: tournament.name,
@@ -323,7 +354,7 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
                           );
                         }}
                       >
-                        อนุมัติ
+                        รับเข้าทัวร์
                       </MiniBtn>
                       <MiniBtn
                         danger

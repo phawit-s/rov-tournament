@@ -4,6 +4,31 @@ import { useCallback, useSyncExternalStore } from "react";
 
 const noopSubscribe = () => () => {};
 
+/**
+ * เวลาปัจจุบันที่ขยับเอง — ใช้กับของที่ต้องพลิกสถานะตามเวลา เช่น เปิด/ปิดรับสมัคร
+ *
+ * เรียก Date.now() ตรงๆ ตอน render ไม่ได้ กฎ react-hooks/purity ห้ามไว้
+ * เพราะค่าจะเปลี่ยนทุกครั้งที่ React บังเอิญ re-render
+ *
+ * ต้องปัดค่าลงเป็นช่วงๆ ด้วย ไม่งั้น getSnapshot คืนค่าใหม่ทุกครั้งที่ถูกเรียก
+ * React จะมองว่า store เปลี่ยนไม่หยุดแล้ววนซ้ำไม่จบ
+ * คืน 0 ตอน render บนเซิร์ฟเวอร์ ให้ผลตรงกับตอน hydrate
+ */
+export function useNow(intervalMs = 30_000): number {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const id = window.setInterval(onChange, intervalMs);
+      return () => window.clearInterval(id);
+    },
+    [intervalMs],
+  );
+  const snapshot = useCallback(
+    () => Math.floor(Date.now() / intervalMs) * intervalMs,
+    [intervalMs],
+  );
+  return useSyncExternalStore(subscribe, snapshot, () => 0);
+}
+
 /** false ตอน render บนเซิร์ฟเวอร์และตอน hydrate, true หลังจากนั้น */
 export function useHydrated(): boolean {
   return useSyncExternalStore(

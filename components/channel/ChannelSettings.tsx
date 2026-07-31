@@ -21,8 +21,40 @@ import {
   pushChannel,
   pushChannelAs,
   watchAllChannels,
+  watchChannel,
 } from "@/lib/channel/store";
 import { normalizeHandle, type Channel } from "@/lib/channel/types";
+
+/**
+ * ของในหน้ากับสำเนาบนคลาวด์ตรงกันไหม
+ *
+ * ต้องเทียบทางเดียว — ไล่จากคีย์ของ "ในหน้า" ไปหาคลาวด์เท่านั้น
+ * เพราะตอนเผยแพร่ pushChannelAs ใส่ isPublic กับ syncedAt เพิ่มให้เอง
+ * และ setDoc ใช้ merge ของเก่าที่ถูกลบไปแล้วก็ยังค้างอยู่บนคลาวด์
+ * ถ้าเทียบสองทางจะไม่มีวันตรงกัน แถบ "ยังไม่ได้เผยแพร่" ก็จะค้างตลอดเวลา
+ *
+ * ข้าม updatedAt/createdAt เพราะ updatedAt ขยับทุกครั้งที่พิมพ์ตัวอักษรเดียว
+ */
+function matchesCloud(local: unknown, cloud: unknown): boolean {
+  if (Array.isArray(local)) {
+    return (
+      Array.isArray(cloud) &&
+      local.length === cloud.length &&
+      local.every((v, i) => matchesCloud(v, cloud[i]))
+    );
+  }
+  if (local && typeof local === "object") {
+    if (!cloud || typeof cloud !== "object" || Array.isArray(cloud)) return false;
+    return Object.entries(local as Record<string, unknown>).every(([key, value]) => {
+      if (key === "updatedAt" || key === "createdAt") return true;
+      const other = (cloud as Record<string, unknown>)[key];
+      // undefined กับ null ถือว่าเท่ากัน ฝั่งคลาวด์เก็บ null ฝั่งหน้าเว็บเป็น undefined
+      if (value === undefined || value === null) return other === undefined || other === null;
+      return matchesCloud(value, other);
+    });
+  }
+  return local === cloud;
+}
 import { compressImage } from "@/lib/image";
 import { uid } from "@/lib/random";
 import { safeImageSrc } from "@/lib/safe";
@@ -206,6 +238,9 @@ export default function ChannelSettings() {
   /** ใบที่ยิงอนุมัติอัตโนมัติไปแล้ว — onSnapshot ยิงซ้ำได้เรื่อยๆ ต้องกันเอง */
   const autoDone = useRef<Set<string>>(new Set());
 
+  /** สำเนาที่อยู่บนคลาวด์จริง ใช้เทียบว่ามีอะไรยังไม่ได้เผยแพร่บ้าง */
+  const [live, setLive] = useState<Channel | null>(null);
+
   const isAdmin = access === "verified";
   const channel = remote ? remote.draft : stored;
   const activeId = remote?.id ?? user?.uid ?? null;
@@ -224,6 +259,16 @@ export default function ChannelSettings() {
     if (!isAdmin) return;
     return watchAllChannels(setChannels, () => setChannels(NO_CHANNELS));
   }, [isAdmin]);
+
+  // ฟังสำเนาบนคลาวด์ไว้เทียบ จะได้รู้ว่ามีอะไรค้างยังไม่ได้เผยแพร่
+  useEffect(() => {
+    if (!activeId) return;
+    return watchChannel(
+      activeId,
+      (c) => setLive(c),
+      () => setLive(null),
+    );
+  }, [activeId]);
 
   /**
    * สรุปยอด + อนุมัติอัตโนมัติ ทำใน callback ตอนข้อมูลมาถึง ไม่ใช่ตอนเรนเดอร์
@@ -250,6 +295,14 @@ export default function ChannelSettings() {
 
   const editingOther = !!remote;
   const otherName = channel.name || channel.handle || "ช่องนี้";
+
+  /*
+    มีอะไรแก้ค้างไว้ไหม — เทียบของในหน้ากับสำเนาบนคลาวด์
+    หน้านี้ยาวมาก ปุ่มเผยแพร่อยู่บนสุดที่เดียว คนแก้ค่าท้ายหน้าแล้วปิดไปเลยก็มี
+    รู้ว่าค้างเมื่อไหร่ถึงจะเด้งแถบบันทึกขึ้นมาเตือนตรงที่มือกำลังทำงานอยู่ได้
+  */
+  const neverPublished = !live;
+  const dirty = !live || !matchesCloud(channel, live);
 
   const set = <K extends keyof Channel>(key: K, value: Channel[K]) => {
     if (remote) {
@@ -376,7 +429,8 @@ export default function ChannelSettings() {
     .filter((s) => s.items.length > 0);
 
   return (
-    <div className="space-y-6">
+    /* เว้นที่ท้ายหน้าไว้ให้แถบบันทึกลอย ไม่ให้มันทับเนื้อหาบรรทัดสุดท้าย */
+    <div className="space-y-6 pb-28">
       {/* แถบสลับช่อง — เห็นเฉพาะผู้ดูแลที่ Firestore ยืนยันสิทธิ์แล้ว */}
       {isAdmin && (
         <ChannelSwitcher
@@ -411,8 +465,8 @@ export default function ChannelSettings() {
         description="ตั้งพร้อมเพย์ แพ็กเกจสมาชิก และลิงก์สำหรับสตรีมที่เดียว ใช้ได้กับทุกทัวร์"
         meta={channel.handle ? `@${channel.handle}` : undefined}
         action={
-          <Button onClick={publish} loading={busy}>
-            เผยแพร่ช่อง
+          <Button onClick={publish} loading={busy} variant={dirty ? "primary" : "outline"}>
+            {dirty ? "เผยแพร่ช่อง" : "เผยแพร่แล้ว"}
           </Button>
         }
       />
@@ -962,6 +1016,46 @@ export default function ChannelSettings() {
           onConfigChange={(songs) => set("songs", songs)}
         />
       </Reveal>
+
+      {/* แถบบันทึกลอย — โผล่เฉพาะตอนมีของค้าง จะได้กดได้จากตรงไหนก็ได้ในหน้า */}
+      <AnimatePresence>
+        {dirty && canManage && (
+          <motion.div
+            initial={reduced ? false : { y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={reduced ? undefined : { y: 80, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 320, damping: 30 }}
+            className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+          >
+            <div className="pointer-events-auto mx-auto flex max-w-3xl flex-wrap items-center gap-3 rounded-2xl border border-hair bg-ink/92 px-4 py-3 shadow-lift-3 backdrop-blur-xl sm:px-5">
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ background: "rgb(var(--st-next))" }}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-sm text-ice">
+                  {neverPublished ? "ช่องนี้ยังไม่เคยเผยแพร่" : "มีการแก้ที่ยังไม่ได้เผยแพร่"}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-muted">
+                  {channel.handle
+                    ? editingOther
+                      ? `กดแล้วค่าจะขึ้นช่องของ ${otherName}`
+                      : "คนดูกับ widget จะเห็นค่าใหม่หลังกดปุ่มนี้"
+                    : "ตั้งชื่อช่อง (handle) ก่อนถึงจะเผยแพร่ได้"}
+                </p>
+              </div>
+              <Button
+                onClick={publish}
+                loading={busy}
+                disabled={!channel.handle}
+                className="shrink-0"
+              >
+                เผยแพร่ช่อง
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 

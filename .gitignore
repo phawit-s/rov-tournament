@@ -45,3 +45,6 @@ worker/.dev.vars
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# log ของ dev server ที่รันเบื้องหลัง
+.devlog.txt

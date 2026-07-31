@@ -11,6 +11,7 @@ import { LANES as GAME_LANES, identityFor, laneByLabel } from "@/lib/game";
 import { safeImageSrc } from "@/lib/safe";
 import { createBracket, defaultRoundBestOf, roundCount } from "@/lib/tournament/bracket";
 import { tournamentStore } from "@/lib/tournament/store";
+import { entryUid } from "@/lib/tournament/registration";
 import { formatThaiDate } from "@/lib/tournament/share";
 import type { SoloEntry, TeamEntry, Tournament } from "@/lib/tournament/types";
 import Crest from "../team/Crest";
@@ -26,23 +27,12 @@ type Props = {
   isAdmin: boolean;
   /** สุ่มสายเสร็จแล้วให้หน้าแม่พาไปแท็บสายแข่งต่อ — เป็นโมเมนต์ใหญ่สุดของทัวร์ */
   onGenerated?: () => void;
+  /** พาไปแท็บสมัคร — แท็บนี้เป็นรายชื่ออย่างเดียวแล้ว ฟอร์มย้ายไปอยู่ที่นั่น */
+  onGoRegister?: () => void;
 };
 
 /** ตัวเลือกตำแหน่ง ดึงจากรายการกลาง เพื่อไม่ให้ป้ายเพี้ยนกับไอคอนที่ใช้แสดงผล */
 const LANE_OPTIONS = [...GAME_LANES.map((l) => l.label), "ไม่ระบุ"];
-
-/**
- * ใบสมัครที่ผูกกับบัญชีจะมี uid ติดมาด้วย
- * เก็บเป็นฟิลด์เสริมบนโครงเดิม จะได้ไม่ต้องแก้ชนิดกลางใน lib/tournament/types
- * และใบเก่าที่ไม่มี uid ก็ยังใช้งานได้เหมือนเดิม
- */
-type AccountBound = { uid?: string };
-
-/** อ่าน uid ของเจ้าของใบแบบไม่พังกับใบเก่า */
-function accountUid(entry: TeamEntry | SoloEntry): string | null {
-  const value = (entry as { id: string; uid?: unknown }).uid;
-  return typeof value === "string" && value.trim() ? value : null;
-}
 
 /** ชื่อที่เอาไว้โชว์ — ชื่อในเกมมาก่อน แล้วค่อยไล่ลงมา ไม่โชว์ uid ให้คนอ่าน */
 function accountLabel(p: UserProfile): string {
@@ -72,12 +62,17 @@ function useAccountDirectory(): Map<string, UserProfile> {
   return useMemo(() => new Map(list.map((p) => [p.uid, p])), [list]);
 }
 
-export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) {
+export default function TeamsPanel({
+  tournament,
+  isAdmin,
+  onGenerated,
+  onGoRegister,
+}: Props) {
   const solo = tournament.entryMode === "solo";
 
   /*
-    ใบสมัครต้องผูกกับบัญชีจริง ผู้จัดถึงจะรู้ว่าใครสมัครและติดต่อกลับได้
-    จึงต้องฟังสถานะล็อกอิน (uid ที่จะแปะไปกับใบ) และโปรไฟล์ของตัวเอง (ไว้เติมฟอร์ม)
+    แท็บนี้เป็น "รายชื่อ" อย่างเดียวแล้ว ฟอร์มสาธารณะย้ายไปแท็บสมัคร
+    ที่เหลือตรงนี้คือฟอร์มกรอกแทนของผู้จัด สำหรับทีมที่เดินมาสมัครหน้างาน
   */
   useSyncExternalStore(
     authStore.subscribe,
@@ -89,12 +84,11 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
     profileStore.getSnapshot,
     profileStore.getServerSnapshot,
   );
-  const signedIn = authStore.user();
-  // บัญชีนิรนาม (มาจากหน้าโดเนท) ตามตัวกลับไม่ได้ ถือว่ายังไม่ผูกบัญชี
-  const account = signedIn && !signedIn.anonymous ? signedIn : null;
-  const myProfile = profileStore.profile();
 
   const directory = useAccountDirectory();
+
+  /** ฟอร์มกรอกแทนพับเก็บไว้ก่อน ไม่ให้บังรายชื่อซึ่งเป็นของหลักในแท็บนี้ */
+  const [adding, setAdding] = useState(false);
 
   const [name, setName] = useState("");
   const [ign, setIgn] = useState("");
@@ -103,19 +97,6 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
   const [members, setMembers] = useState("");
   const [image, setImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const [now] = useState(() => Date.now());
-  const opensAt = tournament.registerOpenAt
-    ? new Date(tournament.registerOpenAt).getTime()
-    : null;
-  const closesAt = tournament.registerCloseAt
-    ? new Date(tournament.registerCloseAt).getTime()
-    : null;
-  const notOpenYet = opensAt !== null && now < opensAt;
-  const closed = closesAt !== null && now > closesAt;
-  const full =
-    !solo && tournament.maxTeams > 0 && tournament.teams.length >= tournament.maxTeams;
-  const canRegister = !notOpenYet && !closed && !full;
 
   const resetForm = () => {
     setName("");
@@ -126,23 +107,6 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
     setImage(null);
     setError(null);
   };
-
-  /** เติมจากโปรไฟล์ของตัวเอง — คนสมัครหลายทัวร์จะได้ไม่ต้องพิมพ์ซ้ำ */
-  const fillFromProfile = () => {
-    if (!myProfile) return;
-    const gameName = myProfile.gameName?.trim();
-    if (gameName && solo) {
-      setIgn(gameName);
-      if (!name.trim()) setName(gameName);
-    }
-    const own = myProfile.contact?.trim();
-    if (own) setContact(own);
-  };
-
-  const canFillFromProfile =
-    canRegister &&
-    !!myProfile &&
-    !!((solo && myProfile.gameName?.trim()) || myProfile.contact?.trim());
 
   const pickImage = async (file: File | undefined) => {
     if (!file) return;
@@ -165,7 +129,9 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
       return setError("ชื่อทีมนี้สมัครไปแล้ว");
     }
 
-    const entry: TeamEntry & AccountBound = {
+    /* ผู้จัดกรอกเอง = ตรวจด้วยตาแล้ว ไม่ต้องเข้าคิวรออนุมัติซ้ำ
+       ไม่มี uid เพราะไม่รู้ว่าทีมนี้ผูกกับบัญชีไหน ผู้จัดใช้ช่องติดต่อแทน */
+    const entry: TeamEntry = {
       id: uid(),
       name: teamName,
       members: members
@@ -176,9 +142,7 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
       contact: contact.trim() || undefined,
       logo: image ?? undefined,
       registeredAt: new Date().toISOString(),
-      approved: !tournament.adminPin,
-      // แปะเฉพาะตอนล็อกอินอยู่จริง ไม่งั้นจะได้ค่า undefined ซึ่ง Firestore ไม่รับ
-      ...(account ? { uid: account.uid } : {}),
+      approved: true,
     };
 
     tournamentStore.mutate(tournament.id, (t) => ({
@@ -192,6 +156,7 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
     });
     toast(`รับสมัคร "${teamName}" แล้ว`, "success");
     resetForm();
+    setAdding(false);
   };
 
   const addSolo = () => {
@@ -205,7 +170,7 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
       return setError("ชื่อนี้สมัครไปแล้ว");
     }
 
-    const entry: SoloEntry & AccountBound = {
+    const entry: SoloEntry = {
       id: uid(),
       name: playerName,
       ign: ign.trim() || undefined,
@@ -213,8 +178,7 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
       contact: contact.trim() || undefined,
       avatar: image ?? undefined,
       registeredAt: new Date().toISOString(),
-      approved: !tournament.adminPin,
-      ...(account ? { uid: account.uid } : {}),
+      approved: true,
     };
 
     tournamentStore.mutate(tournament.id, (t) => ({
@@ -228,6 +192,7 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
     });
     toast(`รับสมัคร "${playerName}" แล้ว`, "success");
     resetForm();
+    setAdding(false);
   };
 
   /** สุ่มแบ่งผู้สมัครเดี่ยวเป็นทีม */
@@ -268,8 +233,8 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
   const approvedSolo = tournament.soloPlayers.filter((p) => p.approved);
 
   // ใบที่ตามตัวเจ้าของกลับได้จริง — ใบเก่าก่อนมีระบบบัญชีจะไม่มี uid
-  const boundTeams = tournament.teams.filter((t) => accountUid(t)).length;
-  const boundSolo = tournament.soloPlayers.filter((p) => accountUid(p)).length;
+  const boundTeams = tournament.teams.filter((t) => entryUid(t)).length;
+  const boundSolo = tournament.soloPlayers.filter((p) => entryUid(p)).length;
 
   const generateBracket = () => {
     if (approvedTeams.length < 2) return;
@@ -298,179 +263,162 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
     tournament.maxTeams > 0 ? tournament.teams.length / tournament.maxTeams : 0;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(320px,380px)_1fr]">
-      {/* ---------- ฟอร์มสมัคร ---------- */}
-      <Panel className="p-6">
-        <Panel.Header
-          eyebrow="Registration"
-          title={solo ? "สมัครรายบุคคล" : "สมัครเข้าแข่ง (มาเป็นทีม)"}
-        />
-
-        <RegisterStatus
-          notOpenYet={notOpenYet}
-          closed={closed}
-          full={full}
-          canRegister={canRegister}
-          tournament={tournament}
-          solo={solo}
-        />
-
-        {/* บอกให้ชัดว่าใบนี้จะไปผูกกับบัญชีไหน ไม่ใช่ส่งแล้วหายไปเฉยๆ */}
-        {hasBackend && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {account ? (
-              <>
-                <Badge rgb="77 181 145" tone="done">
-                  สมัครในนามบัญชีนี้
-                </Badge>
-                <span className="min-w-0 flex-1 truncate text-xs text-muted">
-                  {myProfile?.gameName?.trim() || account.name}
-                  {account.email ? ` · ${account.email}` : ""}
-                </span>
-              </>
-            ) : (
-              <>
-                <Badge rgb="146 151 172">ยังไม่ได้ล็อกอิน</Badge>
-                <span className="min-w-0 flex-1 text-xs text-muted">
-                  ใบนี้จะไม่ผูกกับบัญชี ผู้จัดตามตัวกลับยาก
-                </span>
-              </>
-            )}
+    <div className="space-y-5">
+      {/* ---------- ทางไปสมัคร (คนทั่วไป) ---------- */}
+      {!isAdmin && onGoRegister && (
+        <Panel interactive={false} className="flex flex-wrap items-center gap-4 p-5">
+          <div className="min-w-0 flex-1">
+            <p className="slug">อยากลงแข่งด้วย?</p>
+            <p className="mt-1 text-sm text-muted">
+              หน้านี้เป็นรายชื่อที่ผู้จัดรับเข้าแล้ว ใบสมัครอยู่ที่แท็บสมัคร
+            </p>
           </div>
-        )}
+          <Button size="sm" onClick={onGoRegister}>
+            ไปหน้าสมัคร
+          </Button>
+        </Panel>
+      )}
 
-        <div className="mt-5 space-y-4">
-          <div>
-            <Label>{solo ? "ชื่อ" : "ชื่อทีม"}</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={solo ? "ชื่อเล่น" : "เช่น Rainmaker"}
-              disabled={!canRegister}
-              maxLength={40}
-            />
-          </div>
-
-          {solo ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>ชื่อในเกม</Label>
-                <Input
-                  value={ign}
-                  onChange={(e) => setIgn(e.target.value)}
-                  placeholder="IGN"
-                  disabled={!canRegister}
-                  maxLength={30}
-                />
-              </div>
-              <div>
-                <Label>เลนที่ถนัด</Label>
-                <select
-                  value={lane}
-                  onChange={(e) => setLane(e.target.value)}
-                  disabled={!canRegister}
-                  className="field w-full rounded-xl px-3.5 py-2.5 text-sm text-ice outline-none"
-                >
-                  {LANE_OPTIONS.map((l) => (
-                    <option key={l} value={l}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+      {/* ---------- ฟอร์มกรอกแทน (เฉพาะผู้จัด) ---------- */}
+      {isAdmin && (
+        <Panel className="p-6">
+          <Panel.Header
+            eyebrow="Walk-in"
+            title={solo ? "เพิ่มผู้เล่นเอง" : "เพิ่มทีมเอง"}
+            action={
+              <Button
+                size="sm"
+                variant={adding ? "ghost" : "outline"}
+                onClick={() => {
+                  if (adding) resetForm();
+                  setAdding(!adding);
+                }}
+              >
+                {adding ? "ปิด" : "เปิดฟอร์ม"}
+              </Button>
+            }
+          />
+          {!adding ? (
+            <p className="text-sm text-muted">
+              สำหรับ{solo ? "คน" : "ทีม"}ที่เดินมาสมัครหน้างานหรือทักมาทางแชท —
+              กรอกแล้วเข้ารายชื่อทันที ไม่ต้องรออนุมัติ
+              ส่วนใบที่ส่งผ่านหน้าเว็บจะไปโผล่ที่แท็บคลาวด์ให้กดรับ
+            </p>
           ) : (
-            <div>
-              <Label hint="ทีละบรรทัด หรือคั่นด้วยลูกน้ำ">รายชื่อผู้เล่น</Label>
-              <Textarea
-                rows={5}
-                value={members}
-                onChange={(e) => setMembers(e.target.value)}
-                placeholder={"ก้อง\nเบียร์\nปอนด์"}
-                disabled={!canRegister}
-              />
-              {/* นับหัวสดๆ ให้เห็นว่าครบทีมหรือยังก่อนกดส่ง */}
-              <MemberCount raw={members} size={tournament.teamSize} />
-            </div>
-          )}
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <Label>{solo ? "ชื่อ" : "ชื่อทีม"}</Label>
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={solo ? "ชื่อเล่น" : "เช่น Rainmaker"}
+                    maxLength={40}
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <Label>ช่องทางติดต่อ (ไม่ใส่ก็ได้)</Label>
+                  <Input
+                    value={contact}
+                    onChange={(e) => setContact(e.target.value)}
+                    placeholder="ไอดีไลน์ / เบอร์ / @tiktok"
+                    maxLength={60}
+                  />
+                </div>
+              </div>
 
-          {/* รูป — ไม่บังคับ */}
-          <div>
-            <Label hint="ไม่ใส่ก็ได้ ระบบย่อรูปให้เอง">
-              {solo ? "รูปโปรไฟล์" : "โลโก้ทีม"}
-            </Label>
-            <div className="flex items-center gap-3">
-              {image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={safeImageSrc(image) ?? ""}
-                  alt=""
-                  className="h-16 w-16 rounded-xl object-cover"
-                />
+              {solo ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <Label>ชื่อในเกม</Label>
+                    <Input
+                      value={ign}
+                      onChange={(e) => setIgn(e.target.value)}
+                      placeholder="IGN"
+                      maxLength={30}
+                    />
+                  </div>
+                  <div>
+                    <Label>เลนที่ถนัด</Label>
+                    <select
+                      value={lane}
+                      onChange={(e) => setLane(e.target.value)}
+                      className="field w-full rounded-xl px-3.5 py-2.5 text-sm text-ice outline-none"
+                    >
+                      {LANE_OPTIONS.map((l) => (
+                        <option key={l} value={l}>
+                          {l}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               ) : (
-                <div className="tile-dashed grid h-16 w-16 place-items-center rounded-xl text-muted">
-                  <Crest identity={identityFor(tournament.teams.length)} size={34} />
+                <div>
+                  <Label hint="ทีละบรรทัด หรือคั่นด้วยลูกน้ำ">รายชื่อผู้เล่น</Label>
+                  <Textarea
+                    rows={4}
+                    value={members}
+                    onChange={(e) => setMembers(e.target.value)}
+                    placeholder={"ก้อง\nเบียร์\nปอนด์"}
+                  />
+                  {/* นับหัวสดๆ ให้เห็นว่าครบทีมหรือยังก่อนกดส่ง */}
+                  <MemberCount raw={members} size={tournament.teamSize} />
                 </div>
               )}
-              <div className="space-y-1.5">
-                <label
-                  className={`hover-tile tile inline-block rounded-lg px-3 py-2 text-xs text-ice/80 transition-colors ${
-                    canRegister ? "cursor-pointer" : "cursor-not-allowed opacity-40"
-                  }`}
-                >
-                  เลือกรูป
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={!canRegister}
-                    onChange={(e) => void pickImage(e.target.files?.[0])}
-                  />
-                </label>
-                {image && (
-                  <button
-                    type="button"
-                    onClick={() => setImage(null)}
-                    className="block cursor-pointer text-xs text-muted transition-colors hover:text-[#e79a9a]"
-                  >
-                    เอาออก
-                  </button>
-                )}
+
+              {/* รูป — ไม่บังคับ */}
+              <div>
+                <Label hint="ไม่ใส่ก็ได้ ระบบย่อรูปให้เอง">
+                  {solo ? "รูปโปรไฟล์" : "โลโก้ทีม"}
+                </Label>
+                <div className="flex items-center gap-3">
+                  {image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={safeImageSrc(image) ?? ""}
+                      alt=""
+                      className="h-16 w-16 rounded-xl object-cover"
+                    />
+                  ) : (
+                    <div className="tile-dashed grid h-16 w-16 place-items-center rounded-xl text-muted">
+                      <Crest
+                        identity={identityFor(tournament.teams.length)}
+                        size={34}
+                      />
+                    </div>
+                  )}
+                  <label className="hover-tile tile inline-block cursor-pointer rounded-lg px-3 py-2 text-xs text-ice/80 transition-colors">
+                    เลือกรูป
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => void pickImage(e.target.files?.[0])}
+                    />
+                  </label>
+                  {image && (
+                    <button
+                      type="button"
+                      onClick={() => setImage(null)}
+                      className="cursor-pointer text-xs text-muted transition-colors hover:text-[#e79a9a]"
+                    >
+                      เอาออก
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {error && <p className="text-xs text-[#e79a9a]">{error}</p>}
+
+              <Button onClick={solo ? addSolo : addTeam}>
+                {solo ? "เพิ่มผู้เล่น" : "เพิ่มทีม"}
+              </Button>
             </div>
-          </div>
-
-          <div>
-            <Label>ช่องทางติดต่อ (ไม่ใส่ก็ได้)</Label>
-            <Input
-              value={contact}
-              onChange={(e) => setContact(e.target.value)}
-              placeholder="ไอดีไลน์ / เบอร์ / @tiktok"
-              disabled={!canRegister}
-              maxLength={60}
-            />
-            {canFillFromProfile && (
-              <button
-                type="button"
-                onClick={fillFromProfile}
-                className="mt-2 cursor-pointer text-xs text-champagne/85 transition-colors hover:text-champagne"
-              >
-                เติมจากโปรไฟล์ของฉัน
-              </button>
-            )}
-          </div>
-
-          {error && <p className="text-xs text-[#e79a9a]">{error}</p>}
-
-          <Button
-            onClick={solo ? addSolo : addTeam}
-            disabled={!canRegister}
-            className="w-full"
-          >
-            {solo ? "สมัครเลย" : "สมัครทีมนี้"}
-          </Button>
-        </div>
-      </Panel>
+          )}
+        </Panel>
+      )}
 
       {/* ---------- รายชื่อ ---------- */}
       <div className="space-y-5">
@@ -589,61 +537,6 @@ export default function TeamsPanel({ tournament, isAdmin, onGenerated }: Props) 
 }
 
 /* ---------------- ชิ้นส่วนย่อย ---------------- */
-
-/** แถบบอกว่าเปิด/ปิดรับสมัครอยู่ ใช้สีสถานะแทนตัวหนังสือล้วน */
-function RegisterStatus({
-  notOpenYet,
-  closed,
-  full,
-  canRegister,
-  tournament,
-  solo,
-}: {
-  notOpenYet: boolean;
-  closed: boolean;
-  full: boolean;
-  canRegister: boolean;
-  tournament: Tournament;
-  solo: boolean;
-}) {
-  const badge = canRegister
-    ? { label: "เปิดรับสมัคร", rgb: "77 181 145", tone: "live" as const }
-    : notOpenYet
-      ? { label: "ยังไม่เปิด", rgb: "230 200 148", tone: "plain" as const }
-      : closed
-        ? { label: "ปิดรับแล้ว", rgb: "146 151 172", tone: "plain" as const }
-        : { label: "รับครบแล้ว", rgb: "221 175 100", tone: "done" as const };
-
-  return (
-    <div className="sunken rounded-xl px-4 py-3.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Badge rgb={badge.rgb} tone={badge.tone}>
-          {badge.label}
-        </Badge>
-        {tournament.maxTeams > 0 && !solo && (
-          <span className="num text-xs text-muted">
-            {tournament.teams.length}/{tournament.maxTeams} ทีม
-          </span>
-        )}
-      </div>
-      <p className="mt-2.5 text-xs leading-relaxed text-muted">
-        {notOpenYet && <>เปิด {formatThaiDate(tournament.registerOpenAt)}</>}
-        {!notOpenYet && closed && <>ปิดไปเมื่อ {formatThaiDate(tournament.registerCloseAt)}</>}
-        {!notOpenYet && !closed && full && <>รับครบ {tournament.maxTeams} ทีมแล้ว</>}
-        {canRegister && (
-          <>
-            {tournament.registerCloseAt && (
-              <>ปิดรับ {formatThaiDate(tournament.registerCloseAt)} · </>
-            )}
-            {solo
-              ? `สมัครคนเดียวได้เลย ผู้จัดจะสุ่มแบ่งทีมละ ${tournament.teamSize} คนให้ทีหลัง`
-              : `รับ ${tournament.maxTeams || "ไม่จำกัด"} ทีม · ทีมละ ${tournament.teamSize} คน`}
-          </>
-        )}
-      </p>
-    </div>
-  );
-}
 
 /** นับรายชื่อที่พิมพ์ไปแล้วเทียบกับขนาดทีม กันส่งไม่ครบ */
 function MemberCount({ raw, size }: { raw: string; size: number }) {
@@ -773,7 +666,7 @@ function SoloRow({
 }) {
   const laneMeta = laneByLabel(player.lane);
   const LaneIcon = laneMeta ? LANE_ICON[laneMeta.key] : null;
-  const ownerId = accountUid(player);
+  const ownerId = entryUid(player);
 
   return (
     <motion.li
@@ -864,7 +757,7 @@ function TeamRow({
   directory: Map<string, UserProfile>;
 }) {
   const identity = identityFor(index);
-  const ownerId = accountUid(team);
+  const ownerId = entryUid(team);
 
   return (
     <motion.li

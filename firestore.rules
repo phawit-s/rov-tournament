@@ -294,7 +294,16 @@ service cloud.firestore {
           && request.resource.data.members.size() <= 12;
 
         // อนุมัติ/ปฏิเสธ ทำได้เฉพาะเจ้าของทัวร์
-        allow update, delete: if canManage();
+        allow update: if canManage();
+
+        /*
+          ถอนใบ — ผู้จัดลบได้เสมอ ส่วนเจ้าของใบถอนเองได้เฉพาะตอนที่ยังไม่ถูกตัดสิน
+          ถ้าปล่อยให้ถอนหลังอนุมัติแล้ว ทีมจะหายจากสายที่จับไปแล้วโดยผู้จัดไม่รู้ตัว
+        */
+        allow delete: if canManage()
+          || (request.auth != null
+              && resource.data.byUid == request.auth.uid
+              && resource.data.status == 'pending');
       }
 
     }
