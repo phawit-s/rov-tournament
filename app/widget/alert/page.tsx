@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useHashParam } from "@/hooks/useClient";
+import { useHashParam, useQueryFlag } from "@/hooks/useClient";
 import { useLiveTournament, useWidgetOptions } from "@/hooks/useLiveTournament";
 import { watchChannelDonations } from "@/lib/channel/donations";
 import { watchChannel } from "@/lib/channel/store";
@@ -34,10 +34,21 @@ export default function AlertWidget() {
   const current = queue[0] ?? null;
   const seen = useRef<Set<string>>(new Set());
   const primed = useRef(false);
+  /** โหลดคิวรอบแรกเสร็จหรือยัง ใช้บอกว่า "ไม่มีใบเลย" ต่างจาก "ยังโหลดไม่เสร็จ" */
+  const [loaded, setLoaded] = useState(false);
+  const [total, setTotal] = useState(0);
 
   // #ch= คือโหมดช่อง (แนะนำ) ใช้ลิงก์เดียวได้ตลอด
   const channelId = useHashParam("ch");
+  const replayMode = useQueryFlag("replay");
   const [channel, setChannel] = useState<Channel | null>(null);
+
+  /* ตัวรับ snapshot ผูกไว้ครั้งเดียว จึงอ่านค่าธงผ่าน ref
+     ประกาศ effect นี้ไว้ก่อนตัวที่สมัคร subscription ค่าจะได้พร้อมก่อนใบแรกมาถึง */
+  const replayRef = useRef(false);
+  useEffect(() => {
+    replayRef.current = replayMode;
+  }, [replayMode]);
 
   useEffect(() => {
     if (!channelId || !cloudReady()) return;
@@ -46,14 +57,13 @@ export default function AlertWidget() {
 
   // แยกออกมาจาก effect เพราะเป็น callback ของ subscription ไม่ใช่โค้ดที่รันตอน mount
   const handleSnapshot = useCallback((list: Donation[]) => {
-    const replay =
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("replay") === "1";
+    setLoaded(true);
+    setTotal(list.length);
 
     // รอบแรกถือว่าเห็นหมดแล้ว จะได้ไม่เล่นย้อนหลังตอนเปิดหน้า
     if (!primed.current) {
       primed.current = true;
-      if (!replay) {
+      if (!replayRef.current) {
         list.forEach((d) => seen.current.add(d.id));
         return;
       }
@@ -87,6 +97,23 @@ export default function AlertWidget() {
         <WidgetHint title="ยังเชื่อมช่องไม่ได้">
           ลิงก์ต้องมี <code>#ch=รหัสช่อง</code> (หรือ <code>#c=รหัสทัวร์</code>)
           และต้องเชื่อม Firebase แล้ว
+        </WidgetHint>
+      </WidgetShell>
+    );
+  }
+
+  /*
+    ?replay=1 คือโหมดตั้งค่า คนเปิดมาเพื่อ "ดูว่ามันขึ้นตรงไหน" ก่อนเอาไปวางจริง
+    ถ้ายังไม่เคยมีใบโดเนทที่อนุมัติเลย จอจะดำสนิทซึ่งแยกไม่ออกจากลิงก์ผิดหรือ widget พัง
+    โหมดนี้จึงต้องบอกเหตุผลออกมา ส่วนโหมดใช้งานจริง (ไม่มี replay) ต้องเงียบเหมือนเดิม
+  */
+  if (!current && replayMode && loaded && total === 0) {
+    return (
+      <WidgetShell align="center">
+        <WidgetHint title="ยังไม่มีใบให้เล่นซ้ำ">
+          เชื่อมช่องได้แล้ว แต่ช่องนี้ยังไม่มีใบสนับสนุนที่อนุมัติสักใบ
+          จึงไม่มีอะไรให้เล่นย้อน — ลองส่งใบทดสอบจากหน้าสนับสนุนแล้วกดอนุมัติดู
+          ถ้าจะเอาไปใช้จริงให้ตัด <code>?replay=1</code> ออก
         </WidgetHint>
       </WidgetShell>
     );

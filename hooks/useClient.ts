@@ -63,6 +63,28 @@ export function useHashParam(name: string): string | null {
   );
 }
 
+/**
+ * ธงเปิด/ปิดที่ติดมากับ URL เช่น ?replay=1
+ *
+ * รับทั้งใน query และใน hash เหมือน useHashParam เพราะ Browser Source
+ * บางตัวส่งมาคนละที่กัน แล้วคนตั้งค่าก็พิมพ์สลับกันเป็นเรื่องปกติ
+ */
+export function useQueryFlag(name: string): boolean {
+  const subscribe = useCallback((onChange: () => void) => {
+    window.addEventListener("hashchange", onChange);
+    return () => window.removeEventListener("hashchange", onChange);
+  }, []);
+
+  return useSyncExternalStore(
+    subscribe,
+    () => {
+      if (new URLSearchParams(window.location.search).get(name) === "1") return true;
+      return new RegExp(`[#&]${name}=1(&|$)`).test(window.location.hash);
+    },
+    () => false,
+  );
+}
+
 /** ติดตาม media query โดยไม่ setState ใน effect */
 export function useMediaQuery(query: string, serverValue = false): boolean {
   const subscribe = useCallback(
