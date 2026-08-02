@@ -212,7 +212,20 @@ service cloud.firestore {
           && (request.resource.data.message == null
               || request.resource.data.message.size() <= 120);
 
-        allow update, delete: if canManageChannel();
+        // จัดคิว (เปลี่ยนสถานะ/เลื่อนลำดับ) ทำได้เฉพาะเจ้าของช่องกับผู้ดูแล
+        allow update: if canManageChannel();
+
+        /*
+          ถอนเพลงของตัวเอง — คนขอลบใบของตัวเองได้เฉพาะตอนที่ยังรอคิวอยู่
+
+          ห้ามลบตอนเพลงกำลังเล่น เพราะจะดึงเพลงหายไปกลางไลฟ์
+          และห้ามลบใบที่เล่นจบแล้ว เพราะเป็นประวัติที่สตรีมเมอร์ใช้ดูย้อนหลัง
+          (เทียบ byUid กับคนที่กดอยู่ คนอื่นจึงลบของเราไม่ได้)
+        */
+        allow delete: if canManageChannel()
+          || (request.auth != null
+              && resource.data.byUid == request.auth.uid
+              && resource.data.status == 'queued');
       }
     }
 

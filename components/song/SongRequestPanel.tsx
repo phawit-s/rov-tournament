@@ -6,7 +6,12 @@ import { authStore, getAuthClient } from "@/lib/backend/firebase";
 import { profileStore } from "@/lib/backend/users";
 import type { Channel } from "@/lib/channel/types";
 import { safeImageSrc, safeUrl } from "@/lib/safe";
-import { splitQueue, submitSongRequest, watchSongQueue } from "@/lib/song/store";
+import {
+  removeSongRequest,
+  splitQueue,
+  submitSongRequest,
+  watchSongQueue,
+} from "@/lib/song/store";
 import { DEFAULT_SONG_CONFIG, type SongRequest } from "@/lib/song/types";
 import {
   lookupVideo,
@@ -82,6 +87,8 @@ export default function SongRequestPanel({
   const [error, setError] = useState<string | null>(null);
   /** คิวที่เท่าไหร่ของเพลงที่เพิ่งส่งไป โชว์ค้างไว้จนกว่าจะส่งใบใหม่ */
   const [placed, setPlaced] = useState<number | null>(null);
+  /** ใบที่กำลังถอนอยู่ กันกดรัว */
+  const [pulling, setPulling] = useState<string | null>(null);
 
   const timer = useRef<number | null>(null);
   /** ลำดับการถาม — คำตอบของลิงก์เก่าที่มาช้าต้องไม่ทับผลของลิงก์ใหม่ */
@@ -163,6 +170,21 @@ export default function SongRequestPanel({
 
   const info = preview.state === "ok" ? preview.info : null;
   const canSubmit = !!info && !!name.trim() && !busy;
+
+  /** ถอนเพลงของตัวเองออกจากคิว — ทำได้เฉพาะใบที่ยังไม่ถึงคิวเล่น */
+  const pull = async (song: SongRequest) => {
+    setPulling(song.id);
+    try {
+      await removeSongRequest(channelId, song.id);
+      toast("ถอนเพลงออกจากคิวแล้ว", "success", 1800);
+      // ถอนแล้วโควตาคืน ตัวเลข "ขอได้อีกกี่เพลง" จะขยับเองจาก snapshot
+      setPlaced(null);
+    } catch {
+      toast("ถอนไม่สำเร็จ — เพลงอาจถึงคิวเล่นไปแล้ว", "error");
+    } finally {
+      setPulling(null);
+    }
+  };
 
   const submit = async () => {
     if (!info || !canSubmit) return;
@@ -448,9 +470,23 @@ export default function SongRequestPanel({
                     </p>
                   </div>
                   {song.byUid === myUid && (
-                    <Badge rgb="207 167 101" className="hidden sm:inline-flex">
-                      ของคุณ
-                    </Badge>
+                    <>
+                      <Badge rgb="207 167 101" className="hidden sm:inline-flex">
+                        ของคุณ
+                      </Badge>
+                      {/* ถอนได้เฉพาะของตัวเองที่ยังรอคิว — กติกาฝั่งเซิร์ฟเวอร์
+                          บังคับเรื่องนี้อยู่แล้ว ตรงนี้แค่ไม่โชว์ปุ่มให้สับสน */}
+                      <button
+                        type="button"
+                        disabled={pulling === song.id}
+                        onClick={() => void pull(song)}
+                        title="ถอนเพลงนี้ออกจากคิว"
+                        aria-label="ถอนเพลงนี้ออกจากคิว"
+                        className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg text-muted transition-colors hover:bg-[#e79a9a]/12 hover:text-[#e79a9a] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        ✕
+                      </button>
+                    </>
                   )}
                 </motion.li>
               ))}
