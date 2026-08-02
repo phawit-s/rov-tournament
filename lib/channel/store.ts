@@ -74,16 +74,50 @@ export function decideChannelSeed(input: {
   return input.cloudExists ? "use-cloud" : "create-empty";
 }
 
-export function emptyChannel(owner: { uid: string; email?: string | null }): Channel {
+/**
+ * โครงช่องเปล่า
+ *
+ * ค่าเริ่มต้นของ id คือ uid ของเจ้าของ ซึ่งเป็นช่องแรกของคนนั้น
+ * ช่องที่สองเป็นต้นไปต้องส่ง id เข้ามาเอง เพราะชื่อเอกสารซ้ำกันไม่ได้
+ */
+export function emptyChannel(
+  owner: { uid: string; email?: string | null },
+  id?: string,
+): Channel {
   const now = new Date().toISOString();
   return {
     ...DEFAULT_CHANNEL,
-    id: owner.uid,
+    id: id ?? owner.uid,
     ownerUid: owner.uid,
     ownerEmail: owner.email ?? undefined,
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/**
+ * เปิดช่องใหม่ให้เจ้าของคนเดิม
+ *
+ * ต้องเขียนขึ้นคลาวด์ทันทีตั้งแต่ตอนสร้าง ไม่รอให้กดเผยแพร่
+ * เพราะแถบสลับช่องอ่านรายชื่อจากคลาวด์ ถ้าไม่เขียนก่อนช่องใหม่จะไม่โผล่ให้เลือก
+ *
+ * ยังไม่ตั้ง handle ให้ — เจ้าของต้องตั้งเองก่อนคนอื่นถึงจะเปิดลิงก์ /c/#h= ได้
+ * (ตัวหา handle มองข้ามช่องที่ handle ว่างอยู่แล้ว จึงไม่ไปชนกับช่องอื่น)
+ */
+export async function createChannel(
+  owner: { uid: string; email?: string | null },
+  name: string,
+): Promise<Channel> {
+  const db = getDb();
+  if (!db) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
+  const id = `ch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const fresh: Channel = { ...emptyChannel(owner, id), name: name.trim() };
+  await setDoc(doc(db, COL, id), {
+    ...fresh,
+    isPublic: true,
+    syncedAt: serverTimestamp(),
+  });
+  return fresh;
 }
 
 export const channelStore = {

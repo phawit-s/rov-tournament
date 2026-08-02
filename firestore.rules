@@ -99,10 +99,27 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // ---------- ช่อง (โปรไฟล์ผู้จัด + ระบบโดเนท/สมาชิก) ----------
+    /*
+      ---------- ช่อง (โปรไฟล์ผู้จัด + ระบบโดเนท/สมาชิก) ----------
+
+      เจ้าของดูจากฟิลด์ ownerUid ในเอกสาร ไม่ใช่จากชื่อเอกสาร
+
+      ของเดิมบังคับให้ชื่อเอกสารเท่ากับ uid ของเจ้าของ ซึ่งเท่ากับล็อกไว้ว่า
+      หนึ่งบัญชีมีได้ช่องเดียวตลอดกาล เพราะชื่อเอกสารซ้ำกันไม่ได้
+      ตอนนี้ชื่อเอกสารเป็นรหัสสุ่ม คนหนึ่งจึงเปิดได้หลายช่อง
+      ช่องเก่าที่ชื่อเอกสารบังเอิญเท่ากับ uid ยังใช้ได้เหมือนเดิม
+      เพราะมันมี ownerUid ตรงกันอยู่แล้ว
+    */
     match /channels/{channelId} {
       function isChannelOwner() {
-        return request.auth != null && request.auth.uid == channelId;
+        return request.auth != null
+          && resource.data.ownerUid == request.auth.uid;
+      }
+      // ตอนสร้างยังไม่มี resource ให้อ่าน ต้องดูจากของที่กำลังจะเขียนแทน
+      function claimsChannel() {
+        return request.auth != null
+          && request.auth.token.firebase.sign_in_provider != 'anonymous'
+          && request.resource.data.ownerUid == request.auth.uid;
       }
       // ผู้ดูแลระบบเข้าไปจัดการได้ทุกช่อง ไม่ใช่แค่ช่องตัวเอง
       function canManageChannel() {
@@ -112,15 +129,19 @@ service cloud.firestore {
       // ใครก็อ่านได้ หน้าโดเนทกับ widget ต้องใช้
       allow read: if true;
 
-      // เจ้าของช่องต้องใส่ ownerUid เป็นตัวเอง ส่วนผู้ดูแลแก้ของใครก็ได้
-      allow create, update: if (isChannelOwner()
-          && request.resource.data.ownerUid == request.auth.uid)
-        || isAdmin();
+      // สร้างใหม่ได้ถ้าใส่ ownerUid เป็นตัวเอง
+      allow create: if claimsChannel();
+
+      // เจ้าของห้ามยกช่องให้คนอื่นด้วยการแก้ ownerUid ระหว่างทาง
+      // ส่วนผู้ดูแลระบบแก้ของใครก็ได้ (ใช้ตอนช่วยตั้งค่าให้ผู้จัด)
+      allow update: if (isChannelOwner() && claimsChannel()) || isAdmin();
       allow delete: if canManageChannel();
 
       match /donations/{donationId} {
         function isChannelOwner() {
-          return request.auth != null && request.auth.uid == channelId;
+          // ดูจาก ownerUid ของช่องแม่ ไม่ใช่ชื่อเอกสาร — คนหนึ่งมีได้หลายช่อง
+          return request.auth != null
+            && channel().ownerUid == request.auth.uid;
         }
         function canManageChannel() {
           return isChannelOwner() || isAdmin();
@@ -161,7 +182,9 @@ service cloud.firestore {
       */
       match /songRequests/{songId} {
         function isChannelOwner() {
-          return request.auth != null && request.auth.uid == channelId;
+          // ดูจาก ownerUid ของช่องแม่ ไม่ใช่ชื่อเอกสาร — คนหนึ่งมีได้หลายช่อง
+          return request.auth != null
+            && channel().ownerUid == request.auth.uid;
         }
         function canManageChannel() {
           return isChannelOwner() || isAdmin();

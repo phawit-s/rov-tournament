@@ -16,6 +16,7 @@ import {
 } from "@/lib/channel/donations";
 import {
   channelStore,
+  createChannel,
   decideChannelSeed,
   emptyChannel,
   markDonationAutoApproved,
@@ -256,8 +257,11 @@ export default function ChannelSettings() {
   const liveLoaded = !!activeId && liveSnap?.id === activeId;
   const live = liveLoaded ? (liveSnap?.data ?? null) : null;
   const autoApprove = !!channel?.donate.autoApprove;
-  // แก้ช่องตัวเองได้เสมอ ช่องคนอื่นต้องเป็นผู้ดูแลที่ Firestore ยืนยันแล้ว
-  const canManage = !!user && !!activeId && (activeId === user.uid || isAdmin);
+  /* แก้ช่องของตัวเองได้เสมอ ช่องคนอื่นต้องเป็นผู้ดูแลที่ Firestore ยืนยันแล้ว
+     ดูจาก ownerUid ของช่อง ไม่ใช่จากชื่อเอกสาร เพราะช่องที่สองเป็นต้นไป
+     ชื่อเอกสารเป็นรหัสสุ่ม ไม่ได้เท่ากับ uid ของเจ้าของแล้ว */
+  const canManage =
+    !!user && !!channel && (channel.ownerUid === user.uid || isAdmin);
 
   /*
     ยังไม่มีสำเนาในเครื่อง — ต้องดึงของจริงจากคลาวด์มาก่อน ห้ามสร้างโครงว่างทันที
@@ -353,7 +357,12 @@ export default function ChannelSettings() {
     channelStore.update({ [key]: value } as Partial<Channel>);
   };
 
-  /** สลับช่องที่กำลังแก้ — ส่ง null = กลับมาช่องตัวเอง */
+  /**
+   * สลับช่องที่กำลังแก้ — ส่ง null = กลับมาช่องแรกของตัวเอง
+   *
+   * ช่องแรกของแต่ละคนใช้ uid เป็นชื่อเอกสาร และมีสำเนาอยู่ใน localStorage
+   * ช่องที่สร้างทีหลังมีรหัสของตัวเอง จึงแก้ผ่านสำเนาชั่วคราวใน state แทน
+   */
   const selectChannel = (next: Channel | null) => {
     if (next && next.id === user.uid) {
       setRemote(null);
@@ -364,6 +373,24 @@ export default function ChannelSettings() {
     setDonations([]);
     setStats(NO_STATS);
     setTab("all");
+  };
+
+  /** เปิดช่องใหม่ให้ตัวเอง แล้วสลับไปแก้ช่องนั้นเลย */
+  const addChannel = async () => {
+    setBusy(true);
+    try {
+      const made = await createChannel(
+        { uid: user.uid, email: user.email },
+        `ช่องใหม่ ${channels.length + 1}`,
+      );
+      selectChannel(made);
+      toast("เปิดช่องใหม่แล้ว — ตั้งชื่อช่อง (handle) ก่อนถึงจะเผยแพร่ได้", "success");
+      void recordAudit("channel.publish", { id: made.id, name: made.name, detail: "เปิดช่องใหม่" });
+    } catch {
+      toast("เปิดช่องใหม่ไม่สำเร็จ", "error");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const publish = async () => {
@@ -470,6 +497,8 @@ export default function ChannelSettings() {
           ownName={stored?.name || stored?.handle || user.name}
           ownAvatar={stored?.avatar}
           onSelect={selectChannel}
+          onCreate={() => void addChannel()}
+          busy={busy}
         />
       )}
 
@@ -1134,6 +1163,8 @@ function ChannelSwitcher({
   ownName,
   ownAvatar,
   onSelect,
+  onCreate,
+  busy,
 }: {
   channels: Channel[];
   activeId: string;
@@ -1141,45 +1172,70 @@ function ChannelSwitcher({
   ownName: string;
   ownAvatar?: string;
   onSelect: (c: Channel | null) => void;
+  onCreate: () => void;
+  busy: boolean;
 }) {
-  const own = channels.find((c) => c.id === ownUid);
-  const others = channels.filter((c) => c.id !== ownUid);
+  /* ช่องแรกของเราใช้ uid เป็นชื่อเอกสาร ส่วนช่องที่สร้างทีหลังมีรหัสของตัวเอง
+     แยกเป็นสองกลุ่มให้เห็นชัดว่าอันไหนของเรา อันไหนของคนอื่นที่เข้าไปช่วยดูแล */
+  const first = channels.find((c) => c.id === ownUid);
+  const mine = channels.filter((c) => c.id !== ownUid && c.ownerUid === ownUid);
+  const others = channels.filter((c) => c.id !== ownUid && c.ownerUid !== ownUid);
 
   return (
     <Panel variant="quiet" className="p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="slug slug-2">Admin · สลับช่อง</span>
-        <span className="num text-eyebrow text-muted">{others.length + 1} ช่อง</span>
+        <span className="num text-eyebrow text-muted">
+          ของคุณ {mine.length + 1} · ของคนอื่น {others.length}
+        </span>
       </div>
 
       <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
         <ChannelChip
-          name={own?.name || ownName}
-          handle={own?.handle}
-          avatar={own?.avatar ?? ownAvatar}
+          name={first?.name || ownName}
+          handle={first?.handle}
+          avatar={first?.avatar ?? ownAvatar}
           mine
           active={activeId === ownUid}
           onClick={() => onSelect(null)}
         />
+        {mine.map((c) => (
+          <ChannelChip
+            key={c.id}
+            name={c.name || c.handle || c.id.slice(0, 8)}
+            handle={c.handle}
+            avatar={c.avatar}
+            mine
+            active={activeId === c.id}
+            onClick={() => onSelect(c)}
+          />
+        ))}
         {others.map((c) => (
           <ChannelChip
             key={c.id}
-            name={c.name || c.handle || c.id.slice(0, 6)}
+            name={c.name || c.handle || c.id.slice(0, 8)}
             handle={c.handle}
             avatar={c.avatar}
             active={activeId === c.id}
             onClick={() => onSelect(c)}
           />
         ))}
+
+        <button
+          type="button"
+          onClick={onCreate}
+          disabled={busy}
+          className="hover-tile flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-dashed border-hair px-4 py-2 font-display text-xs text-muted transition-colors hover:text-champagne disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          + เปิดช่องใหม่
+        </button>
       </div>
 
-      {others.length === 0 && (
-        <p className="mt-2.5 text-xs leading-relaxed text-muted">
-          ตอนนี้ทั้งระบบมีช่องเดียวคือช่องของคุณ กดที่การ์ดจึงไม่มีอะไรให้สลับไป —
-          ช่องของคนอื่นจะโผล่ที่นี่ก็ต่อเมื่อเจ้าของช่องนั้นเข้ามาตั้งค่าแล้วกด
-          &ldquo;เผยแพร่ช่อง&rdquo; ด้วยตัวเองอย่างน้อยหนึ่งครั้ง
-        </p>
-      )}
+      <p className="mt-2.5 text-xs leading-relaxed text-muted">
+        {others.length === 0
+          ? "ช่องของคนอื่นจะโผล่ที่นี่ก็ต่อเมื่อเจ้าของช่องนั้นเข้ามาตั้งค่าแล้วกดเผยแพร่เองอย่างน้อยหนึ่งครั้ง"
+          : "กดที่ช่องไหนก็สลับไปแก้ช่องนั้น — ของที่แก้ค้างไว้ในช่องเดิมจะหายถ้ายังไม่ได้กดเผยแพร่"}
+      </p>
     </Panel>
   );
 }
