@@ -782,14 +782,22 @@ input[type="range"] {
   appearance: none;
   background: transparent;
 }
+/*
+  แถบสีต้องจบตรงกึ่งกลางหัวจับพอดี
+
+  หัวจับกว้าง 18px มันจึงวิ่งอยู่แค่ช่วง 9px ถึง (กว้างทั้งหมด − 9px)
+  ถ้าวางจุดจบของสีที่ "กี่เปอร์เซ็นต์ของความกว้างเต็ม" ตรงๆ สองอันจะเหลื่อมกัน
+  ห่างสุดถึง 9px ที่ปลายทั้งสองข้าง ซึ่งเห็นชัดมากว่าไม่ตรงกัน
+  --fill จึงรับค่าเป็นตัวเลขล้วน 0–1 ไม่ใช่เปอร์เซ็นต์ เพราะต้องเอาไปคูณใน calc
+*/
 input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 99px;
   background: linear-gradient(
     90deg,
     var(--color-gold-deep) 0%,
-    var(--color-champagne) var(--fill, 50%),
-    var(--color-line) var(--fill, 50%)
+    var(--color-champagne) calc(9px + (100% - 18px) * var(--fill, 0.5)),
+    var(--color-line) calc(9px + (100% - 18px) * var(--fill, 0.5))
   );
 }
 input[type="range"]::-webkit-slider-thumb {

@@ -616,7 +616,7 @@ function Stepper({
         max={max}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={{ ["--fill" as string]: `${pct}%` }}
+        style={{ ["--fill" as string]: pct / 100 }}
         className="w-full cursor-pointer"
         aria-label={label}
       />

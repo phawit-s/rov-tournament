@@ -174,15 +174,18 @@ export function SongPlayerCore({
   }, [channelId, active, playing, queued, queue]);
 
   /**
-   * คิวว่างสนิท = หยิบเพลงสำรองมาต่อให้ ไลฟ์จะได้ไม่เงียบ
+   * เติมเพลงสำรองไว้ล่วงหน้าหนึ่งเพลงเสมอเมื่อคิวว่าง
    *
-   * ใส่เป็นใบจริงในคิวเลย ไม่ได้เล่นลอยๆ widget กับคนดูจะได้เห็นว่ากำลังเล่นอะไร
-   * และเพราะ splitQueue จัดให้เพลงสำรองอยู่ท้ายแถวเสมอ พอมีคนขอเข้ามา
-   * เพลงของเขาจะได้คิวก่อนเพลงสำรองที่ยังไม่ได้เล่นโดยอัตโนมัติ
+   * ตั้งใจเติมตั้งแต่ตอนที่ยังมีเพลงเล่นอยู่ ไม่ใช่รอให้เงียบก่อนค่อยหา
+   * เพราะถ้ารอ ทั้งจอผู้ดูแลและ widget จะขึ้นว่า "คิวว่าง" ตลอดเวลา
+   * ทั้งที่มีกองสำรองรออยู่ร้อยเพลง คนดูแลจะไม่มีทางรู้ว่าอะไรกำลังจะมา
+   *
+   * ใส่เป็นใบจริงในคิว ไม่ได้เล่นลอยๆ และเพราะ splitQueue จัดให้เพลงสำรอง
+   * อยู่ท้ายแถวเสมอ พอมีคนขอเข้ามาเพลงของเขาจะแทรกขึ้นก่อนใบสำรองใบนี้เอง
    */
   const fillingRef = useRef(false);
   useEffect(() => {
-    if (!channelId || !active || playing || queued.length > 0) return;
+    if (!channelId || !active || queued.length > 0) return;
     if (fillerMode === "off" || !filler?.length || fillingRef.current) return;
 
     const pick = pickFiller(filler, queue, fillerMode);
@@ -205,7 +208,7 @@ export function SongPlayerCore({
     ).finally(() => {
       fillingRef.current = false;
     });
-  }, [channelId, active, playing, queued.length, queue, filler, fillerMode]);
+  }, [channelId, active, queued.length, queue, filler, fillerMode]);
 
   /* ---------- ตัวเล่น ---------- */
   useEffect(() => {
@@ -345,6 +348,45 @@ export function SongPlayerCore({
     }
   };
 
+  /** คลิกเพลงในคิว = ให้เล่นเพลงนั้นเลย ไม่ต้องรอไล่ไปตามลำดับ */
+  const playNow = async (song: SongRequest) => {
+    if (song.id === playing?.id) return;
+    if (playing) await setSongStatus(channelId, playing.id, "played");
+    await setSongStatus(channelId, song.id, "playing", queue);
+  };
+
+  /** คลิกเพลงในกองสำรอง = ใส่คิวแล้วเล่นเลย */
+  const playTrackNow = async (track: FillerTrack) => {
+    const uid = authStore.user()?.uid;
+    if (!uid) return;
+    const id = await addSongToQueue(
+      channelId,
+      {
+        videoId: track.videoId,
+        title: track.title,
+        author: track.author,
+        url: watchUrl(track.videoId),
+        byUid: uid,
+        byName: "เพลย์ลิสต์สำรอง",
+      },
+      "filler",
+    );
+    if (!id) return;
+    if (playing) await setSongStatus(channelId, playing.id, "played");
+    await setSongStatus(channelId, id, "playing", queue);
+  };
+
+  /*
+    เพลงสำรองที่จะมาถึงคิวต่อไป
+
+    โหมดเรียงลำดับบอกได้แน่นอนว่าเพลงไหนมาก่อน จึงติดป้ายให้เห็น
+    โหมดสุ่มบอกไม่ได้ — จะเดาให้ดูก็เท่ากับโกหก เลยไม่ติดป้ายเลย
+  */
+  const nextFillerId =
+    fillerMode === "order" && filler?.length
+      ? (pickFiller(filler, queue, "order")?.videoId ?? null)
+      : null;
+
   const stage = (
     <div className="relative aspect-video w-full overflow-hidden bg-black">
       {/* ตัวเล่นต้องอยู่ใน DOM ตลอด ไม่งั้นสร้าง player ใหม่ทุกครั้งที่เปลี่ยนเพลง */}
@@ -355,7 +397,9 @@ export function SongPlayerCore({
           <div>
             <p className="slug">รอเพลง</p>
             <p className="mt-2 text-sm text-muted">
-              คิวว่างอยู่ — มีคนขอเพลงเข้ามาเมื่อไหร่ ตัวเล่นจะเริ่มเองทันที
+              {fillerMode !== "off" && filler?.length
+                ? "กำลังหยิบเพลงจากกองสำรองมาเล่น…"
+                : "คิวว่างอยู่ — มีคนขอเพลงเข้ามาเมื่อไหร่ ตัวเล่นจะเริ่มเองทันที"}
             </p>
           </div>
         </div>
@@ -482,6 +526,7 @@ export function SongPlayerCore({
           value={volume}
           onChange={(e) => setVolume(Number(e.target.value))}
           className="flex-1"
+          style={{ ["--fill" as string]: volume / 100 }}
           aria-label="ระดับเสียง"
         />
         <span className="num w-9 text-right text-xs text-muted">{volume}</span>
@@ -499,9 +544,10 @@ export function SongPlayerCore({
     );
   }
 
-  /* ---------- หน้าเต็ม ---------- */
+  /* ---------- หน้าเต็ม ----------
+     items-start ไม่งั้นการ์ดขวาจะถูกยืดให้สูงเท่าตัวเล่นแล้วเหลือพื้นที่ว่างโล่ง */
   return (
-    <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+    <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-start">
       <Panel variant="feature" className="overflow-hidden p-0">
         {stage}
         <div className="p-5">{controls}</div>
@@ -513,40 +559,67 @@ export function SongPlayerCore({
         {!ready && !apiError && <Skeleton className="h-16 w-full" />}
 
         {queued.length === 0 ? (
-          <EmptyState
-            title="คิวว่าง"
-            description="ส่งลิงก์หน้าขอเพลงให้คนดู แล้วเพลงจะเข้ามาเล่นเองที่นี่"
-          />
+          <p className="text-sm text-muted">
+            ยังไม่มีใครขอเพลง —{" "}
+            {fillerMode === "off" || !filler?.length
+              ? "เปิดเพลย์ลิสต์สำรองไว้จะได้ไม่เงียบ"
+              : "ระบบจะหยิบจากกองสำรองข้างล่างมาเล่นให้เอง"}
+          </p>
         ) : (
           <ul className="space-y-2">
             {queued.map((s, i) => (
-              <motion.li
-                key={s.id}
-                layout={!reduced}
-                className="tile flex items-center gap-3 rounded-xl p-2.5"
-              >
-                <span className="fig text-outline w-6 shrink-0 text-center text-lg">
-                  {i + 1}
-                </span>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={thumbUrl(s.videoId)}
-                  alt=""
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                  className="h-9 w-16 shrink-0 rounded object-cover"
+              <motion.li key={s.id} layout={!reduced}>
+                <QueueRow
+                  no={i + 1}
+                  videoId={s.videoId}
+                  title={s.title}
+                  sub={
+                    s.source === "filler" ? "จากเพลย์ลิสต์สำรอง" : `ขอโดย ${s.byName}`
+                  }
+                  onClick={() => void playNow(s)}
                 />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-ice">{s.title}</span>
-                  <span className="block truncate text-xs text-muted">
-                    ขอโดย {s.byName}
-                  </span>
-                </span>
               </motion.li>
             ))}
           </ul>
+        )}
+
+        {/* ---------- กองสำรอง ----------
+            โชว์ทั้งกองไปเลย นี่คือที่เดียวที่คนดูแลจะเห็นว่ามีอะไรให้เล่นบ้าง
+            และคลิกเลือกเพลงที่อยากเปิดตอนนี้ได้จากตรงนี้ */}
+        {!!filler?.length && (
+          <>
+            <div className="mt-5 flex items-center gap-3">
+              <span className="slug slug-2 shrink-0">
+                {fillerMode === "off" ? "กองสำรอง (ปิดอยู่)" : "กองสำรอง"}
+              </span>
+              <span className="rule h-px flex-1" />
+              <span className="num shrink-0 text-xs text-muted">{filler.length}</span>
+            </div>
+
+            <p className="mt-2 text-xs text-muted">
+              {fillerMode === "off"
+                ? "โหมดสำรองปิดอยู่ ระบบจะไม่หยิบมาเล่นเอง แต่กดเลือกเพลงเองได้"
+                : fillerMode === "shuffle"
+                  ? "โหมดสุ่ม — บอกล่วงหน้าไม่ได้ว่าเพลงไหนจะมา กดเลือกเองได้"
+                  : "โหมดตามลำดับ — เพลงที่ติดป้ายคือเพลงที่จะมาเป็นตัวถัดไป"}
+            </p>
+
+            <ul className="no-scrollbar mt-3 max-h-96 space-y-2 overflow-y-auto">
+              {filler.map((t, i) => (
+                <li key={t.videoId}>
+                  <QueueRow
+                    no={i + 1}
+                    videoId={t.videoId}
+                    title={t.title}
+                    sub={t.author}
+                    dim
+                    marked={t.videoId === nextFillerId}
+                    onClick={() => void playTrackNow(t)}
+                  />
+                </li>
+              ))}
+            </ul>
+          </>
         )}
 
         {done.length > 0 && (
@@ -554,6 +627,68 @@ export function SongPlayerCore({
         )}
       </Panel>
     </div>
+  );
+}
+
+/**
+ * แถวเพลงในคิว — กดได้ทั้งแถวเพื่อเล่นเพลงนั้นทันที
+ * เป็น button ทั้งใบ ไม่ใช่ปุ่มเล็กมุมขวา จะได้กดง่ายตอนรีบระหว่างไลฟ์
+ */
+function QueueRow({
+  no,
+  videoId,
+  title,
+  sub,
+  onClick,
+  dim = false,
+  marked = false,
+}: {
+  no: number;
+  videoId: string;
+  title: string;
+  sub: string;
+  onClick: () => void;
+  dim?: boolean;
+  marked?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="กดเพื่อเล่นเพลงนี้เลย"
+      className={`hover-tile tile group flex w-full cursor-pointer items-center gap-3 rounded-xl p-2.5 text-left transition-colors ${
+        marked ? "ring-1 ring-champagne/45" : ""
+      }`}
+    >
+      <span
+        className={`fig text-outline w-6 shrink-0 text-center text-lg ${
+          dim ? "opacity-60" : ""
+        }`}
+      >
+        {no}
+      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={thumbUrl(videoId, "mq")}
+        alt=""
+        referrerPolicy="no-referrer"
+        loading="lazy"
+        onError={(e) => {
+          e.currentTarget.style.visibility = "hidden";
+        }}
+        className="h-9 w-16 shrink-0 rounded object-cover"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm text-ice">{title}</span>
+        <span className="block truncate text-xs text-muted">{sub}</span>
+      </span>
+      {marked && (
+        <span className="slug slug-2 shrink-0 text-champagne">ถัดไป</span>
+      )}
+      <span className="shrink-0 text-xs text-muted opacity-0 transition-opacity group-hover:opacity-100">
+        ▶
+      </span>
+    </button>
   );
 }
 

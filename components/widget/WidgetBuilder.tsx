@@ -274,7 +274,7 @@ export default function WidgetBuilder() {
               step={0.05}
               value={scale}
               onChange={(e) => setScale(Number(e.target.value))}
-              style={{ ["--fill" as string]: `${((scale - 0.6) / 1.4) * 100}%` }}
+              style={{ ["--fill" as string]: (scale - 0.6) / 1.4 }}
               className="mt-3 w-full cursor-pointer"
             />
           </div>

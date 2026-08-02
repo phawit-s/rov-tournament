@@ -381,9 +381,7 @@ export default function WheelView() {
                   max={12}
                   value={state.duration}
                   onChange={(e) => wheelStore.set({ duration: Number(e.target.value) })}
-                  style={{
-                    ["--fill" as string]: `${((state.duration - 2) / 10) * 100}%`,
-                  }}
+                  style={{ ["--fill" as string]: (state.duration - 2) / 10 }}
                   className="w-full cursor-pointer"
                   aria-label="ความยาวการหมุน (วินาที)"
                 />
