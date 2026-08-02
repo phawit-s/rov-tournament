@@ -16,6 +16,7 @@ import {
 } from "@/lib/channel/donations";
 import {
   channelStore,
+  decideChannelSeed,
   emptyChannel,
   markDonationAutoApproved,
   pushChannel,
@@ -238,21 +239,50 @@ export default function ChannelSettings() {
   /** ใบที่ยิงอนุมัติอัตโนมัติไปแล้ว — onSnapshot ยิงซ้ำได้เรื่อยๆ ต้องกันเอง */
   const autoDone = useRef<Set<string>>(new Set());
 
-  /** สำเนาที่อยู่บนคลาวด์จริง ใช้เทียบว่ามีอะไรยังไม่ได้เผยแพร่บ้าง */
-  const [live, setLive] = useState<Channel | null>(null);
+  /**
+   * สำเนาที่อยู่บนคลาวด์จริง ใช้ทั้งเทียบว่ามีอะไรค้างยังไม่ได้เผยแพร่
+   * และใช้เป็นต้นทางตอนเครื่องนี้ยังไม่มีสำเนาในเครื่อง
+   *
+   * เก็บ id ของช่องคู่กับข้อมูลเสมอ เพราะผู้ดูแลสลับช่องได้
+   * ถ้าเก็บแต่ข้อมูลเปล่าๆ จะแยกไม่ออกว่า "ยังโหลดไม่เสร็จ" กับ "ช่องนี้ไม่มีบนคลาวด์"
+   */
+  const [liveSnap, setLiveSnap] = useState<{ id: string; data: Channel | null } | null>(
+    null,
+  );
 
   const isAdmin = access === "verified";
   const channel = remote ? remote.draft : stored;
   const activeId = remote?.id ?? user?.uid ?? null;
+  const liveLoaded = !!activeId && liveSnap?.id === activeId;
+  const live = liveLoaded ? (liveSnap?.data ?? null) : null;
   const autoApprove = !!channel?.donate.autoApprove;
   // แก้ช่องตัวเองได้เสมอ ช่องคนอื่นต้องเป็นผู้ดูแลที่ Firestore ยืนยันแล้ว
   const canManage = !!user && !!activeId && (activeId === user.uid || isAdmin);
 
-  // ยังไม่มีช่องในเครื่อง = สร้างโครงว่างให้จากบัญชีที่ล็อกอิน
+  /*
+    ยังไม่มีสำเนาในเครื่อง — ต้องดึงของจริงจากคลาวด์มาก่อน ห้ามสร้างโครงว่างทันที
+
+    ของเดิมสร้างโครงว่างเลยโดยไม่ถามคลาวด์ พอเปิดหน้านี้ในเครื่องใหม่
+    หรือหลังล้างข้อมูลเบราว์เซอร์ หน้าจะขึ้นช่องเปล่าที่ยังไม่มี handle ทั้งที่
+    บนคลาวด์มีช่องที่ตั้งค่าไว้ครบแล้ว — แล้วถ้าเผลอกด "เผยแพร่ช่อง" ตอนนั้น
+    ช่องจริงจะโดนทับด้วยของเปล่าทั้งใบ ทั้งพร้อมเพย์ แพ็กเกจ และเพลย์ลิสต์สำรอง
+
+    รอจนรู้ผลจากคลาวด์ก่อน (liveLoaded) ค่อยตัดสินใจ
+    และทำเฉพาะช่องของตัวเอง ช่องที่ผู้ดูแลสลับไปดูใช้สำเนาแยกของมันเอง
+  */
   useEffect(() => {
-    if (!user || stored) return;
-    channelStore.set(emptyChannel({ uid: user.uid, email: user.email }));
-  }, [user, stored]);
+    const choice = decideChannelSeed({
+      hasUser: !!user,
+      hasLocal: !!stored,
+      editingOther: !!remote,
+      cloudLoaded: liveLoaded,
+      cloudExists: !!live,
+    });
+    if (choice === "use-cloud" && live) channelStore.set(live);
+    else if (choice === "create-empty" && user) {
+      channelStore.set(emptyChannel({ uid: user.uid, email: user.email }));
+    }
+  }, [user, stored, remote, liveLoaded, live]);
 
   // รายชื่อช่องทั้งหมดสำหรับแถบสลับช่อง — คนทั่วไปไม่ต้องดึง
   useEffect(() => {
@@ -265,8 +295,8 @@ export default function ChannelSettings() {
     if (!activeId) return;
     return watchChannel(
       activeId,
-      (c) => setLive(c),
-      () => setLive(null),
+      (c) => setLiveSnap({ id: activeId, data: c }),
+      () => setLiveSnap({ id: activeId, data: null }),
     );
   }, [activeId]);
 
@@ -1144,8 +1174,10 @@ function ChannelSwitcher({
       </div>
 
       {others.length === 0 && (
-        <p className="mt-2 text-xs text-muted">
-          ยังไม่มีช่องอื่นบนคลาวด์ — ช่องจะโผล่ที่นี่หลังเจ้าของกดเผยแพร่ครั้งแรก
+        <p className="mt-2.5 text-xs leading-relaxed text-muted">
+          ตอนนี้ทั้งระบบมีช่องเดียวคือช่องของคุณ กดที่การ์ดจึงไม่มีอะไรให้สลับไป —
+          ช่องของคนอื่นจะโผล่ที่นี่ก็ต่อเมื่อเจ้าของช่องนั้นเข้ามาตั้งค่าแล้วกด
+          &ldquo;เผยแพร่ช่อง&rdquo; ด้วยตัวเองอย่างน้อยหนึ่งครั้ง
         </p>
       )}
     </Panel>
@@ -1167,15 +1199,19 @@ function ChannelChip({
   active: boolean;
   onClick: () => void;
 }) {
+  /* ช่องที่กำลังแก้อยู่ต้องกดไม่ได้ ไม่งั้นกดแล้วไม่มีอะไรเกิดขึ้น
+     ซึ่งแยกไม่ออกจาก "ปุ่มเสีย" โดยเฉพาะตอนที่มีช่องเดียวทั้งระบบ */
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={active}
       aria-pressed={active}
-      className={`flex min-h-11 shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors ${
+      title={active ? "กำลังแก้ช่องนี้อยู่" : "สลับไปแก้ช่องนี้"}
+      className={`flex min-h-11 shrink-0 items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors ${
         active
-          ? "border-champagne/45 bg-[rgb(221_175_100/0.12)]"
-          : "border-hair hover-tile"
+          ? "cursor-default border-champagne/45 bg-[rgb(221_175_100/0.12)]"
+          : "cursor-pointer border-hair hover-tile"
       }`}
     >
       {avatar ? (

@@ -45,6 +45,35 @@ function commit(next: Channel | null) {
   listeners.forEach((l) => l());
 }
 
+/**
+ * ตัดสินว่าจะเอาอะไรมาเป็นสำเนาในเครื่องตอนเปิดหน้าตั้งค่าช่อง
+ *
+ * แยกออกมาเป็นฟังก์ชันล้วนเพราะตัดสินผิดแล้วเสียหายหนัก —
+ * ถ้ารีบสร้างโครงว่างทั้งที่บนคลาวด์มีช่องอยู่แล้ว หน้าจะโชว์ช่องเปล่า
+ * และถ้าคนกด "เผยแพร่ช่อง" ตอนนั้น ช่องจริงจะโดนทับหายทั้งใบ
+ */
+export type SeedChoice = "wait" | "use-cloud" | "create-empty" | "keep-local";
+
+export function decideChannelSeed(input: {
+  /** ล็อกอินอยู่ไหม */
+  hasUser: boolean;
+  /** มีสำเนาในเครื่องแล้วหรือยัง */
+  hasLocal: boolean;
+  /** ผู้ดูแลกำลังสลับไปแก้ช่องของคนอื่นอยู่ไหม (ช่องนั้นใช้สำเนาแยกของมันเอง) */
+  editingOther: boolean;
+  /** รู้ผลจากคลาวด์แล้วหรือยัง */
+  cloudLoaded: boolean;
+  /** บนคลาวด์มีช่องนี้อยู่จริงไหม */
+  cloudExists: boolean;
+}): SeedChoice {
+  if (!input.hasUser) return "wait";
+  // ของที่แก้ค้างไว้ในเครื่องสำคัญกว่าเสมอ ห้ามเอาของคลาวด์มาทับงานที่ยังไม่ได้เผยแพร่
+  if (input.hasLocal) return "keep-local";
+  if (input.editingOther) return "keep-local";
+  if (!input.cloudLoaded) return "wait";
+  return input.cloudExists ? "use-cloud" : "create-empty";
+}
+
 export function emptyChannel(owner: { uid: string; email?: string | null }): Channel {
   const now = new Date().toISOString();
   return {
