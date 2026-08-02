@@ -20,6 +20,7 @@ import {
   type LockState,
 } from "@/lib/song/player-lock";
 import { pickFiller } from "@/lib/song/filler";
+import { setSongsEnabled } from "@/lib/song/config";
 import {
   addSongToQueue,
   setSongStatus,
@@ -32,7 +33,8 @@ import type { FillerTrack, SongRequest } from "@/lib/song/types";
 import Button from "../ui/Button";
 import Panel, { PanelHeader } from "../ui/Panel";
 import { PageHeading } from "../ui/Reveal";
-import { EmptyState, Skeleton } from "../tournament/ui";
+import { toast } from "../ui/Toast";
+import { Badge, EmptyState, Skeleton } from "../tournament/ui";
 import SongConsole from "./SongConsole";
 
 /**
@@ -654,6 +656,56 @@ export function SongPlayerCore({
 }
 
 /**
+ * ปุ่มเปิด/ปิดรับคิวจากคนดู
+ *
+ * เขียนลงเอกสารช่องตรงๆ มีผลทันที ไม่ต้องไปกด "เผยแพร่ช่อง" ที่หน้าตั้งค่า
+ * เพราะปุ่มนี้ใช้ตอนกำลังไลฟ์ — ปิดแล้วต้องปิดเดี๋ยวนั้น ไม่ใช่ปิดแล้วยังมีคนส่งเข้ามาได้อีก
+ *
+ * ปิดรับคิวไม่ได้แปลว่าหยุดเพลง เพลงที่ค้างอยู่ในคิวกับกองสำรองยังเดินต่อตามปกติ
+ */
+function AcceptToggle({
+  channelId,
+  channel,
+}: {
+  channelId: string;
+  channel: Channel | null;
+}) {
+  const [busy, setBusy] = useState(false);
+  const open = channel?.songs?.enabled === true;
+
+  // ยังโหลดข้อมูลช่องไม่เสร็จ อย่าเพิ่งโชว์ปุ่มที่บอกสถานะผิด
+  if (!channel) return null;
+
+  const flip = async () => {
+    setBusy(true);
+    try {
+      await setSongsEnabled(channelId, !open);
+      toast(open ? "ปิดรับคิวแล้ว" : "เปิดรับคิวแล้ว", "success", 1800);
+    } catch {
+      toast("เปลี่ยนไม่สำเร็จ — ต้องเป็นเจ้าของช่องถึงจะแก้ได้", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Badge rgb={open ? "77 181 145" : "146 151 172"} tone={open ? "live" : "plain"}>
+        {open ? "เปิดรับคิวอยู่" : "ปิดรับคิวแล้ว"}
+      </Badge>
+      <Button
+        size="sm"
+        variant={open ? "danger" : "primary"}
+        loading={busy}
+        onClick={() => void flip()}
+      >
+        {open ? "ปิดรับคิว" : "เปิดรับคิว"}
+      </Button>
+    </div>
+  );
+}
+
+/**
  * แถวเพลงในคิว — กดได้ทั้งแถวเพื่อเล่นเพลงนั้นทันที
  * เป็น button ทั้งใบ ไม่ใช่ปุ่มเล็กมุมขวา จะได้กดง่ายตอนรีบระหว่างไลฟ์
  */
@@ -758,6 +810,7 @@ export default function SongPlayer() {
         eyebrow="Player"
         title="เล่นเพลงตามคิว"
         description="เดินเอง — คนดูขอเพลงเข้ามาแล้วเล่นเลย เพลงจบก็ต่อเพลงถัดไปให้ เปิดหน้านี้ในเบราว์เซอร์ที่ล็อกอิน YouTube Premium ไว้ แล้วดึงเสียงเข้า OBS ทาง Desktop Audio"
+        action={<AcceptToggle channelId={channelId} channel={channel} />}
       />
       <SongPlayerCore
         channelId={channelId}

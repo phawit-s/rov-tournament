@@ -1,45 +1,17 @@
 "use client";
 
-import { doc, updateDoc } from "firebase/firestore";
-import { getDb } from "@/lib/backend/firebase";
 import type { FillerTrack, SongRequest } from "./types";
 
-const COL = "channels";
-
 /**
- * เพลย์ลิสต์สำรองของช่อง
+ * ตรรกะการเลือกเพลงสำรอง
  *
- * เก็บไว้ในเอกสารช่องเลย ไม่แยกเป็นคอลเลกชันใหม่ เพราะกติกา Firestore
- * เปิดให้เจ้าของแก้เอกสารช่องอยู่แล้ว ไม่ต้องไปเพิ่มกติกาแล้วรอ publish ใหม่
- * รายการนี้เก็บแค่ไอดีคลิปกับชื่อ ไม่ได้ใหญ่พอจะชนเพดาน 1MB ต่อเอกสาร
+ * ตัวรายการเก็บอยู่ในเอกสารช่อง (ดู lib/song/config.ts สำหรับการเขียน)
+ * ไม่แยกเป็นคอลเลกชันใหม่ เพราะกติกา Firestore เปิดให้เจ้าของแก้เอกสารช่อง
+ * อยู่แล้ว ไม่ต้องไปเพิ่มกติกาแล้วรอ publish ใหม่ก่อนถึงจะใช้ได้
  */
 
 /** เพดานจำนวนเพลงสำรอง กันเอกสารช่องบวมจนชนลิมิตของ Firestore */
 export const FILLER_LIMIT = 100;
-
-export async function saveFillerList(
-  channelId: string,
-  tracks: FillerTrack[],
-): Promise<void> {
-  const db = getDb();
-  if (!db || !channelId) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
-  await updateDoc(doc(db, COL, channelId), {
-    "songs.filler": tracks.slice(0, FILLER_LIMIT),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-export async function saveFillerMode(
-  channelId: string,
-  mode: "off" | "order" | "shuffle",
-): Promise<void> {
-  const db = getDb();
-  if (!db || !channelId) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
-  await updateDoc(doc(db, COL, channelId), {
-    "songs.fillerMode": mode,
-    updatedAt: new Date().toISOString(),
-  });
-}
 
 /**
  * เลือกเพลงสำรองเพลงถัดไป
