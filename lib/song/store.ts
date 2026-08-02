@@ -72,6 +72,7 @@ export async function submitSongRequest(
       byUid: data.byUid,
       byName: data.byName.slice(0, 40),
       message: (data.message ?? "").slice(0, 120) || null,
+      source: "viewer" as const,
       status: "queued" as SongStatus,
       createdAt: new Date().toISOString(),
       playedAt: null,
@@ -185,11 +186,65 @@ export async function clearFinishedSongs(channelId: string, queue: SongRequest[]
   }
 }
 
-/** เพลงที่กำลังเล่นกับคิวถัดไป — ใช้ทั้งใน widget และหน้าจัดการ */
+/**
+ * เพลงที่กำลังเล่นกับคิวถัดไป — ใช้ทั้งใน widget และหน้าจัดการ
+ *
+ * คิวเรียงให้เพลงที่คนขอจริงมาก่อนเพลงสำรองเสมอ
+ * เพลงสำรองคือของที่ระบบหยิบมาเล่นกันเงียบตอนไม่มีใครขอ
+ * พอมีคนขอเข้ามาก็ต้องได้คิวก่อนทันทีโดยไม่ต้องรอเพลงสำรองหมดกอง
+ * (ไม่ตัดเพลงที่กำลังเล่นอยู่ทิ้งกลางคัน รอให้จบเพลงก่อน)
+ */
 export function splitQueue(list: SongRequest[]) {
+  const queued = list
+    .filter((s) => s.status === "queued")
+    .sort((a, b) => {
+      const fa = a.source === "filler" ? 1 : 0;
+      const fb = b.source === "filler" ? 1 : 0;
+      if (fa !== fb) return fa - fb;
+      return (a.createdAt ?? "").localeCompare(b.createdAt ?? "");
+    });
+
   return {
     playing: list.find((s) => s.status === "playing") ?? null,
-    queued: list.filter((s) => s.status === "queued"),
+    queued,
     done: list.filter((s) => s.status === "played" || s.status === "rejected"),
   };
+}
+
+/**
+ * ใส่เพลงเข้าคิวโดยตรง — ใช้ตอนสตรีมเมอร์ใส่เอง ต่อคิวเพลงเก่า หรือระบบหยิบเพลงสำรอง
+ *
+ * ไม่ผ่านด่านเพดานเหมือน submitSongRequest เพราะคนที่กดคือเจ้าของคิวเอง
+ * เพดานพวกนั้นมีไว้กันคนดูสแปม ไม่ได้มีไว้กันเจ้าของ
+ */
+export async function addSongToQueue(
+  channelId: string,
+  data: {
+    videoId: string;
+    title: string;
+    author: string;
+    url: string;
+    byUid: string;
+    byName: string;
+    message?: string | null;
+  },
+  source: "streamer" | "filler",
+): Promise<string | null> {
+  const db = getDb();
+  if (!db || !channelId) return null;
+  const ref = await addDoc(collection(db, COL, channelId, SONGS), {
+    channelId,
+    videoId: data.videoId,
+    title: (data.title ?? "").slice(0, 140),
+    author: (data.author ?? "").slice(0, 80),
+    url: data.url,
+    byUid: data.byUid,
+    byName: (data.byName ?? "").slice(0, 40),
+    message: data.message ?? null,
+    source,
+    status: "queued" as SongStatus,
+    createdAt: new Date().toISOString(),
+    playedAt: null,
+  });
+  return ref.id;
 }

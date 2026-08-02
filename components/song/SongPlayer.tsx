@@ -11,19 +11,28 @@ import {
 import { motion, useReducedMotion } from "motion/react";
 import { useHashParam } from "@/hooks/useClient";
 import { authStore } from "@/lib/backend/firebase";
+import { watchChannel } from "@/lib/channel/store";
+import type { Channel } from "@/lib/channel/types";
 import {
   claimPlayerLock,
   playerInstanceId,
   type LockHandle,
   type LockState,
 } from "@/lib/song/player-lock";
-import { setSongStatus, splitQueue, watchSongQueue } from "@/lib/song/store";
-import { thumbUrl } from "@/lib/song/youtube";
-import type { SongRequest } from "@/lib/song/types";
+import { pickFiller } from "@/lib/song/filler";
+import {
+  addSongToQueue,
+  setSongStatus,
+  splitQueue,
+  watchSongQueue,
+} from "@/lib/song/store";
+import { thumbUrl, watchUrl } from "@/lib/song/youtube";
+import type { FillerTrack, SongRequest } from "@/lib/song/types";
 import Button from "../ui/Button";
 import Panel, { PanelHeader } from "../ui/Panel";
 import { PageHeading } from "../ui/Reveal";
 import { EmptyState, Skeleton } from "../tournament/ui";
+import SongConsole from "./SongConsole";
 
 /**
  * ตัวเล่นเพลงตามคิว — เดินเอง ไม่ต้องมีใครกด
@@ -123,12 +132,23 @@ function readVolume(): number {
 export function SongPlayerCore({
   channelId,
   compact = false,
+  filler,
+  fillerMode = "off",
 }: {
   channelId: string;
   /** true = ฝังอยู่ในหน้าอื่น ไม่ต้องโชว์คิวซ้ำกับที่หน้านั้นมีอยู่แล้ว */
   compact?: boolean;
+  /** เพลย์ลิสต์สำรอง — ใส่มาแล้วคิวจะไม่มีวันว่างจนเงียบทั้งไลฟ์ */
+  filler?: FillerTrack[];
+  fillerMode?: "off" | "order" | "shuffle";
 }) {
   const reduced = useReducedMotion();
+  // ต้องรู้ว่าใครล็อกอินอยู่ ตอนต่อเพลงสำรองต้องแปะ uid ไปกับใบ
+  useSyncExternalStore(
+    authStore.subscribe,
+    authStore.getSnapshot,
+    authStore.getServerSnapshot,
+  );
 
   const [queue, setQueue] = useState<SongRequest[]>(EMPTY);
   const [ready, setReady] = useState(false);
@@ -219,6 +239,40 @@ export function SongPlayerCore({
       promotingRef.current = null;
     });
   }, [channelId, active, playing, queued, queue]);
+
+  /**
+   * คิวว่างสนิท = หยิบเพลงสำรองมาต่อให้ ไลฟ์จะได้ไม่เงียบ
+   *
+   * ใส่เป็นใบจริงในคิวเลย ไม่ได้เล่นลอยๆ widget กับคนดูจะได้เห็นว่ากำลังเล่นอะไร
+   * และเพราะ splitQueue จัดให้เพลงสำรองอยู่ท้ายแถวเสมอ พอมีคนขอเข้ามา
+   * เพลงของเขาจะได้คิวก่อนเพลงสำรองที่ยังไม่ได้เล่นโดยอัตโนมัติ
+   */
+  const fillingRef = useRef(false);
+  useEffect(() => {
+    if (!channelId || !active || playing || queued.length > 0) return;
+    if (fillerMode === "off" || !filler?.length || fillingRef.current) return;
+
+    const pick = pickFiller(filler, queue, fillerMode);
+    // กติกาบังคับให้ byUid ตรงกับคนที่เขียน ยังไม่ล็อกอินก็เขียนไม่ได้
+    const uid = authStore.user()?.uid;
+    if (!pick || !uid) return;
+
+    fillingRef.current = true;
+    void addSongToQueue(
+      channelId,
+      {
+        videoId: pick.videoId,
+        title: pick.title,
+        author: pick.author,
+        url: watchUrl(pick.videoId),
+        byUid: uid,
+        byName: "เพลย์ลิสต์สำรอง",
+      },
+      "filler",
+    ).finally(() => {
+      fillingRef.current = false;
+    });
+  }, [channelId, active, playing, queued.length, queue, filler, fillerMode]);
 
   /* ---------- ตัวเล่น ---------- */
   useEffect(() => {
@@ -586,6 +640,17 @@ export default function SongPlayer() {
   const chParam = useHashParam("ch");
   const channelId = chParam ?? (user && !user.anonymous ? user.uid : null);
 
+  // ต้องมีข้อมูลช่องเพื่ออ่านเพลย์ลิสต์สำรอง — hook ต้องอยู่เหนือ early return
+  const [channel, setChannel] = useState<Channel | null>(null);
+  useEffect(() => {
+    if (!channelId) return;
+    return watchChannel(
+      channelId,
+      (c) => setChannel(c),
+      () => setChannel(null),
+    );
+  }, [channelId]);
+
   if (!channelId) {
     return (
       <EmptyState
@@ -603,7 +668,12 @@ export default function SongPlayer() {
         title="เล่นเพลงตามคิว"
         description="เดินเอง — คนดูขอเพลงเข้ามาแล้วเล่นเลย เพลงจบก็ต่อเพลงถัดไปให้ เปิดหน้านี้ในเบราว์เซอร์ที่ล็อกอิน YouTube Premium ไว้ แล้วดึงเสียงเข้า OBS ทาง Desktop Audio"
       />
-      <SongPlayerCore channelId={channelId} />
+      <SongPlayerCore
+        channelId={channelId}
+        filler={channel?.songs?.filler}
+        fillerMode={channel?.songs?.fillerMode ?? "off"}
+      />
+      <SongConsole channelId={channelId} channel={channel} />
     </div>
   );
 }

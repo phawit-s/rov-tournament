@@ -20,6 +20,21 @@ export type SongRequest = {
   createdAt: string;
   /** เวลาที่สตรีมเมอร์กดเล่น ใช้เรียงประวัติและคิดสถิติ */
   playedAt?: string | null;
+
+  /**
+   * ใครเป็นคนใส่เข้าคิว — ใบเก่าไม่มีฟิลด์นี้ ถือว่ามาจากคนดู
+   *
+   * filler คือเพลงจากเพลย์ลิสต์สำรองที่ระบบหยิบมาเล่นเองตอนไม่มีใครขอ
+   * ต้องอยู่ท้ายคิวเสมอ พอมีคนขอจริงเข้ามาจะได้แทรกขึ้นก่อน
+   */
+  source?: "viewer" | "streamer" | "filler";
+};
+
+/** เพลงในเพลย์ลิสต์สำรองของช่อง */
+export type FillerTrack = {
+  videoId: string;
+  title: string;
+  author: string;
 };
 
 /** ตั้งค่าระบบขอเพลงของช่อง */
@@ -33,6 +48,14 @@ export type SongConfig = {
   allowDuplicates?: boolean;
   /** ข้อความบอกกติกาที่หน้าขอเพลง */
   note?: string;
+
+  /**
+   * เพลย์ลิสต์สำรอง — เอาไว้เล่นตอนไม่มีใครขอเพลง จะได้ไม่เงียบทั้งไลฟ์
+   * ระบบจะหยิบมาต่อคิวให้เองทีละเพลงเมื่อคิวว่าง
+   */
+  filler?: FillerTrack[];
+  /** off = ไม่เล่นสำรองเลย · order = ไล่ตามลำดับ · shuffle = สุ่ม */
+  fillerMode?: "off" | "order" | "shuffle";
 };
 
 export const DEFAULT_SONG_CONFIG: SongConfig = {
@@ -41,4 +64,6 @@ export const DEFAULT_SONG_CONFIG: SongConfig = {
   maxQueue: 30,
   allowDuplicates: false,
   note: "วางลิงก์ YouTube ได้เลย เพลงจะเข้าคิวรอสตรีมเมอร์เปิด",
+  filler: [],
+  fillerMode: "off",
 };
