@@ -25,6 +25,7 @@ import { saveFillerList, setSongsEnabled } from "@/lib/song/config";
 import {
   addSongToQueue,
   moveSongInQueue,
+  removeSongRequest,
   setSongStatus,
   splitQueue,
   watchSongQueue,
@@ -411,6 +412,26 @@ export function SongPlayerCore({
   };
 
   /**
+   * ลบเพลงที่กำลังเล่นทิ้งถาวร
+   *
+   * ต้องดันเพลงถัดไปขึ้นมาก่อนค่อยลบ ไม่งั้นจะมีช่วงที่ไม่มีอะไรเล่นอยู่เลย
+   * แล้วตัวเดินคิวอัตโนมัติจะรีบไปหยิบเพลงสำรองมาแทรกแทนเพลงที่ควรได้คิว
+   */
+  const dropPlaying = async () => {
+    if (!playing) return;
+    const doomed = playing.id;
+    manualRef.current = true;
+    try {
+      if (queued.length > 0) {
+        await setSongStatus(channelId, queued[0].id, "playing", queue);
+      }
+      await removeSongRequest(channelId, doomed);
+    } finally {
+      manualRef.current = false;
+    }
+  };
+
+  /**
    * คลิกเพลง = ให้เล่นเพลงนั้นเลย
    *
    * ห้ามทำเป็นสองจังหวะ (ปิดเพลงเดิมก่อน แล้วค่อยเปิดตัวใหม่) เด็ดขาด
@@ -583,6 +604,16 @@ export function SongPlayerCore({
         <Button size="sm" variant="ghost" disabled={!playing} onClick={() => void skip()}>
           ข้ามเพลงนี้
         </Button>
+        {/* ข้าม = เก็บไว้ในประวัติ ดึงกลับมาต่อคิวได้
+            ลบทิ้ง = หายถาวร ไว้ใช้กับของที่ไม่อยากให้ค้างอยู่ในระบบเลย */}
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={!playing}
+          onClick={() => void dropPlaying()}
+        >
+          ลบเพลงนี้ทิ้ง
+        </Button>
         {playing && (
           <a
             href={playing.url}
@@ -665,6 +696,7 @@ export function SongPlayerCore({
                     onMove={(dir) =>
                       void moveSongInQueue(channelId, queued, s.id, dir)
                     }
+                    onRemove={() => void removeSongRequest(channelId, s.id)}
                     canUp={at > 0}
                     canDown={at < group.length - 1}
                   />
@@ -782,6 +814,7 @@ function QueueRow({
   sub,
   onClick,
   onMove,
+  onRemove,
   canUp = false,
   canDown = false,
   dim = false,
@@ -794,6 +827,8 @@ function QueueRow({
   onClick: () => void;
   /** ไม่ส่งมา = แถวนี้เลื่อนลำดับไม่ได้ (เช่นกองสำรองที่ยังไม่เข้าคิว) */
   onMove?: (dir: "up" | "down" | "top") => void;
+  /** ไม่ส่งมา = แถวนี้เอาออกจากคิวไม่ได้ */
+  onRemove?: () => void;
   canUp?: boolean;
   canDown?: boolean;
   dim?: boolean;
@@ -838,21 +873,34 @@ function QueueRow({
         {marked && <span className="slug slug-2 shrink-0 text-champagne">ถัดไป</span>}
       </button>
 
-      {onMove && (
+      {(onMove || onRemove) && (
         <div className="flex shrink-0 items-center gap-0.5 opacity-40 transition-opacity group-hover:opacity-100">
-          <MoveBtn
-            label="ขึ้นบนสุด"
-            disabled={!canUp}
-            onClick={() => onMove("top")}
-          >
-            ⤒
-          </MoveBtn>
-          <MoveBtn label="เลื่อนขึ้น" disabled={!canUp} onClick={() => onMove("up")}>
-            ↑
-          </MoveBtn>
-          <MoveBtn label="เลื่อนลง" disabled={!canDown} onClick={() => onMove("down")}>
-            ↓
-          </MoveBtn>
+          {onMove && (
+            <>
+              <MoveBtn
+                label="ขึ้นบนสุด"
+                disabled={!canUp}
+                onClick={() => onMove("top")}
+              >
+                ⤒
+              </MoveBtn>
+              <MoveBtn label="เลื่อนขึ้น" disabled={!canUp} onClick={() => onMove("up")}>
+                ↑
+              </MoveBtn>
+              <MoveBtn
+                label="เลื่อนลง"
+                disabled={!canDown}
+                onClick={() => onMove("down")}
+              >
+                ↓
+              </MoveBtn>
+            </>
+          )}
+          {onRemove && (
+            <MoveBtn label="เอาออกจากคิว" disabled={false} onClick={onRemove} danger>
+              ✕
+            </MoveBtn>
+          )}
         </div>
       )}
     </div>
@@ -864,11 +912,13 @@ function MoveBtn({
   disabled,
   onClick,
   children,
+  danger = false,
 }: {
   label: string;
   disabled: boolean;
   onClick: () => void;
   children: ReactNode;
+  danger?: boolean;
 }) {
   return (
     <button
@@ -877,7 +927,11 @@ function MoveBtn({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="grid h-8 w-7 cursor-pointer place-items-center rounded-lg text-sm text-muted transition-colors hover:bg-champagne/12 hover:text-champagne disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-muted"
+      className={`grid h-8 w-7 cursor-pointer place-items-center rounded-lg text-sm text-muted transition-colors disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-muted ${
+        danger
+          ? "hover:bg-[#e79a9a]/12 hover:text-[#e79a9a]"
+          : "hover:bg-champagne/12 hover:text-champagne"
+      }`}
     >
       {children}
     </button>
