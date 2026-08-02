@@ -26,6 +26,7 @@ import {
   addSongToQueue,
   moveSongInQueue,
   removeSongRequest,
+  setSongDuration,
   setSongStatus,
   splitQueue,
   watchSongQueue,
@@ -126,6 +127,8 @@ export function SongPlayerCore({
   const deadTimerRef = useRef<number | null>(null);
   /** คลิปที่โหลดล่าสุดเคยเล่นจริงแล้วหรือยัง */
   const playedOkRef = useRef(false);
+  /** ใบที่ส่งความยาวคลิปไปแล้ว กันเขียนซ้ำทุกครั้งที่กดเล่นต่อจากหยุด */
+  const durationSentRef = useRef<string | null>(null);
 
   const stateRef = useRef({ channelId, queue, active: true });
   useEffect(() => {
@@ -273,6 +276,18 @@ export function SongPlayerCore({
                 if (blockTimerRef.current) {
                   window.clearTimeout(blockTimerRef.current);
                   blockTimerRef.current = null;
+                }
+                /* บอกความยาวคลิปให้ widget รู้ — มีแต่ตัวเล่นที่รู้ค่านี้
+                   เขียนครั้งเดียวต่อเพลง widget จะได้คำนวณแถบความคืบหน้าเองได้
+                   โดยไม่ต้องส่งเวลาปัจจุบันมาทุกวินาที */
+                const cur = loadedRef.current;
+                const { channelId: ch } = stateRef.current;
+                if (cur && ch && durationSentRef.current !== cur) {
+                  const secs = playerRef.current?.getDuration?.() ?? 0;
+                  if (secs > 0) {
+                    durationSentRef.current = cur;
+                    void setSongDuration(ch, cur, secs).catch(() => {});
+                  }
                 }
               }
               if (e.data === YT_STATE.PAUSED) setPaused(true);

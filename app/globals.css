@@ -855,6 +855,13 @@ input[type="range"]::-moz-range-thumb {
     animation: none !important;
     transform: scaleY(0.7) !important;
   }
+
+  /* แถบเพลงต้องค้างที่ตำแหน่งจริงตอนเปิด ไม่ใช่กระโดดไปสุดปลายทาง
+     (--at คือสัดส่วนที่เล่นไปแล้ว ส่งมาจากคอมโพเนนต์) */
+  .bar-run {
+    animation: none !important;
+    transform: scaleX(var(--at, 0)) !important;
+  }
 }
 
 /* ---------------------------------------------------------------
@@ -911,4 +918,28 @@ input[type="range"]::-moz-range-thumb {
 
 .slide-in {
   animation: slide-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/*
+  แถบความคืบหน้าของเพลง
+
+  ตั้ง animation-duration เท่าความยาวคลิป แล้วใส่ animation-delay ติดลบ
+  เท่ากับเวลาที่เล่นไปแล้ว แถบจะโผล่มาที่ตำแหน่งถูกต้องทันทีแล้ววิ่งต่อเอง
+  ไม่มี JS ขยับเลยแม้แต่เฟรมเดียว — เบราว์เซอร์เดินให้บน compositor
+*/
+@keyframes bar-run {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.bar-run {
+  transform-origin: left center;
+  animation-name: bar-run;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  will-change: transform;
 }

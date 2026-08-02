@@ -34,6 +34,11 @@ type WidgetDef = {
    */
   scope: "tournament" | "channel";
   detail: string;
+  /**
+   * พารามิเตอร์ประจำตัวที่ต้องติดไปกับลิงก์เสมอ
+   * ใช้กับ widget ที่ใช้หน้าเดียวกันแต่คนละทรง (เช่นเพลงแบบแถบยาว vs แบบการ์ด)
+   */
+  params?: Record<string, string>;
 };
 
 const WIDGETS: WidgetDef[] = [
@@ -90,6 +95,28 @@ const WIDGETS: WidgetDef[] = [
     h: 300,
     scope: "channel",
     detail: "ชื่อเพลงที่คนดูขอมาพร้อมคิวถัดไปอีกสามเพลง อัปเดตเองตอนกดเล่น",
+  },
+  {
+    key: "song-card",
+    name: "เพลงที่กำลังเล่น (การ์ดสูง)",
+    path: "/widget/song/",
+    // วัดจากที่เรนเดอร์จริง: การ์ด 340x487 (ชื่อสองบรรทัด) + ขอบ 12px สองด้าน
+    w: 380,
+    h: 530,
+    scope: "channel",
+    params: { card: "1" },
+    detail: "ปกใหญ่ + แถบเวลาเดินจริง ย้อมสีตามปกเพลงเองทุกเพลง เรียบๆ เหมาะวางข้างจอ",
+  },
+  {
+    key: "song-card-wide",
+    name: "เพลงที่กำลังเล่น (การ์ดนอน)",
+    path: "/widget/song/",
+    // วัดจากที่เรนเดอร์จริง: การ์ด 470x130 (ความสูงล็อกด้วยปก ไม่ขยับตามชื่อเพลง) + ขอบ 12px สองด้าน
+    w: 500,
+    h: 160,
+    scope: "channel",
+    params: { card: "wide" },
+    detail: "การ์ดสูงในทรงนอน ปกอยู่ข้างชื่อเพลง เตี้ยพอวางมุมบนหรือล่างของจอได้",
   },
 ];
 
@@ -197,7 +224,7 @@ export default function WidgetBuilder() {
 
   const makeUrl = useCallback(
     (widget: WidgetDef, accentValue: string, solid = false) => {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams(widget.params);
       if (accentValue && accentValue !== "e6c894") params.set("accent", accentValue);
       if (scale !== 1) params.set("scale", String(scale));
       if (solid) params.set("solid", "1");

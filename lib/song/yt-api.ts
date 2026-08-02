@@ -18,6 +18,8 @@ export type YTPlayer = {
   mute: () => void;
   setVolume: (v: number) => void;
   getPlayerState: () => number;
+  /** ความยาวคลิปเป็นวินาที — เป็น 0 จนกว่าคลิปจะโหลดข้อมูลเสร็จ */
+  getDuration: () => number;
   destroy: () => void;
 };
 

@@ -215,6 +215,26 @@ export async function moveSongInQueue(
   await Promise.all([write(target.id, keyOther), write(other.id, keyTarget)]);
 }
 
+/**
+ * บันทึกความยาวคลิปที่ตัวเล่นเพิ่งอ่านได้
+ *
+ * widget เอาไปคู่กับ playedAt เพื่อคำนวณแถบความคืบหน้าเอง
+ * โดยไม่ต้องให้ตัวเล่นคอยส่งเวลาปัจจุบันมาทุกวินาที (ซึ่งจะเปลืองทั้งเน็ตและโควตา)
+ */
+export async function setSongDuration(
+  channelId: string,
+  songId: string,
+  duration: number,
+): Promise<void> {
+  const db = getDb();
+  if (!db || !(duration > 0)) return;
+  await setDoc(
+    doc(db, COL, channelId, SONGS, songId),
+    { duration: Math.round(duration) },
+    { merge: true },
+  );
+}
+
 export async function removeSongRequest(channelId: string, songId: string) {
   const db = getDb();
   if (!db) return;

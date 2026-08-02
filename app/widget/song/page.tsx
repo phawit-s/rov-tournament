@@ -6,6 +6,7 @@ import { useWidgetOptions } from "@/hooks/useLiveTournament";
 import { splitQueue, watchSongQueue } from "@/lib/song/store";
 import type { SongRequest } from "@/lib/song/types";
 import { thumbUrl } from "@/lib/song/youtube";
+import NowPlayingCard, { type CardShape } from "@/components/widget/NowPlayingCard";
 import WidgetShell, { WidgetCard, WidgetHint } from "@/components/widget/WidgetShell";
 
 /** โชว์คิวถัดไปแค่ 3 เพลง มากกว่านี้ความสูงจะเกินกรอบ 620x300 ที่ออกแบบไว้ */
@@ -17,7 +18,12 @@ const EMPTY: SongRequest[] = [];
 /**
  * เพลงที่กำลังเล่นกับคิวถัดไป สำหรับวางค้างไว้บนสตรีม
  *
- * ลิงก์: /widget/song/#ch=รหัสช่อง  (ขนาดที่ออกแบบไว้ 620 x 300)
+ * มีสามทรงให้เลือก
+ *   - แถบยาว (ค่าเริ่มต้น) 620x300 — เห็นคิวถัดไปสามเพลง เหมาะวางขอบล่างจอ
+ *   - การ์ดสูง (?card=1) 380x530 — ปกใหญ่ ย้อมสีตามปก มีแถบเวลา เหมาะวางข้างจอ
+ *   - การ์ดนอน (?card=wide) — ทรงเดียวกันแต่ปกอยู่ข้างข้อความ เหมาะวางมุมบน/ล่าง
+ *
+ * ลิงก์: /widget/song/#ch=รหัสช่อง
  * widget ตัวนี้ไม่ได้ล็อกอิน จึงขอเฉพาะเพลงที่ยังไม่จบ (onlyOpen)
  * ให้ตรงกับสิทธิ์อ่านสาธารณะใน firestore.rules
  *
@@ -25,14 +31,21 @@ const EMPTY: SongRequest[] = [];
  * ทุกเปอร์เซ็นต์ซีพียูที่กินไปคือเฟรมที่คนดูเสียไป จึงตั้งใจ:
  *   1. ไม่มีแอนิเมชันที่ขับด้วย JS เลย ใช้ CSS keyframes ที่แตะแค่ transform/opacity
  *      ซึ่งเบราว์เซอร์ยกไปให้ compositor ทำคนละเธรด ไม่กวน main thread
- *   2. ไม่ใช้ filter/blur และไม่ขยับ box-shadow — สองอันนั้นบังคับวาดใหม่ทุกเฟรม
+ *   2. ไม่มี blur หรือ box-shadow ที่ "ขยับ" — สองอันนั้นบังคับวาดใหม่ทุกเฟรม
+ *      (ทรงการ์ดมีเบลอเป็นพื้นหลังรูป แต่เป็นภาพนิ่ง แรสเตอร์ครั้งเดียวแล้วแคช)
  *   3. ไม่มี layout animation ที่ต้องวัดตำแหน่งกล่องใหม่ (บังคับ reflow)
  *   4. รูปปกใช้ไซซ์ mq (320x180) พอดีกับที่แสดงจริง ไม่ต้องถอดรหัสรูปใหญ่มาย่อ
- *   5. รีเรนเดอร์เฉพาะตอนคิวเปลี่ยนจริง ไม่มีตัวจับเวลาเดินอยู่เบื้องหลัง
+ *   5. แถบยาวรีเรนเดอร์เฉพาะตอนคิวเปลี่ยน ส่วนทรงการ์ดมีตัวเลขเวลาที่ขยับ
+ *      วินาทีละครั้ง แยกไว้ในคอมโพเนนต์ย่อยจนรีเรนเดอร์แค่ข้อความสองคำ
  */
 export default function SongWidget() {
   const channelId = useHashParam("ch");
   const { accent } = useWidgetOptions();
+  /* ?card=1 (หรือ card=tall) = การ์ดสูง · ?card=wide = การ์ดนอน · ไม่ใส่ = แถบยาว
+     รับ "1" ด้วยเพราะเป็นค่าที่แจกไปตั้งแต่ก่อนมีทรงนอน ลิงก์เก่าต้องไม่พัง */
+  const cardParam = useHashParam("card");
+  const shape: CardShape | null =
+    cardParam === "wide" ? "wide" : cardParam === "1" || cardParam === "tall" ? "tall" : null;
   const [queue, setQueue] = useState<SongRequest[]>(EMPTY);
 
   useEffect(() => {
@@ -60,6 +73,17 @@ export default function SongWidget() {
 
   // ค้างอยู่บนจอตลอดเวลา ตอนคิวว่างจึงต้องหายไปเลย ไม่ใช่โชว์กล่องเปล่า
   if (!playing && next.length === 0) return null;
+
+  /* ทรงการ์ดเล่าเรื่องเพลงเดียว ถ้ายังไม่มีเพลงเล่นก็ไม่มีอะไรให้โชว์
+     (ต่างจากแถบยาวที่โชว์คิวที่รออยู่ได้แม้ยังไม่กดเล่น) */
+  if (shape) {
+    if (!playing) return null;
+    return (
+      <WidgetShell>
+        <NowPlayingCard song={playing} accent={accent} shape={shape} />
+      </WidgetShell>
+    );
+  }
 
   return (
     <WidgetShell>
@@ -196,11 +220,11 @@ function Equalizer({ accent, active }: { accent: string; active: boolean }) {
 
   if (!active) {
     return (
-      <span className="flex h-3.5 items-end gap-[3px]" aria-hidden>
+      <span className="flex h-3.5 items-end gap-0.75" aria-hidden>
         {bars.map((i) => (
           <span
             key={i}
-            className="block w-[3px] rounded-full"
+            className="block w-0.75 rounded-full"
             style={{ background: `${accent}66`, height: `${35 + (i % 3) * 18}%` }}
           />
         ))}
@@ -209,11 +233,11 @@ function Equalizer({ accent, active }: { accent: string; active: boolean }) {
   }
 
   return (
-    <span className="flex h-3.5 items-end gap-[3px]" aria-hidden>
+    <span className="flex h-3.5 items-end gap-0.75" aria-hidden>
       {bars.map((i) => (
         <span
           key={i}
-          className="eq-bar block h-full w-[3px] rounded-full"
+          className="eq-bar block h-full w-0.75 rounded-full"
           style={{
             background: accent,
             // จังหวะไม่เท่ากันทุกเส้น ดูเป็นธรรมชาติกว่าเลื่อนพร้อมกันเป็นแถว
