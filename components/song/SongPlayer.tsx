@@ -21,7 +21,7 @@ import {
   type LockState,
 } from "@/lib/song/player-lock";
 import { pickFiller } from "@/lib/song/filler";
-import { saveFillerList, setSongsEnabled } from "@/lib/song/config";
+import { setSongsEnabled } from "@/lib/song/config";
 import {
   addSongToQueue,
   moveSongInQueue,
@@ -44,8 +44,13 @@ import SongConsole from "./SongConsole";
 /**
  * ตัวเล่นเพลงตามคิว — เดินเอง ไม่ต้องมีใครกด
  *
- * คิวมาถึง = เล่นเลย เพลงจบ = ต่อเพลงถัดไปเอง คลิปเสียก็ข้ามให้
+ * คิวมาถึง = เล่นเลย เพลงจบ = ต่อเพลงถัดไปเอง
  * ปุ่มที่เหลือ (ข้าม/หยุด) เป็นทางออกฉุกเฉิน ไม่ใช่ทางเดินปกติ
+ *
+ * ข้ามเองเฉพาะตอน YouTube บอกมาตรงๆ ว่าคลิปเสีย (onError) เท่านั้น
+ * เคยมีตัวเฝ้าเวลาที่ข้ามคลิปซึ่งเงียบเกิน 12 วินาทีด้วย แต่ถอดออกแล้ว —
+ * มันแยกไม่ออกว่าคลิปเสียหรือตัวเล่นเองเริ่มอะไรไม่ได้ พอเจอกรณีหลัง
+ * มันไล่ข้ามทีละ 13 วินาทีจนคิวหมดทั้งแถว
  *
  * ข้อจำกัดเดียวที่เลี่ยงไม่ได้คือกฎ autoplay ของเบราว์เซอร์ —
  * ถ้ายังไม่เคยมีใครคลิกอะไรในหน้านั้นเลย เบราว์เซอร์จะไม่ยอมให้เล่นมีเสียง
@@ -57,9 +62,6 @@ import SongConsole from "./SongConsole";
 
 const EMPTY: SongRequest[] = [];
 const VOLUME_KEY = "tourney-hub/song/volume";
-
-/** รอคลิปเริ่มเล่นนานสุดเท่าไหร่ก่อนถือว่าเล่นไม่ได้แล้วข้าม */
-const DEAD_MS = 12_000;
 
 function readVolume(): number {
   if (typeof window === "undefined") return 70;
@@ -76,7 +78,6 @@ export function SongPlayerCore({
   compact = false,
   filler,
   fillerMode = "off",
-  onUnplayable,
 }: {
   channelId: string;
   /** true = ฝังอยู่ในหน้าอื่น ไม่ต้องโชว์คิวซ้ำกับที่หน้านั้นมีอยู่แล้ว */
@@ -84,8 +85,6 @@ export function SongPlayerCore({
   /** เพลย์ลิสต์สำรอง — ใส่มาแล้วคิวจะไม่มีวันว่างจนเงียบทั้งไลฟ์ */
   filler?: FillerTrack[];
   fillerMode?: "off" | "order" | "shuffle";
-  /** คลิปนี้เริ่มเล่นไม่ได้ — ให้หน้าแม่เอาออกจากกองสำรองได้ถ้าอยาก */
-  onUnplayable?: (videoId: string, fromFiller: boolean) => void;
 }) {
   const reduced = useReducedMotion();
   // ต้องรู้ว่าใครล็อกอินอยู่ ตอนต่อเพลงสำรองต้องแปะ uid ไปกับใบ
@@ -123,10 +122,6 @@ export function SongPlayerCore({
   /** เพลงที่กำลังยิงคำสั่งโปรโมตอยู่ กัน snapshot ยิงซ้ำแล้วเขียนซ้ำ */
   const promotingRef = useRef<string | null>(null);
   const blockTimerRef = useRef<number | null>(null);
-  /** ตัวเฝ้าเวลาสำหรับคลิปที่เริ่มเล่นไม่ได้ */
-  const deadTimerRef = useRef<number | null>(null);
-  /** คลิปที่โหลดล่าสุดเคยเล่นจริงแล้วหรือยัง */
-  const playedOkRef = useRef(false);
   /** บอกเรื่องเขียนความยาวคลิปไม่ผ่านไปแล้วหรือยัง กันเตือนซ้ำทุกเพลง */
   const durationSentRef = useRef<string | null>(null);
 
@@ -272,11 +267,6 @@ export function SongPlayerCore({
               if (e.data === YT_STATE.PLAYING) {
                 setBlocked(false);
                 setPaused(false);
-                playedOkRef.current = true;
-                if (deadTimerRef.current) {
-                  window.clearTimeout(deadTimerRef.current);
-                  deadTimerRef.current = null;
-                }
                 if (blockTimerRef.current) {
                   window.clearTimeout(blockTimerRef.current);
                   blockTimerRef.current = null;
@@ -298,7 +288,6 @@ export function SongPlayerCore({
     return () => {
       cancelled = true;
       if (blockTimerRef.current) window.clearTimeout(blockTimerRef.current);
-      if (deadTimerRef.current) window.clearTimeout(deadTimerRef.current);
       playerRef.current?.destroy();
       playerRef.current = null;
     };
@@ -347,7 +336,6 @@ export function SongPlayerCore({
 
     loadedRef.current = playing.id;
     manualPauseRef.current = false;
-    playedOkRef.current = false;
     p.loadVideoById(playing.videoId);
 
     /*
@@ -363,27 +351,14 @@ export function SongPlayerCore({
     }, 2200);
 
     /*
-      ตัวเฝ้าเวลา — คลิปที่เริ่มเล่นไม่ได้ต้องถูกข้าม ไม่ใช่ค้างคาไว้ทั้งไลฟ์
+      ไม่มีตัวข้ามอัตโนมัติแล้ว — เคยมีตัวเฝ้าเวลา 12 วินาทีที่ข้ามคลิปที่ยังไม่เริ่มเล่น
+      แต่มันแยกไม่ออกว่า "คลิปนี้เสีย" หรือ "ตัวเล่นเริ่มอะไรไม่ได้เลยตอนนี้"
+      พอเจอกรณีหลัง มันไล่ข้ามทีละ 13 วินาทีจนคิวหมดเกลี้ยง (เกิดกับของจริงมาแล้ว)
 
-      YouTube ไม่ได้ยิง onError ทุกกรณีที่เล่นไม่ได้ MV ของค่ายเพลงจำนวนมาก
-      ที่เจ้าของตั้งค่าห้ามฝังในเว็บอื่นจะวนอยู่ที่ บัฟเฟอร์ → ยังไม่เริ่ม
-      แล้วเงียบไปเฉยๆ ไม่มีสัญญาณอะไรกลับมาเลย ถ้าไม่มีตัวนี้คิวจะหยุดตรงนั้นถาวร
-      (ตรวจกองสำรองจริงของช่องแล้วพบว่าเป็นแบบนี้เกินครึ่ง)
-
-      ให้เวลามากพอสำหรับเน็ตช้า แต่ไม่นานจนคนดูรู้สึกว่าไลฟ์เงียบ
+      คลิปที่เริ่มไม่ได้จึงค้างอยู่กับที่ ให้คนดูแลกดข้ามเอง — เสียเวลาไม่กี่วินาที
+      แลกกับการไม่เผาคิวที่คนดูอุตส่าห์ขอมาทิ้งทั้งแถว
     */
-    const startingId = playing.id;
-    const startingVideo = playing.videoId;
-    const fromFiller = playing.source === "filler";
-    if (deadTimerRef.current) window.clearTimeout(deadTimerRef.current);
-    deadTimerRef.current = window.setTimeout(() => {
-      // ได้เล่นจริงแล้ว หรือเปลี่ยนเพลงไปแล้ว = ไม่ต้องทำอะไร
-      if (playedOkRef.current || loadedRef.current !== startingId) return;
-      if (manualPauseRef.current) return;
-      onUnplayable?.(startingVideo, fromFiller);
-      void advance(startingId);
-    }, DEAD_MS);
-  }, [ready, active, playing, advance, onUnplayable]);
+  }, [ready, active, playing, advance]);
 
   /*
     ตามเก็บความยาวคลิปให้ widget
@@ -1033,27 +1008,6 @@ export default function SongPlayer() {
         channelId={channelId}
         filler={channel?.songs?.filler}
         fillerMode={channel?.songs?.fillerMode ?? "off"}
-        onUnplayable={(videoId, fromFiller) => {
-          /*
-            คลิปที่เริ่มเล่นไม่ได้เอาออกจากกองสำรองเลย ไม่งั้นพอวนมาถึงอีกรอบ
-            ไลฟ์ก็จะค้างซ้ำที่เดิม — ส่วนเพลงที่คนดูขอมาไม่แตะ แค่ข้ามไป
-            เพราะมันเป็นของครั้งเดียว ไม่ได้อยู่ในกองที่จะวนกลับมา
-          */
-          if (!fromFiller) return;
-          const list = channel?.songs?.filler ?? [];
-          const gone = list.find((t) => t.videoId === videoId);
-          if (!gone) return;
-          void saveFillerList(
-            channelId,
-            list.filter((t) => t.videoId !== videoId),
-          ).then(() =>
-            toast(
-              `"${gone.title.slice(0, 28)}" เล่นไม่ได้ (เจ้าของคลิปห้ามฝัง) — เอาออกจากกองสำรองแล้ว`,
-              "info",
-              5000,
-            ),
-          );
-        }}
       />
       <SongConsole channelId={channelId} channel={channel} />
     </div>

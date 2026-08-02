@@ -42,7 +42,36 @@ export function playlistIdFrom(raw: string): string | null {
   }
 }
 
-/** อ่านไอดีคลิปทั้งหมดในเพลย์ลิสต์ ผ่านตัวเล่นซ่อนที่ปิดเสียงไว้ */
+/**
+ * เพลย์ลิสต์นี้เปิดสาธารณะไหม
+ *
+ * oEmbed ให้ข้อมูลเฉพาะของสาธารณะ ของที่ตั้งเป็น "ไม่จำกัด" จะตอบ 401
+ * ทั้งที่กดลิงก์เข้าดูได้ปกติ — ซึ่งเป็นจุดที่คนสับสนที่สุด
+ * เพราะเปิดลิงก์เองแล้วเห็นครบ เลยไม่คิดว่าเป็นเรื่องการตั้งค่าความเป็นส่วนตัว
+ *
+ * คืน null เมื่อถามไม่ได้ (เน็ตล่ม/โดนบล็อก) จะได้ไม่ไปสรุปแทนผู้ใช้ผิดๆ
+ */
+async function isPlaylistPublic(listId: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(
+      `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(
+        `https://www.youtube.com/playlist?list=${listId}`,
+      )}`,
+      { signal: AbortSignal.timeout(6000) },
+    );
+    return res.ok;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * อ่านไอดีคลิปทั้งหมดในเพลย์ลิสต์ ผ่านตัวเล่นซ่อนที่ปิดเสียงไว้
+ *
+ * เพดานเวลา 15 วิเหลือเฟือ — เพลย์ลิสต์สาธารณะ 183 เพลงใช้เวลา 0.75 วิ
+ * ที่หมดเวลาจริงๆ คือกรณีตัวเล่นไม่ยอมโหลดเลย ซึ่งมันเงียบสนิท
+ * ไม่ยิง onError และไม่เปลี่ยนสถานะอะไรให้จับได้ จึงต้องไปถามสาเหตุเอาทีหลัง
+ */
 export function fetchPlaylistVideoIds(
   listId: string,
   timeoutMs = 15000,
@@ -107,7 +136,14 @@ export function fetchPlaylistVideoIds(
           },
         });
 
-        window.setTimeout(() => die(new Error("playlist-timeout")), timeoutMs);
+        /* หมดเวลาแล้วค่อยไปหาสาเหตุ ไม่ถามดักไว้ก่อน — ถ้าดักไว้แล้ววันหนึ่ง
+           YouTube ยอมให้ฝังเพลย์ลิสต์ "ไม่จำกัด" ได้ เราจะปฏิเสธของที่ใช้ได้จริงทิ้ง */
+        window.setTimeout(() => {
+          if (done) return;
+          void isPlaylistPublic(listId).then((pub) =>
+            die(new Error(pub === false ? "playlist-not-public" : "playlist-timeout")),
+          );
+        }, timeoutMs);
       })
       .catch(() => die(new Error("yt-api-blocked")));
   });
