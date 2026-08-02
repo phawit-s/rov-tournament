@@ -3,15 +3,17 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { motion } from "motion/react";
-import { hasBackend } from "@/lib/backend/firebase";
+import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { tournamentStore } from "@/lib/tournament/store";
-import { channelStore } from "@/lib/channel/store";
+import { channelStore, watchAllChannels } from "@/lib/channel/store";
+import type { Channel } from "@/lib/channel/types";
 import Panel from "../ui/Panel";
 import Button from "../ui/Button";
 import { PageHeading } from "../ui/Reveal";
@@ -91,6 +93,9 @@ const WIDGETS: WidgetDef[] = [
   },
 ];
 
+/** อ้างอิงคงที่ ไม่งั้น setState ตอน error จะสร้างอาร์เรย์ใหม่แล้วรีเรนเดอร์ไม่จบ */
+const NO_CHANNELS: Channel[] = [];
+
 /** สีสำเร็จรูปชุดเดียวกับสีสถานะของทั้งเว็บ กดแล้วได้โทนที่เข้ากับงานแน่ๆ */
 const ACCENT_PRESETS = ["e6c894", "cfa765", "6f8fd8", "4db591", "a079d8", "e0566b"];
 
@@ -133,6 +138,12 @@ export default function WidgetBuilder() {
     tournamentStore.getSnapshot,
     tournamentStore.getServerSnapshot,
   );
+  useSyncExternalStore(
+    authStore.subscribe,
+    authStore.getSnapshot,
+    authStore.getServerSnapshot,
+  );
+  const user = authStore.user();
   const channel = useSyncExternalStore(
     channelStore.subscribe,
     channelStore.getSnapshot,
@@ -145,6 +156,22 @@ export default function WidgetBuilder() {
   const [scale, setScale] = useState(1);
   const [copied, setCopied] = useState<string | null>(null);
 
+  /*
+    ช่องทั้งหมดที่เราเป็นเจ้าของ — คนหนึ่งเปิดได้หลายช่องแล้ว
+    ลิงก์ widget ที่ผูกกับช่อง (แจ้งเตือน/เพลง) จึงต้องบอกให้ชัดว่าอันไหนของช่องไหน
+    ไม่งั้นจะแจกลิงก์ของช่องเดียวเงียบๆ แล้วคนเอาไปแปะผิดช่องโดยไม่รู้ตัว
+  */
+  const [myChannels, setMyChannels] = useState<Channel[]>(NO_CHANNELS);
+  const [pickedChannelId, setPickedChannelId] = useState("");
+
+  useEffect(() => {
+    if (!hasBackend) return;
+    return watchAllChannels(
+      (list) => setMyChannels(list),
+      () => setMyChannels(NO_CHANNELS),
+    );
+  }, []);
+
   // หน่วงสีก่อนส่งเข้า iframe ไม่งั้นพิมพ์โค้ดสีทีละตัวแล้วพรีวิวรีโหลดรัวๆ
   const previewAccent = useDebounced(accent, 400);
 
@@ -155,30 +182,50 @@ export default function WidgetBuilder() {
 
   const selected = tournaments.find((t) => t.id === tournamentId) ?? tournaments[0];
 
+  /* ช่องของเราเท่านั้น — ผู้ดูแลเห็นช่องคนอื่นได้ก็จริง แต่เอาไปทำ widget ของตัวเองไม่ได้ */
+  const owned = useMemo(
+    () => myChannels.filter((c) => c.ownerUid && c.ownerUid === user?.uid),
+    [myChannels, user?.uid],
+  );
+  /* เรียงให้ช่องที่กำลังแก้อยู่ในหน้าช่องมาก่อน คนส่วนใหญ่ต่อ widget ให้ช่องนั้น */
+  const activeChannel =
+    owned.find((c) => c.id === pickedChannelId) ??
+    owned.find((c) => c.id === channel?.id) ??
+    owned[0] ??
+    channel ??
+    null;
+
   const makeUrl = useCallback(
     (widget: WidgetDef, accentValue: string, solid = false) => {
       const params = new URLSearchParams();
       if (accentValue && accentValue !== "e6c894") params.set("accent", accentValue);
       if (scale !== 1) params.set("scale", String(scale));
       if (solid) params.set("solid", "1");
+      /*
+        widget ที่ผูกกับช่องใช้ ?ch= ไม่ใช่ #ch=
+        ถ้าลืมใส่ / ปิดท้าย เซิร์ฟเวอร์จะเด้ง URL ใหม่แล้วส่วน #hash หายไปเลย
+        (ทดสอบกับ GitHub Pages แล้ว: /widget/song#ch=... → 301 ไป /widget/song/ เฉยๆ)
+        ส่วน ?ch= รอดทั้งสองแบบ และ Browser Source บางตัวก็ตัด # ทิ้งอยู่แล้ว
+      */
+      if (widget.scope === "channel" && activeChannel) {
+        params.set("ch", activeChannel.id);
+      }
       const query = params.toString() ? `?${params.toString()}` : "";
       const hash =
         widget.scope === "channel"
-          ? channel
-            ? `#ch=${channel.id}`
-            : ""
+          ? ""
           : selected
             ? `#${useCloud ? "c" : "t"}=${selected.id}`
             : "";
       return `${origin}${widget.path}${query}${hash}`;
     },
-    [channel, origin, scale, selected, useCloud],
+    [activeChannel, origin, scale, selected, useCloud],
   );
 
   /* ตัวที่ผูกกับช่องโผล่ก็ต่อเมื่อมีช่องแล้ว ตัวที่ผูกกับทัวร์ก็ต่อเมื่อมีทัวร์
      ไม่งั้นจะแจกลิงก์ที่ไม่มีรหัสห้อยท้าย ซึ่งเปิดมาแล้วว่างเปล่า */
   const usable = WIDGETS.filter((w) =>
-    w.scope === "channel" ? !!channel : tournaments.length > 0,
+    w.scope === "channel" ? !!activeChannel : tournaments.length > 0,
   );
 
   const copy = (url: string, key: string) => {
@@ -200,6 +247,40 @@ export default function WidgetBuilder() {
       {/* ตั้งค่า */}
       <Panel className="p-6">
         <Panel.Header eyebrow="Setup" title="ตั้งค่ากราฟิกแพ็กเกจ" />
+
+        {/* เลือกช่อง — มีผลเฉพาะ widget ที่ผูกกับช่อง (แจ้งเตือนโดเนท / เพลง)
+            โผล่ก็ต่อเมื่อมีมากกว่าหนึ่งช่อง ช่องเดียวไม่ต้องให้เลือกให้รก */}
+        {owned.length > 1 && (
+          <div className="mb-5">
+            <Label hint="ใช้กับ widget แจ้งเตือนโดเนทและเพลง — ทัวร์เลือกแยกด้านล่าง">
+              ทำ widget ให้ช่องไหน
+            </Label>
+            <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+              {owned.map((c) => {
+                const on = c.id === activeChannel?.id;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setPickedChannelId(c.id)}
+                    className={`min-h-11 shrink-0 cursor-pointer rounded-xl px-4 py-2 text-left transition-colors ${
+                      on
+                        ? "bg-champagne/14 text-champagne ring-1 ring-champagne/45"
+                        : "tile hover-tile text-muted hover:text-ice"
+                    }`}
+                  >
+                    <span className="block max-w-40 truncate font-display text-sm">
+                      {c.name || c.handle || c.id.slice(0, 8)}
+                    </span>
+                    <span className="num block text-eyebrow text-muted">
+                      {c.handle ? `@${c.handle}` : "ยังไม่ตั้ง handle"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <div>
