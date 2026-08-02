@@ -65,6 +65,12 @@ export type SongConfig = {
   filler?: FillerTrack[];
   /** off = ไม่เล่นสำรองเลย · order = ไล่ตามลำดับ · shuffle = สุ่ม */
   fillerMode?: "off" | "order" | "shuffle";
+
+  /**
+   * ลิงก์ Worker ที่ใช้ค้นหาเพลง — ว่างไว้ = ไม่มีช่องค้นหา ใช้วางลิงก์แทน
+   * คีย์ YouTube อยู่ใน Worker ไม่ได้อยู่ในหน้าเว็บ
+   */
+  searchEndpoint?: string;
 };
 
 export const DEFAULT_SONG_CONFIG: SongConfig = {

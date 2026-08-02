@@ -651,6 +651,59 @@ const handler = {
         );
       }
 
+      /*
+        ค้นหาเพลงบน YouTube — เปิดด้วย GET ?search=<คำค้น>
+
+        ทำไมต้องผ่าน Worker: การค้นหาต้องใช้ YouTube Data API ซึ่งต้องมีคีย์
+        และเว็บเป็นไฟล์ static ล้วน ถ้าใส่คีย์ในหน้าเว็บใครก็หยิบไปใช้จนโควตาหมด
+        ตรงนี้คีย์อยู่ฝั่งเซิร์ฟเวอร์ และมี ALLOWED_ORIGIN คุมว่าใครเรียกได้อยู่แล้ว
+
+        (ลองทางที่ไม่ต้องใช้คีย์มาแล้วสองทาง — listType:'search' ของตัวเล่นฝัง
+        ถูกปิดไปแล้ว ส่วน endpoint คำแนะนำของ Google ก็โดน CORS บล็อก)
+      */
+      const search = new URL(request.url).searchParams.get("search");
+      if (search !== null) {
+        const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+        if (!allow(ip, Number(env.MAX_PER_MIN || 0))) return fail("rate-limited", cors);
+
+        const q = search.trim().slice(0, 100);
+        if (!q) return fail("empty-query", cors);
+        if (!env.YT_API_KEY) return fail("no-youtube-key", cors);
+
+        const api = new URL("https://www.googleapis.com/youtube/v3/search");
+        api.searchParams.set("part", "snippet");
+        api.searchParams.set("type", "video");
+        api.searchParams.set("maxResults", "12");
+        // เอาเฉพาะคลิปที่ฝังเล่นในเว็บอื่นได้ ไม่งั้นกดแล้วไปค้างที่ตัวเล่น
+        api.searchParams.set("videoEmbeddable", "true");
+        api.searchParams.set("q", q);
+        api.searchParams.set("key", env.YT_API_KEY);
+
+        const res = await fetch(api.toString());
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          return fail("youtube-error", cors, {
+            status: res.status,
+            message: data?.error?.message ?? null,
+          });
+        }
+
+        return reply(
+          {
+            ok: true,
+            items: (data?.items ?? [])
+              .filter((it) => it?.id?.videoId)
+              .map((it) => ({
+                videoId: it.id.videoId,
+                title: it.snippet?.title ?? "",
+                author: it.snippet?.channelTitle ?? "",
+                thumb: it.snippet?.thumbnails?.medium?.url ?? null,
+              })),
+          },
+          cors,
+        );
+      }
+
       if (request.method !== "POST") {
         return fail("method-not-allowed", cors);
       }

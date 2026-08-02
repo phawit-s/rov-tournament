@@ -19,7 +19,14 @@ import Panel from "../ui/Panel";
 import { toast } from "../ui/Toast";
 import { StatTile } from "../ui/hud";
 import { IconCheck, IconChevronDown, IconCopy, IconExternal } from "../ui/icons";
-import { ArtCalendar, EmptyState, Label, NumberInput, Textarea } from "../tournament/ui";
+import {
+  ArtCalendar,
+  EmptyState,
+  Input,
+  Label,
+  NumberInput,
+  Textarea,
+} from "../tournament/ui";
 import { SongPlayerCore } from "./SongPlayer";
 
 /** อ้างอิงคงที่ ไม่งั้นคิวว่างจะเป็นอาร์เรย์ใหม่ทุกเรนเดอร์แล้ววนไม่จบ */
@@ -190,6 +197,27 @@ export default function SongQueuePanel({
             onChange={(e) => patch({ note: e.target.value.slice(0, 200) })}
             placeholder="วางลิงก์ YouTube ได้เลย เพลงจะเข้าคิวรอสตรีมเมอร์เปิด"
           />
+        </div>
+
+        {/* ค้นหาเพลง — ต้องมีคีย์ YouTube ซึ่งฝังในหน้าเว็บไม่ได้ จึงต้องผ่าน Worker */}
+        <div className="mt-4">
+          <Label hint="ไม่ใส่ก็ได้ — ไม่ใส่แล้วหน้าเล่นเพลงจะมีแค่ช่องวางลิงก์">
+            ลิงก์ Worker สำหรับค้นหาเพลง
+          </Label>
+          <Input
+            value={songs.searchEndpoint ?? ""}
+            onChange={(e) => patch({ searchEndpoint: e.target.value.trim() })}
+            placeholder="https://slip-verify.xxxx.workers.dev"
+            inputMode="url"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <p className="mt-2 text-xs leading-relaxed text-muted">
+            ใช้ Worker ตัวเดียวกับที่ตรวจสลิปได้เลย แค่เพิ่มคีย์เข้าไปด้วย{" "}
+            <code className="text-champagne">wrangler secret put YT_API_KEY</code> —
+            คีย์ขอฟรีที่ Google Cloud Console (เปิด YouTube Data API v3)
+            โควตาฟรีค้นได้ราววันละ 100 ครั้ง
+          </p>
         </div>
 
         {/* ลิงก์ที่เอาไปแปะให้คนดู — ใช้ handle ก่อนเพราะจำง่ายกว่า uid */}

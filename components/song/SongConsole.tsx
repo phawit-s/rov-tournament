@@ -7,6 +7,7 @@ import { safeImageSrc } from "@/lib/safe";
 import { FILLER_LIMIT } from "@/lib/song/filler";
 import { saveFillerList, saveFillerMode } from "@/lib/song/config";
 import { importPlaylist, playlistIdFrom } from "@/lib/song/playlist";
+import { searchSongs, type SearchHit } from "@/lib/song/search";
 import { addSongToQueue, watchSongQueue } from "@/lib/song/store";
 import { DEFAULT_SONG_CONFIG, type FillerTrack, type SongRequest } from "@/lib/song/types";
 import { lookupVideo, thumbUrl, videoIdFrom, watchUrl } from "@/lib/song/youtube";
@@ -86,7 +87,9 @@ export default function SongConsole({
         ))}
       </div>
 
-      {tab === "add" && <AddSong channelId={channelId} />}
+      {tab === "add" && (
+        <AddSong channelId={channelId} searchEndpoint={songs.searchEndpoint?.trim()} />
+      )}
 
       {tab === "history" && (
         <History channelId={channelId} done={done} />
@@ -233,9 +236,137 @@ function LinkBox({
    ใส่เพลงเอง
    ========================================================================= */
 
-function AddSong({ channelId }: { channelId: string }) {
+function AddSong({
+  channelId,
+  searchEndpoint,
+}: {
+  channelId: string;
+  searchEndpoint?: string;
+}) {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<SearchHit[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [added, setAdded] = useState<string | null>(null);
+
+  const queue = async (info: {
+    videoId: string;
+    title: string;
+    author: string;
+  }) => {
+    const user = authStore.user();
+    if (!user) {
+      toast("ต้องล็อกอินก่อนถึงจะใส่เพลงได้", "error");
+      return;
+    }
+    await addSongToQueue(
+      channelId,
+      {
+        videoId: info.videoId,
+        title: info.title,
+        author: info.author,
+        url: watchUrl(info.videoId),
+        byUid: user.uid,
+        byName: "สตรีมเมอร์",
+      },
+      "streamer",
+    );
+    setAdded(info.videoId);
+    toast("ใส่คิวแล้ว", "success", 1600);
+    window.setTimeout(() => setAdded(null), 1600);
+  };
+
+  const run = async () => {
+    if (!searchEndpoint || !q.trim()) return;
+    setBusy(true);
+    setErr(null);
+    const res = await searchSongs(searchEndpoint, q);
+    if (res.ok) setHits(res.items);
+    else {
+      setHits(null);
+      setErr(res.reason);
+    }
+    setBusy(false);
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* ---------- ค้นหา ---------- */}
+      {searchEndpoint ? (
+        <div className="space-y-3">
+          <p className="mb-2 text-sm font-medium text-ice/85">ค้นหาเพลง</p>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void run();
+              }}
+              placeholder="พิมพ์ชื่อเพลงหรือชื่อศิลปิน"
+              className="min-w-0 flex-1"
+            />
+            <Button onClick={() => void run()} loading={busy} disabled={!q.trim()}>
+              ค้นหา
+            </Button>
+          </div>
+
+          {err && <p className="text-xs text-[#e79a9a]">{err}</p>}
+
+          {hits?.length === 0 && (
+            <p className="text-sm text-muted">ไม่เจอเพลงที่ตรงกับคำค้นนี้</p>
+          )}
+
+          {!!hits?.length && (
+            <ul className="no-scrollbar max-h-96 space-y-2 overflow-y-auto">
+              {hits.map((h) => (
+                <li key={h.videoId}>
+                  <button
+                    type="button"
+                    onClick={() => void queue(h)}
+                    title="กดเพื่อใส่คิว"
+                    className="hover-tile tile flex w-full cursor-pointer items-center gap-3 rounded-xl p-2.5 text-left"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={safeImageSrc(h.thumb ?? thumbUrl(h.videoId, "mq")) ?? ""}
+                      alt=""
+                      loading="lazy"
+                      className="aspect-video w-20 shrink-0 rounded-md object-cover"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block line-clamp-2 text-sm leading-snug text-ice">
+                        {h.title}
+                      </span>
+                      <span className="block truncate text-xs text-muted">
+                        {h.author}
+                      </span>
+                    </span>
+                    <span
+                      className={`shrink-0 font-display text-xs ${
+                        added === h.videoId ? "text-[#4db591]" : "text-champagne"
+                      }`}
+                    >
+                      {added === h.videoId ? "ใส่แล้ว" : "+ ใส่คิว"}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <span className="rule block h-px" />
+        </div>
+      ) : (
+        <div className="tally rounded-xl tile px-4 py-3">
+          <p className="slug slug-2">ยังไม่มีช่องค้นหา</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            การค้นหาต้องใช้คีย์ YouTube Data API ซึ่งฝังในหน้าเว็บไม่ได้ (ใครก็หยิบไปใช้ได้)
+            ใส่คีย์ไว้ใน Worker แล้ววางลิงก์ Worker ที่หน้าช่อง → ระบบขอเพลง
+            ช่องค้นหาจะโผล่ตรงนี้เอง ระหว่างนี้วางลิงก์เพลงข้างล่างได้เหมือนเดิม
+          </p>
+        </div>
+      )}
+
       <LinkBox
         label="วางลิงก์เพลงที่อยากเปิด"
         hint="เพลงจะต่อท้ายคิวปกติ ถ้าคิวว่างอยู่ก็เล่นต่อทันที"
@@ -261,11 +392,6 @@ function AddSong({ channelId }: { channelId: string }) {
           toast("ใส่คิวแล้ว", "success");
         }}
       />
-
-      <p className="text-xs leading-relaxed text-muted">
-        อยากค้นหาเพลงจากในหน้านี้เลยต้องต่อ YouTube Data API ซึ่งใช้คีย์ของ Google —
-        ตอนนี้ยังไม่ได้ต่อไว้ ระหว่างนี้ก๊อปลิงก์จากแอป YouTube มาวางได้เหมือนกัน
-      </p>
     </div>
   );
 }
