@@ -106,6 +106,8 @@ export function SongPlayerCore({
   const loadedRef = useRef<string | null>(null);
   /** คนกดหยุดเอง — ต่างจากโดนสั่งหยุดเพราะเสียสิทธิ์ ต้องไม่ไปสั่งเล่นต่อทับเจตนา */
   const manualPauseRef = useRef(false);
+  /** กำลังกดเลือกเพลงอยู่ — ตัวเดินคิวอัตโนมัติต้องหยุดรอ ไม่งั้นแย่งกันจนได้ผิดเพลง */
+  const manualRef = useRef(false);
   /** เพลงที่กำลังยิงคำสั่งโปรโมตอยู่ กัน snapshot ยิงซ้ำแล้วเขียนซ้ำ */
   const promotingRef = useRef<string | null>(null);
   const blockTimerRef = useRef<number | null>(null);
@@ -164,6 +166,8 @@ export function SongPlayerCore({
       promotingRef.current = null;
       return;
     }
+    // คนกำลังกดเลือกเพลงอยู่ ห้ามแทรก ไม่งั้นเขากดเพลงหนึ่งแล้วได้อีกเพลง
+    if (manualRef.current) return;
     const next = queued[0];
     if (!next || promotingRef.current === next.id) return;
     promotingRef.current = next.id;
@@ -187,6 +191,8 @@ export function SongPlayerCore({
   useEffect(() => {
     if (!channelId || !active || queued.length > 0) return;
     if (fillerMode === "off" || !filler?.length || fillingRef.current) return;
+    // คนกำลังกดเลือกเพลงอยู่ อย่าเพิ่งเติมมาแย่งคิว
+    if (manualRef.current) return;
 
     const pick = pickFiller(filler, queue, fillerMode);
     // กติกาบังคับให้ byUid ตรงกับคนที่เขียน ยังไม่ล็อกอินก็เขียนไม่ได้
@@ -348,33 +354,50 @@ export function SongPlayerCore({
     }
   };
 
-  /** คลิกเพลงในคิว = ให้เล่นเพลงนั้นเลย ไม่ต้องรอไล่ไปตามลำดับ */
-  const playNow = async (song: SongRequest) => {
-    if (song.id === playing?.id) return;
-    if (playing) await setSongStatus(channelId, playing.id, "played");
-    await setSongStatus(channelId, song.id, "playing", queue);
+  /**
+   * คลิกเพลง = ให้เล่นเพลงนั้นเลย
+   *
+   * ห้ามทำเป็นสองจังหวะ (ปิดเพลงเดิมก่อน แล้วค่อยเปิดตัวใหม่) เด็ดขาด
+   * ระหว่างสองจังหวะนั้นจะไม่มีเพลงไหนเล่นอยู่เลยแม้แต่เสี้ยววินาที
+   * ตัวเดินคิวอัตโนมัติเห็นแบบนั้นก็จะรีบดันเพลงหัวคิวขึ้นมาแทน
+   * ผลคือกดเพลงหนึ่งแล้วได้อีกเพลงหนึ่ง — เป็นอาการที่เจอตอนกดจากกองสำรอง
+   * เพราะมีเพลงสำรองที่เติมล่วงหน้าไว้รออยู่หัวคิวพอดี
+   *
+   * setSongStatus ตอนตั้งเป็น "playing" ปิดเพลงที่ค้างอยู่ให้ในชุดเดียวกันแล้ว
+   * จึงเรียกครั้งเดียวพอ และต้องกันตัวเดินคิวไม่ให้แทรกระหว่างที่ยังทำไม่เสร็จ
+   */
+  const pickAndPlay = async (job: () => Promise<string | null>) => {
+    manualRef.current = true;
+    try {
+      const id = await job();
+      if (id) await setSongStatus(channelId, id, "playing", stateRef.current.queue);
+    } finally {
+      manualRef.current = false;
+    }
   };
 
-  /** คลิกเพลงในกองสำรอง = ใส่คิวแล้วเล่นเลย */
-  const playTrackNow = async (track: FillerTrack) => {
-    const uid = authStore.user()?.uid;
-    if (!uid) return;
-    const id = await addSongToQueue(
-      channelId,
-      {
-        videoId: track.videoId,
-        title: track.title,
-        author: track.author,
-        url: watchUrl(track.videoId),
-        byUid: uid,
-        byName: "เพลย์ลิสต์สำรอง",
-      },
-      "filler",
-    );
-    if (!id) return;
-    if (playing) await setSongStatus(channelId, playing.id, "played");
-    await setSongStatus(channelId, id, "playing", queue);
+  const playNow = (song: SongRequest) => {
+    if (song.id === playing?.id) return Promise.resolve();
+    return pickAndPlay(async () => song.id);
   };
+
+  const playTrackNow = (track: FillerTrack) =>
+    pickAndPlay(async () => {
+      const uid = authStore.user()?.uid;
+      if (!uid) return null;
+      return addSongToQueue(
+        channelId,
+        {
+          videoId: track.videoId,
+          title: track.title,
+          author: track.author,
+          url: watchUrl(track.videoId),
+          byUid: uid,
+          byName: "เพลย์ลิสต์สำรอง",
+        },
+        "filler",
+      );
+    });
 
   /*
     เพลงสำรองที่จะมาถึงคิวต่อไป
