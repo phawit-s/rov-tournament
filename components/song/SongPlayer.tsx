@@ -20,7 +20,7 @@ import {
   type LockState,
 } from "@/lib/song/player-lock";
 import { pickFiller } from "@/lib/song/filler";
-import { setSongsEnabled } from "@/lib/song/config";
+import { saveFillerList, setSongsEnabled } from "@/lib/song/config";
 import {
   addSongToQueue,
   setSongStatus,
@@ -54,6 +54,9 @@ import SongConsole from "./SongConsole";
 const EMPTY: SongRequest[] = [];
 const VOLUME_KEY = "tourney-hub/song/volume";
 
+/** รอคลิปเริ่มเล่นนานสุดเท่าไหร่ก่อนถือว่าเล่นไม่ได้แล้วข้าม */
+const DEAD_MS = 12_000;
+
 function readVolume(): number {
   if (typeof window === "undefined") return 70;
   const raw = Number(localStorage.getItem(VOLUME_KEY));
@@ -69,6 +72,7 @@ export function SongPlayerCore({
   compact = false,
   filler,
   fillerMode = "off",
+  onUnplayable,
 }: {
   channelId: string;
   /** true = ฝังอยู่ในหน้าอื่น ไม่ต้องโชว์คิวซ้ำกับที่หน้านั้นมีอยู่แล้ว */
@@ -76,6 +80,8 @@ export function SongPlayerCore({
   /** เพลย์ลิสต์สำรอง — ใส่มาแล้วคิวจะไม่มีวันว่างจนเงียบทั้งไลฟ์ */
   filler?: FillerTrack[];
   fillerMode?: "off" | "order" | "shuffle";
+  /** คลิปนี้เริ่มเล่นไม่ได้ — ให้หน้าแม่เอาออกจากกองสำรองได้ถ้าอยาก */
+  onUnplayable?: (videoId: string, fromFiller: boolean) => void;
 }) {
   const reduced = useReducedMotion();
   // ต้องรู้ว่าใครล็อกอินอยู่ ตอนต่อเพลงสำรองต้องแปะ uid ไปกับใบ
@@ -113,6 +119,10 @@ export function SongPlayerCore({
   /** เพลงที่กำลังยิงคำสั่งโปรโมตอยู่ กัน snapshot ยิงซ้ำแล้วเขียนซ้ำ */
   const promotingRef = useRef<string | null>(null);
   const blockTimerRef = useRef<number | null>(null);
+  /** ตัวเฝ้าเวลาสำหรับคลิปที่เริ่มเล่นไม่ได้ */
+  const deadTimerRef = useRef<number | null>(null);
+  /** คลิปที่โหลดล่าสุดเคยเล่นจริงแล้วหรือยัง */
+  const playedOkRef = useRef(false);
 
   const stateRef = useRef({ channelId, queue, active: true });
   useEffect(() => {
@@ -252,6 +262,11 @@ export function SongPlayerCore({
               if (e.data === YT_STATE.PLAYING) {
                 setBlocked(false);
                 setPaused(false);
+                playedOkRef.current = true;
+                if (deadTimerRef.current) {
+                  window.clearTimeout(deadTimerRef.current);
+                  deadTimerRef.current = null;
+                }
                 if (blockTimerRef.current) {
                   window.clearTimeout(blockTimerRef.current);
                   blockTimerRef.current = null;
@@ -273,6 +288,7 @@ export function SongPlayerCore({
     return () => {
       cancelled = true;
       if (blockTimerRef.current) window.clearTimeout(blockTimerRef.current);
+      if (deadTimerRef.current) window.clearTimeout(deadTimerRef.current);
       playerRef.current?.destroy();
       playerRef.current = null;
     };
@@ -305,17 +321,23 @@ export function SongPlayerCore({
       return;
     }
 
-    // ใบเดิม แต่คลิปอาจถูกสั่งหยุดไว้ตอนเสียสิทธิ์ — สั่งเล่นต่อให้เอง
+    /*
+      ใบเดิม — สั่งเล่นต่อเฉพาะตอนที่ "เราเป็นคนสั่งหยุดไว้เอง" เท่านั้น
+
+      ห้ามสั่งเล่นทุกครั้งที่เห็นว่าคลิปไม่ขยับ เพราะคลิปที่เจ้าของห้ามฝัง
+      จะวนอยู่ที่ บัฟเฟอร์ → ยังไม่เริ่ม ตลอดโดยไม่ยิง error ออกมา
+      ถ้าไล่กดเล่นซ้ำทุกรอบ มันจะบัฟเฟอร์ใหม่ไม่จบ เห็นเป็นวงกลมหมุนค้างบนจอ
+      คลิปที่เริ่มไม่ได้จริงๆ ให้ตัวเฝ้าเวลาด้านล่างจัดการข้ามไปแทน
+    */
     if (playing.id === loadedRef.current) {
       if (manualPauseRef.current) return;
-      const state = p.getPlayerState();
-      const moving = state === YT_STATE.PLAYING || state === YT_STATE.BUFFERING;
-      if (!moving && state !== YT_STATE.ENDED) p.playVideo();
+      if (p.getPlayerState() === YT_STATE.PAUSED) p.playVideo();
       return;
     }
 
     loadedRef.current = playing.id;
     manualPauseRef.current = false;
+    playedOkRef.current = false;
     p.loadVideoById(playing.videoId);
 
     /*
@@ -329,7 +351,29 @@ export function SongPlayerCore({
       const moving = state === YT_STATE.PLAYING || state === YT_STATE.BUFFERING;
       if (!moving) setBlocked(true);
     }, 2200);
-  }, [ready, active, playing]);
+
+    /*
+      ตัวเฝ้าเวลา — คลิปที่เริ่มเล่นไม่ได้ต้องถูกข้าม ไม่ใช่ค้างคาไว้ทั้งไลฟ์
+
+      YouTube ไม่ได้ยิง onError ทุกกรณีที่เล่นไม่ได้ MV ของค่ายเพลงจำนวนมาก
+      ที่เจ้าของตั้งค่าห้ามฝังในเว็บอื่นจะวนอยู่ที่ บัฟเฟอร์ → ยังไม่เริ่ม
+      แล้วเงียบไปเฉยๆ ไม่มีสัญญาณอะไรกลับมาเลย ถ้าไม่มีตัวนี้คิวจะหยุดตรงนั้นถาวร
+      (ตรวจกองสำรองจริงของช่องแล้วพบว่าเป็นแบบนี้เกินครึ่ง)
+
+      ให้เวลามากพอสำหรับเน็ตช้า แต่ไม่นานจนคนดูรู้สึกว่าไลฟ์เงียบ
+    */
+    const startingId = playing.id;
+    const startingVideo = playing.videoId;
+    const fromFiller = playing.source === "filler";
+    if (deadTimerRef.current) window.clearTimeout(deadTimerRef.current);
+    deadTimerRef.current = window.setTimeout(() => {
+      // ได้เล่นจริงแล้ว หรือเปลี่ยนเพลงไปแล้ว = ไม่ต้องทำอะไร
+      if (playedOkRef.current || loadedRef.current !== startingId) return;
+      if (manualPauseRef.current) return;
+      onUnplayable?.(startingVideo, fromFiller);
+      void advance(startingId);
+    }, DEAD_MS);
+  }, [ready, active, playing, advance, onUnplayable]);
 
   useEffect(() => {
     if (ready) playerRef.current?.setVolume(volume);
@@ -823,6 +867,27 @@ export default function SongPlayer() {
         channelId={channelId}
         filler={channel?.songs?.filler}
         fillerMode={channel?.songs?.fillerMode ?? "off"}
+        onUnplayable={(videoId, fromFiller) => {
+          /*
+            คลิปที่เริ่มเล่นไม่ได้เอาออกจากกองสำรองเลย ไม่งั้นพอวนมาถึงอีกรอบ
+            ไลฟ์ก็จะค้างซ้ำที่เดิม — ส่วนเพลงที่คนดูขอมาไม่แตะ แค่ข้ามไป
+            เพราะมันเป็นของครั้งเดียว ไม่ได้อยู่ในกองที่จะวนกลับมา
+          */
+          if (!fromFiller) return;
+          const list = channel?.songs?.filler ?? [];
+          const gone = list.find((t) => t.videoId === videoId);
+          if (!gone) return;
+          void saveFillerList(
+            channelId,
+            list.filter((t) => t.videoId !== videoId),
+          ).then(() =>
+            toast(
+              `"${gone.title.slice(0, 28)}" เล่นไม่ได้ (เจ้าของคลิปห้ามฝัง) — เอาออกจากกองสำรองแล้ว`,
+              "info",
+              5000,
+            ),
+          );
+        }}
       />
       <SongConsole channelId={channelId} channel={channel} />
     </div>
