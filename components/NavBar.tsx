@@ -26,6 +26,7 @@ import Button from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toast";
 import {
   IconClock,
+  IconLock,
   IconDice,
   IconHeart,
   IconMonitor,
@@ -111,6 +112,14 @@ export const NAV: NavItem[] = [
     no: "07",
     group: "channel",
     Icon: IconClock,
+    admin: true,
+  },
+  {
+    href: "/admin/",
+    label: "หลังบ้าน",
+    no: "08",
+    group: "channel",
+    Icon: IconLock,
     admin: true,
   },
 ];
