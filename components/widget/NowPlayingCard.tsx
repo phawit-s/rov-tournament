@@ -44,11 +44,12 @@ export default function NowPlayingCard({
   accent,
   shape = "tall",
 }: {
-  song: SongRequest;
+  /** null = ยังไม่มีเพลงเล่น ให้ขึ้นการ์ดสีเทารอแทนที่จะหายไปจากจอ */
+  song: SongRequest | null;
   accent: string;
   shape?: CardShape;
 }) {
-  const palette = useArtPalette(song.videoId);
+  const palette = useArtPalette(song?.videoId ?? null);
 
   /* กำหนดความกว้างตรงๆ ไม่ผ่านคลาส เพราะตัวเลขนี้คือสัญญากับผู้ใช้ —
      ต้องตรงกับขนาด Browser Source ที่หน้าแจกลิงก์บอกไว้เป๊ะๆ
@@ -57,31 +58,50 @@ export default function NowPlayingCard({
 
   const words = (
     <>
+      {/* กำหนดสีเป็น rgba ตรงๆ ไม่ใช้คลาสแบบ text-white/60
+          เพราะค่านั้นออกมาเป็น oklab() ที่วัดความเปรียบต่างย้อนกลับไม่ได้
+          ตัวหนังสือบน widget ต้องพิสูจน์ได้ว่าอ่านออกจริงตอนวางทับภาพเกม */}
       <p
-        className={`line-clamp-2 font-display leading-tight text-white ${
+        className={`line-clamp-2 font-display leading-tight ${
           shape === "tall" ? "text-lg" : "text-base"
         }`}
+        style={{ color: song ? "#fff" : "rgb(255 255 255 / 0.78)" }}
       >
-        {song.title}
+        {song ? song.title : "รอเพลงถัดไป"}
       </p>
       <p
         className="mt-0.5 truncate text-sm"
-        style={{ color: palette.tint, opacity: 0.8 }}
+        style={{ color: palette.tint, opacity: song ? 0.8 : 0.6 }}
       >
-        {song.author || `ขอโดย ${song.byName}`}
+        {song ? song.author || `ขอโดย ${song.byName}` : "ยังไม่มีเพลงในคิว"}
       </p>
-      <Progress song={song} palette={palette} />
+      {song && <Progress song={song} palette={palette} />}
     </>
+  );
+
+  const art = song ? (
+    <Artwork
+      videoId={song.videoId}
+      palette={palette}
+      accent={accent}
+      round={shape === "wide" ? 16 : 22}
+    />
+  ) : (
+    <IdleArt accent={accent} round={shape === "wide" ? 16 : 22} />
   );
 
   /*
     ทรงนอน — ปกกับข้อความอยู่ในแผ่นเดียวกัน วางเรียงกันซ้ายขวา
     ปกย่อลงเหลือเท่าความสูงของข้อความ จะได้เป็นแถบเตี้ยที่วางขอบจอได้
   */
+  /* key ผูกกับเพลง พอเปลี่ยนเพลง React สร้างกล่องใหม่ แอนิเมชันเข้าฉากจึงเล่นซ้ำเอง
+     ตอนรออยู่ใช้คีย์คงที่ จะได้ไม่กระพริบใหม่ทุกครั้งที่คิวขยับ */
+  const key = song?.id ?? "idle";
+
   if (shape === "wide") {
     return (
       <div
-        key={song.id}
+        key={key}
         className="rise-in flex items-center gap-3.5 rounded-2xl p-3"
         style={{
           width,
@@ -91,7 +111,7 @@ export default function NowPlayingCard({
         }}
       >
         <div className="shrink-0" style={{ width: ART_WIDE }}>
-          <Artwork videoId={song.videoId} palette={palette} accent={accent} round={16} />
+          {art}
         </div>
         <div className="min-w-0 flex-1">{words}</div>
       </div>
@@ -101,8 +121,8 @@ export default function NowPlayingCard({
   return (
     /* ทรงสูง — ห้ามใส่ overflow-hidden ที่ชั้นนี้ มันจะเฉือนแสงฟุ้งรอบปกทิ้งหมด
        ลูกแต่ละใบมีมุมโค้งของตัวเองอยู่แล้ว จึงไม่ต้องมีอะไรมาครอบ */
-    <div key={song.id} className="rise-in" style={{ width, filter: DROP }}>
-      <Artwork videoId={song.videoId} palette={palette} accent={accent} />
+    <div key={key} className="rise-in" style={{ width, filter: DROP }}>
+      {art}
 
       {/*
         ชื่อเพลงกับแถบเวลาอยู่ในแผ่นเดียวกัน
@@ -206,6 +226,41 @@ function Artwork({
 }
 
 /**
+ * ช่องปกตอนยังไม่มีเพลง — เส้นกราฟเสียงเต้นอยู่บนพื้นเทา
+ *
+ * ต้องเป็น "รออยู่" ไม่ใช่ "พัง" คนดูที่เห็นกล่องเทานิ่งสนิทจะคิดว่าระบบค้าง
+ * เส้นที่ยังเต้นบอกว่าป้ายยังมีชีวิต แค่ยังไม่มีใครขอเพลง
+ * (ใช้ .eq-bar ตัวเดียวกับ widget แถบยาว — CSS ล้วน ไม่มี JS ขยับต่อเฟรม)
+ */
+function IdleArt({ accent, round }: { accent: string; round: number }) {
+  return (
+    <div
+      className="relative grid aspect-square w-full place-items-center overflow-hidden"
+      style={{
+        borderRadius: round,
+        background: NEUTRAL_PALETTE.soft,
+        boxShadow: "inset 0 0 0 1px rgb(255 255 255 / 0.07)",
+      }}
+    >
+      <span className="flex h-8 items-end gap-1" aria-hidden>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <span
+            key={i}
+            className="eq-bar block h-full w-1 rounded-full"
+            style={{
+              background: accent,
+              opacity: 0.32,
+              animationDelay: `${i * 150}ms`,
+              animationDuration: `${1400 + (i % 3) * 260}ms`,
+            }}
+          />
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/**
  * แถบเวลา — เส้นบางเต็มความกว้าง แล้วเวลาตัวเล็กอยู่ใต้เส้นคนละมุม
  *
  * ไม่มีพื้นเป็นของตัวเอง เพราะนั่งอยู่ในแผ่นชื่อเพลงแล้ว
@@ -251,17 +306,25 @@ function Progress({ song, palette }: { song: SongRequest; palette: ArtPalette })
  * เริ่มที่สีกลางเสมอ แล้วค่อยเปลี่ยนเมื่อรูปโหลดเสร็จ — ถ้าฝืนรอสีก่อนค่อยวาด
  * จะเห็นการ์ดว่างแวบหนึ่งทุกครั้งที่เปลี่ยนเพลง ซึ่งบนสตรีมสะดุดตากว่าสีที่ค่อยๆ ไล่
  */
-function useArtPalette(videoId: string): ArtPalette {
-  const [palette, setPalette] = useState<ArtPalette>(NEUTRAL_PALETTE);
+function useArtPalette(videoId: string | null): ArtPalette {
+  const [loaded, setLoaded] = useState<ArtPalette | null>(null);
 
   useEffect(() => {
+    if (!videoId) return;
     const ac = new AbortController();
     void loadArtPalette(thumbUrl(videoId, "mq"), ac.signal).then((p) => {
-      if (!ac.signal.aborted) setPalette(p);
+      if (!ac.signal.aborted) setLoaded(p);
     });
     // เพลงเปลี่ยนก่อนรูปเก่าโหลดเสร็จ ต้องทิ้งผลเก่า ไม่งั้นสีจะมาทับของเพลงใหม่
     return () => ac.abort();
   }, [videoId]);
 
-  return palette;
+  /*
+    ไม่มีเพลง = สีเทาเสมอ ไม่ค้างสีของเพลงที่เพิ่งจบ
+
+    แต่ระหว่างที่เปลี่ยนเพลงแล้วสีใหม่ยังโหลดไม่เสร็จ ให้ค้างสีเดิมไว้ก่อน
+    ถ้าเด้งกลับไปเทาแล้วค่อยเข้าสีใหม่ จะเห็นเทาแวบหนึ่งทุกครั้งที่เปลี่ยนเพลง
+    ซึ่งบนสตรีมสะดุดตากว่าการไล่สีจากของเก่าไปของใหม่
+  */
+  return videoId ? (loaded ?? NEUTRAL_PALETTE) : NEUTRAL_PALETTE;
 }

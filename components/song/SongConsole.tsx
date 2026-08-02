@@ -170,9 +170,12 @@ function LinkBox({
     setBusy(true);
     try {
       await onPick(info);
+      // ล้างช่องเฉพาะตอนสำเร็จ ล้มเหลวแล้วต้องเหลือลิงก์ไว้ให้กดซ้ำได้
       setLink("");
       setInfo(null);
       setState("none");
+    } catch {
+      /* ผู้เรียกแจ้งสาเหตุไปแล้ว ตรงนี้แค่กันไม่ให้กลายเป็น unhandled rejection */
     } finally {
       setBusy(false);
     }
@@ -498,6 +501,9 @@ function ImportPlaylist({
     setBusy(true);
     setError(null);
     setStep("กำลังเปิดเพลย์ลิสต์…");
+
+    /* ---- ขั้นที่ 1: อ่านรายชื่อเพลงจาก YouTube ---- */
+    let fresh: FillerTrack[];
     try {
       const room = Math.max(0, FILLER_LIMIT - existing.length);
       if (room === 0) {
@@ -510,15 +516,11 @@ function ImportPlaylist({
       );
 
       const have = new Set(existing.map((t) => t.videoId));
-      const fresh = found.filter((t) => !have.has(t.videoId));
+      fresh = found.filter((t) => !have.has(t.videoId));
       if (fresh.length === 0) {
         setError("เพลงในเพลย์ลิสต์นี้อยู่ในกองครบแล้ว");
         return;
       }
-
-      await onImported([...existing, ...fresh]);
-      setUrl("");
-      toast(`เพิ่ม ${fresh.length} เพลงจากเพลย์ลิสต์แล้ว`, "success");
     } catch (e) {
       const code = e instanceof Error ? e.message : "";
       setError(
@@ -528,10 +530,28 @@ function ImportPlaylist({
             ? "อ่านเพลย์ลิสต์ไม่ทัน อาจเป็นเพลย์ลิสต์ส่วนตัวหรือลิงก์ไม่ถูก"
             : "เปิดเพลย์ลิสต์นี้ไม่ได้ ต้องเป็นเพลย์ลิสต์ที่เปิดสาธารณะ",
       );
+      return;
     } finally {
       setBusy(false);
       setStep(null);
     }
+
+    /*
+      ---- ขั้นที่ 2: บันทึกขึ้นคลาวด์ ----
+      แยกออกมาจากขั้นแรก เพราะสองขั้นนี้พังคนละสาเหตุ ถ้ารวม try เดียวกัน
+      "บันทึกไม่ผ่าน" จะไปโผล่เป็น "เพลย์ลิสต์นี้ไม่เปิดสาธารณะ" ซึ่งพาไปแก้ผิดทาง
+      และห้ามเด้ง "เพิ่มสำเร็จ" ถ้าขั้นนี้ยังไม่ผ่าน — ผู้ใช้จะนึกว่าเซฟแล้ว
+      แล้วรู้ตัวอีกทีตอนเปิดอีกเครื่องแล้วกองว่างเปล่า
+    */
+    try {
+      await onImported([...existing, ...fresh]);
+    } catch {
+      // ตัวบันทึกแจ้งสาเหตุจริงไปแล้ว ตรงนี้แค่ไม่ต้องบอกว่าสำเร็จ
+      setError("อ่านเพลย์ลิสต์ได้ แต่บันทึกลงช่องไม่สำเร็จ");
+      return;
+    }
+    setUrl("");
+    toast(`เพิ่ม ${fresh.length} เพลงจากเพลย์ลิสต์แล้ว`, "success");
   };
 
   return (
@@ -608,12 +628,26 @@ function Filler({
 }) {
   const [busy, setBusy] = useState(false);
 
+  /*
+    บันทึกกองสำรองขึ้นช่องบนคลาวด์
+
+    ต้องโยน error ต่อ ไม่ใช่กลืนไว้เอง — ผู้เรียกบางรายมีขั้นตอนต่อจากนี้
+    (ตัวนำเข้าเพลย์ลิสต์เด้ง "เพิ่มสำเร็จ") ถ้ากลืนไว้ มันจะบอกว่าสำเร็จ
+    ทั้งที่ไม่มีอะไรขึ้นเซิร์ฟเวอร์เลย แล้วผู้ใช้จะรู้ตัวอีกทีตอนเปิดอีกเครื่อง
+
+    บอกสาเหตุจริงจาก Firestore ด้วย ไม่ใช่เดาว่า "ไม่ใช่เจ้าของช่อง" อย่างเดียว
+    เพราะเขียนไม่ผ่านได้หลายทาง (เน็ตหลุด / กติกาเปลี่ยน / ล็อกอินคนละบัญชี)
+    แล้วแคชในเครื่องของ Firestore ยังโชว์รายการค้างไว้เหมือนเซฟสำเร็จอีก
+  */
   const save = async (next: FillerTrack[]) => {
     setBusy(true);
     try {
       await saveFillerList(channelId, next);
-    } catch {
-      toast("บันทึกไม่สำเร็จ — ต้องเป็นเจ้าของช่องถึงจะแก้ได้", "error");
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      console.error("บันทึกกองสำรองไม่สำเร็จ", err);
+      toast(`บันทึกกองสำรองไม่สำเร็จ — ${why}`, "error", 7000);
+      throw err;
     } finally {
       setBusy(false);
     }
@@ -631,7 +665,18 @@ function Filler({
                 key={m.key}
                 type="button"
                 disabled={!canEdit}
-                onClick={() => void saveFillerMode(channelId, m.key).catch(() => {})}
+                onClick={() =>
+                  void saveFillerMode(channelId, m.key).catch((err) => {
+                    /* ปุ่มจะเด้งกลับค่าเดิมเองเมื่อสแนปช็อตไม่เปลี่ยน
+                       ถ้าไม่บอกสาเหตุ ผู้ใช้จะนึกว่าปุ่มเสีย */
+                    console.error("เปลี่ยนโหมดเล่นสำรองไม่สำเร็จ", err);
+                    toast(
+                      `เปลี่ยนโหมดไม่สำเร็จ — ${err instanceof Error ? err.message : err}`,
+                      "error",
+                      7000,
+                    );
+                  })
+                }
                 className={`cursor-pointer rounded-xl px-3 py-2.5 text-center transition-all duration-200 ${
                   on
                     ? "bg-champagne/14 text-champagne ring-1 ring-champagne/45"
@@ -708,7 +753,7 @@ function Filler({
               <button
                 type="button"
                 disabled={busy || !canEdit}
-                onClick={() => void save(tracks.filter((x) => x.videoId !== t.videoId))}
+                onClick={() => void save(tracks.filter((x) => x.videoId !== t.videoId)).catch(() => {})}
                 className="shrink-0 cursor-pointer px-2 text-xs text-muted transition-colors hover:text-[#e79a9a] disabled:cursor-not-allowed"
                 aria-label="เอาเพลงนี้ออก"
               >

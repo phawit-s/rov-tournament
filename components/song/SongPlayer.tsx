@@ -127,7 +127,7 @@ export function SongPlayerCore({
   const deadTimerRef = useRef<number | null>(null);
   /** คลิปที่โหลดล่าสุดเคยเล่นจริงแล้วหรือยัง */
   const playedOkRef = useRef(false);
-  /** ใบที่ส่งความยาวคลิปไปแล้ว กันเขียนซ้ำทุกครั้งที่กดเล่นต่อจากหยุด */
+  /** บอกเรื่องเขียนความยาวคลิปไม่ผ่านไปแล้วหรือยัง กันเตือนซ้ำทุกเพลง */
   const durationSentRef = useRef<string | null>(null);
 
   const stateRef = useRef({ channelId, queue, active: true });
@@ -136,6 +136,10 @@ export function SongPlayerCore({
   }, [channelId, queue, lock]);
 
   const { playing, queued, done } = useMemo(() => splitQueue(queue), [queue]);
+  /* แยกออกมาเป็นค่าพื้นฐาน เพราะ playing เป็นอ็อบเจกต์ใหม่ทุกสแนปช็อต
+     ถ้าใส่ทั้งก้อนใน deps เอฟเฟกต์จะรีสตาร์ตทุกครั้งที่คิวขยับแม้เพลงไม่เปลี่ยน */
+  const playingId = playing?.id ?? null;
+  const playingDuration = playing?.duration ?? 0;
   /** แท็บนี้เป็นคนคุมคิวจริงไหม ผู้ชมห้ามทั้งเล่นและห้ามเดินคิว */
   const active = lock === "leader";
   /** กติกาบังคับให้ byUid ตรงกับคนที่เขียน ยังไม่รู้ว่าใครล็อกอินก็เขียนอะไรไม่ได้ */
@@ -277,18 +281,6 @@ export function SongPlayerCore({
                   window.clearTimeout(blockTimerRef.current);
                   blockTimerRef.current = null;
                 }
-                /* บอกความยาวคลิปให้ widget รู้ — มีแต่ตัวเล่นที่รู้ค่านี้
-                   เขียนครั้งเดียวต่อเพลง widget จะได้คำนวณแถบความคืบหน้าเองได้
-                   โดยไม่ต้องส่งเวลาปัจจุบันมาทุกวินาที */
-                const cur = loadedRef.current;
-                const { channelId: ch } = stateRef.current;
-                if (cur && ch && durationSentRef.current !== cur) {
-                  const secs = playerRef.current?.getDuration?.() ?? 0;
-                  if (secs > 0) {
-                    durationSentRef.current = cur;
-                    void setSongDuration(ch, cur, secs).catch(() => {});
-                  }
-                }
               }
               if (e.data === YT_STATE.PAUSED) setPaused(true);
               // คลิปจบเอง = ไปเพลงถัดไป (ไม่ใช่ตอนกดหยุดหรือโหลดคลิปใหม่)
@@ -392,6 +384,45 @@ export function SongPlayerCore({
       void advance(startingId);
     }, DEAD_MS);
   }, [ready, active, playing, advance, onUnplayable]);
+
+  /*
+    ตามเก็บความยาวคลิปให้ widget
+
+    มีแต่ตัวเล่นที่รู้ความยาวคลิป (oEmbed ไม่บอก) widget เอาไปคู่กับ playedAt
+    แล้วคำนวณแถบความคืบหน้าเอง จึงไม่ต้องส่งเวลาปัจจุบันมาทุกวินาที
+
+    ทำไมต้องตามเก็บแทนที่จะอ่านทีเดียวตอนเหตุการณ์ "เริ่มเล่น" ยิง:
+    วิธีนั้นมีนัดเดียว พลาดแล้วพลาดเลย ทั้งที่พลาดได้หลายทาง — แท็บเพิ่งได้สิทธิ์
+    คุมคิวหลังเพลงเริ่มไปแล้ว, รีเฟรชหน้ากลางเพลง, หรือเขียนไม่ผ่านชั่วคราว
+    ตัวนี้ยิงซ้ำจนกว่าจะได้ แล้วหยุดเองเมื่อสแนปช็อตกลับมาพร้อมค่า
+  */
+  useEffect(() => {
+    if (!active || !channelId || !playingId) return;
+    if (playingDuration && playingDuration > 0) return;
+
+    let timer = 0;
+    let tries = 0;
+    const tick = () => {
+      // เปลี่ยนเพลงไปแล้วระหว่างรอ = เลิกยุ่งกับใบเก่า
+      if (loadedRef.current !== playingId) return;
+      const secs = playerRef.current?.getDuration?.() ?? 0;
+      if (secs > 0) {
+        setSongDuration(channelId, playingId, secs).catch((err) => {
+          /* เงียบไปเฉยๆ แปลว่าแถบเวลาบน widget จะไม่ขึ้นโดยไม่มีใครรู้สาเหตุ
+             บอกครั้งเดียวพอ ไม่ใช่ทุกเพลง */
+          if (durationSentRef.current !== "แจ้งแล้ว") {
+            durationSentRef.current = "แจ้งแล้ว";
+            console.error("เขียนความยาวคลิปไม่สำเร็จ", err);
+            toast("บันทึกความยาวเพลงไม่ได้ แถบเวลาบน widget จะไม่ขึ้น", "error");
+          }
+        });
+        return;
+      }
+      if (++tries < 8) timer = window.setTimeout(tick, 1500);
+    };
+    timer = window.setTimeout(tick, 1000);
+    return () => window.clearTimeout(timer);
+  }, [active, channelId, playingId, playingDuration]);
 
   useEffect(() => {
     if (ready) playerRef.current?.setVolume(volume);

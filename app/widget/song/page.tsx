@@ -71,19 +71,19 @@ export default function SongWidget() {
     );
   }
 
-  // ค้างอยู่บนจอตลอดเวลา ตอนคิวว่างจึงต้องหายไปเลย ไม่ใช่โชว์กล่องเปล่า
-  if (!playing && next.length === 0) return null;
-
-  /* ทรงการ์ดเล่าเรื่องเพลงเดียว ถ้ายังไม่มีเพลงเล่นก็ไม่มีอะไรให้โชว์
-     (ต่างจากแถบยาวที่โชว์คิวที่รออยู่ได้แม้ยังไม่กดเล่น) */
+  /* ทรงการ์ดอยู่ประจำที่บนจอ ตอนคิวว่างจึงค้างไว้เป็นการ์ดเทารอ
+     ดีกว่าหายวับไปแล้วเหลือรูโหว่ตรงมุมที่คนดูเคยเห็นป้าย
+     (ต่างจากแถบยาวด้านล่างที่ตั้งใจให้หายไปเลย เพราะกินพื้นที่กว้าง) */
   if (shape) {
-    if (!playing) return null;
     return (
       <WidgetShell>
-        <NowPlayingCard song={playing} accent={accent} shape={shape} />
+        <NowPlayingCard song={playing ?? null} accent={accent} shape={shape} />
       </WidgetShell>
     );
   }
+
+  // แถบยาวค้างอยู่บนจอตลอดเวลา ตอนคิวว่างจึงต้องหายไปเลย ไม่ใช่โชว์กล่องเปล่า
+  if (!playing && next.length === 0) return null;
 
   return (
     <WidgetShell>
