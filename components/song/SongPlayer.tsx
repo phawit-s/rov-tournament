@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ReactNode,
 } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { useHashParam } from "@/hooks/useClient";
@@ -23,6 +24,7 @@ import { pickFiller } from "@/lib/song/filler";
 import { saveFillerList, setSongsEnabled } from "@/lib/song/config";
 import {
   addSongToQueue,
+  moveSongInQueue,
   setSongStatus,
   splitQueue,
   watchSongQueue,
@@ -643,19 +645,32 @@ export function SongPlayerCore({
           </p>
         ) : (
           <ul className="space-y-2">
-            {queued.map((s, i) => (
-              <motion.li key={s.id} layout={!reduced}>
-                <QueueRow
-                  no={i + 1}
-                  videoId={s.videoId}
-                  title={s.title}
-                  sub={
-                    s.source === "filler" ? "จากเพลย์ลิสต์สำรอง" : `ขอโดย ${s.byName}`
-                  }
-                  onClick={() => void playNow(s)}
-                />
-              </motion.li>
-            ))}
+            {queued.map((s, i) => {
+              /* เลื่อนได้เฉพาะในกลุ่มเดียวกัน เพลงที่คนขอกับเพลงสำรองอยู่คนละชั้น
+                 ปุ่มจึงต้องดูจากตำแหน่งในกลุ่ม ไม่ใช่ตำแหน่งในคิวรวม */
+              const group = queued.filter(
+                (x) => (x.source === "filler") === (s.source === "filler"),
+              );
+              const at = group.findIndex((x) => x.id === s.id);
+              return (
+                <motion.li key={s.id} layout={!reduced}>
+                  <QueueRow
+                    no={i + 1}
+                    videoId={s.videoId}
+                    title={s.title}
+                    sub={
+                      s.source === "filler" ? "จากเพลย์ลิสต์สำรอง" : `ขอโดย ${s.byName}`
+                    }
+                    onClick={() => void playNow(s)}
+                    onMove={(dir) =>
+                      void moveSongInQueue(channelId, queued, s.id, dir)
+                    }
+                    canUp={at > 0}
+                    canDown={at < group.length - 1}
+                  />
+                </motion.li>
+              );
+            })}
           </ul>
         )}
 
@@ -766,6 +781,9 @@ function QueueRow({
   title,
   sub,
   onClick,
+  onMove,
+  canUp = false,
+  canDown = false,
   dim = false,
   marked = false,
 }: {
@@ -774,46 +792,94 @@ function QueueRow({
   title: string;
   sub: string;
   onClick: () => void;
+  /** ไม่ส่งมา = แถวนี้เลื่อนลำดับไม่ได้ (เช่นกองสำรองที่ยังไม่เข้าคิว) */
+  onMove?: (dir: "up" | "down" | "top") => void;
+  canUp?: boolean;
+  canDown?: boolean;
   dim?: boolean;
   marked?: boolean;
+}) {
+  /* ปุ่มซ้อนในปุ่มไม่ได้ ตัวแถวจึงเป็น div แล้วให้ส่วนเนื้อหาเป็นปุ่มกดเล่น
+     ส่วนปุ่มเลื่อนลำดับวางเป็นพี่น้องข้างๆ */
+  return (
+    <div
+      className={`hover-tile tile group flex items-center gap-1 rounded-xl pr-1.5 transition-colors ${
+        marked ? "ring-1 ring-champagne/45" : ""
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        title="กดเพื่อเล่นเพลงนี้เลย"
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-xl p-2.5 text-left"
+      >
+        <span
+          className={`fig text-outline w-6 shrink-0 text-center text-lg ${
+            dim ? "opacity-60" : ""
+          }`}
+        >
+          {no}
+        </span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={thumbUrl(videoId, "mq")}
+          alt=""
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          onError={(e) => {
+            e.currentTarget.style.visibility = "hidden";
+          }}
+          className="h-9 w-16 shrink-0 rounded object-cover"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm text-ice">{title}</span>
+          <span className="block truncate text-xs text-muted">{sub}</span>
+        </span>
+        {marked && <span className="slug slug-2 shrink-0 text-champagne">ถัดไป</span>}
+      </button>
+
+      {onMove && (
+        <div className="flex shrink-0 items-center gap-0.5 opacity-40 transition-opacity group-hover:opacity-100">
+          <MoveBtn
+            label="ขึ้นบนสุด"
+            disabled={!canUp}
+            onClick={() => onMove("top")}
+          >
+            ⤒
+          </MoveBtn>
+          <MoveBtn label="เลื่อนขึ้น" disabled={!canUp} onClick={() => onMove("up")}>
+            ↑
+          </MoveBtn>
+          <MoveBtn label="เลื่อนลง" disabled={!canDown} onClick={() => onMove("down")}>
+            ↓
+          </MoveBtn>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MoveBtn({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: ReactNode;
 }) {
   return (
     <button
       type="button"
+      title={label}
+      aria-label={label}
+      disabled={disabled}
       onClick={onClick}
-      title="กดเพื่อเล่นเพลงนี้เลย"
-      className={`hover-tile tile group flex w-full cursor-pointer items-center gap-3 rounded-xl p-2.5 text-left transition-colors ${
-        marked ? "ring-1 ring-champagne/45" : ""
-      }`}
+      className="grid h-8 w-7 cursor-pointer place-items-center rounded-lg text-sm text-muted transition-colors hover:bg-champagne/12 hover:text-champagne disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-muted"
     >
-      <span
-        className={`fig text-outline w-6 shrink-0 text-center text-lg ${
-          dim ? "opacity-60" : ""
-        }`}
-      >
-        {no}
-      </span>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={thumbUrl(videoId, "mq")}
-        alt=""
-        referrerPolicy="no-referrer"
-        loading="lazy"
-        onError={(e) => {
-          e.currentTarget.style.visibility = "hidden";
-        }}
-        className="h-9 w-16 shrink-0 rounded object-cover"
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm text-ice">{title}</span>
-        <span className="block truncate text-xs text-muted">{sub}</span>
-      </span>
-      {marked && (
-        <span className="slug slug-2 shrink-0 text-champagne">ถัดไป</span>
-      )}
-      <span className="shrink-0 text-xs text-muted opacity-0 transition-opacity group-hover:opacity-100">
-        ▶
-      </span>
+      {children}
     </button>
   );
 }

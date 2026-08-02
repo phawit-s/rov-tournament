@@ -163,6 +163,58 @@ export async function setSongStatus(
   );
 }
 
+/**
+ * เลื่อนลำดับเพลงในคิว
+ *
+ * ขึ้น/ลง = สลับคีย์เรียงกับใบที่อยู่ติดกัน วิธีนี้ไม่ต้องเขียนใหม่ทั้งคิว
+ * แตะแค่สองใบ และไม่พังถ้ามีใบใหม่แทรกเข้ามาระหว่างนั้น
+ *
+ * บนสุด = ตั้งคีย์ให้มาก่อนหัวแถวหนึ่งวินาที
+ *
+ * สลับได้เฉพาะในกลุ่มเดียวกัน — เพลงที่คนขอกับเพลงสำรองอยู่คนละชั้นเสมอ
+ * (เพลงสำรองต้องอยู่ท้ายแถวตลอด ไม่งั้นมันจะไปแซงเพลงที่คนดูอุตส่าห์ขอมา)
+ */
+export async function moveSongInQueue(
+  channelId: string,
+  queued: SongRequest[],
+  songId: string,
+  dir: "up" | "down" | "top",
+): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+
+  const isFiller = (s: SongRequest) => s.source === "filler";
+  const target = queued.find((s) => s.id === songId);
+  if (!target) return;
+
+  // ดูเฉพาะเพื่อนร่วมกลุ่ม จะได้ไม่ข้ามชั้นไปสลับกับอีกกลุ่ม
+  const group = queued.filter((s) => isFiller(s) === isFiller(target));
+  const at = group.findIndex((s) => s.id === songId);
+  if (at < 0) return;
+
+  const write = (id: string, key: string) =>
+    setDoc(doc(db, COL, channelId, SONGS, id), { orderKey: key }, { merge: true });
+
+  if (dir === "top") {
+    if (at === 0) return;
+    const head = group[0];
+    const headAt = Date.parse(sortKeyOf(head));
+    const key = Number.isFinite(headAt)
+      ? new Date(headAt - 1000).toISOString()
+      : new Date(0).toISOString();
+    await write(target.id, key);
+    return;
+  }
+
+  const other = group[dir === "up" ? at - 1 : at + 1];
+  if (!other) return;
+  /* อ่านคีย์ทั้งสองให้ครบก่อนค่อยเขียน — ถ้าอ่านสลับกับเขียน
+     ค่าที่อ่านทีหลังอาจกลายเป็นค่าที่เพิ่งเขียนไป แล้วสองใบจะได้คีย์เท่ากันจนไม่สลับ */
+  const keyTarget = sortKeyOf(target);
+  const keyOther = sortKeyOf(other);
+  await Promise.all([write(target.id, keyOther), write(other.id, keyTarget)]);
+}
+
 export async function removeSongRequest(channelId: string, songId: string) {
   const db = getDb();
   if (!db) return;
@@ -194,6 +246,9 @@ export async function clearFinishedSongs(channelId: string, queue: SongRequest[]
  * พอมีคนขอเข้ามาก็ต้องได้คิวก่อนทันทีโดยไม่ต้องรอเพลงสำรองหมดกอง
  * (ไม่ตัดเพลงที่กำลังเล่นอยู่ทิ้งกลางคัน รอให้จบเพลงก่อน)
  */
+/** คีย์ที่ใช้เรียงจริง — ใบที่ยังไม่เคยถูกเลื่อนลำดับก็ใช้เวลาที่ขอไปตามเดิม */
+export const sortKeyOf = (s: SongRequest): string => s.orderKey ?? s.createdAt ?? "";
+
 export function splitQueue(list: SongRequest[]) {
   const queued = list
     .filter((s) => s.status === "queued")
@@ -201,7 +256,9 @@ export function splitQueue(list: SongRequest[]) {
       const fa = a.source === "filler" ? 1 : 0;
       const fb = b.source === "filler" ? 1 : 0;
       if (fa !== fb) return fa - fb;
-      return (a.createdAt ?? "").localeCompare(b.createdAt ?? "");
+      const byKey = sortKeyOf(a).localeCompare(sortKeyOf(b));
+      // คีย์ชนกันได้ถ้าสองใบถูกเลื่อนพร้อมกัน ใช้ id ตัดสินให้ลำดับนิ่ง
+      return byKey !== 0 ? byKey : a.id.localeCompare(b.id);
     });
 
   return {
