@@ -5,6 +5,7 @@ import { authStore } from "@/lib/backend/firebase";
 import type { Channel } from "@/lib/channel/types";
 import { safeImageSrc } from "@/lib/safe";
 import { FILLER_LIMIT, saveFillerList, saveFillerMode } from "@/lib/song/filler";
+import { importPlaylist, playlistIdFrom } from "@/lib/song/playlist";
 import { addSongToQueue, watchSongQueue } from "@/lib/song/store";
 import { DEFAULT_SONG_CONFIG, type FillerTrack, type SongRequest } from "@/lib/song/types";
 import { lookupVideo, thumbUrl, videoIdFrom, watchUrl } from "@/lib/song/youtube";
@@ -347,6 +348,117 @@ function History({ channelId, done }: { channelId: string; done: SongRequest[] }
 }
 
 /* =========================================================================
+   นำเข้าทั้งเพลย์ลิสต์จาก YouTube
+   ========================================================================= */
+
+function ImportPlaylist({
+  existing,
+  onImported,
+}: {
+  existing: FillerTrack[];
+  onImported: (merged: FillerTrack[]) => Promise<void>;
+}) {
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const listId = playlistIdFrom(url);
+  const isMix = !!listId && listId.startsWith("RD");
+
+  const run = async () => {
+    if (!listId) return;
+    setBusy(true);
+    setError(null);
+    setStep("กำลังเปิดเพลย์ลิสต์…");
+    try {
+      const room = Math.max(0, FILLER_LIMIT - existing.length);
+      if (room === 0) {
+        setError(`กองเต็มแล้ว (${FILLER_LIMIT} เพลง) ลบบางเพลงออกก่อน`);
+        return;
+      }
+
+      const found = await importPlaylist(listId, room, (done, total) =>
+        setStep(`กำลังอ่านชื่อเพลง ${done}/${total}…`),
+      );
+
+      const have = new Set(existing.map((t) => t.videoId));
+      const fresh = found.filter((t) => !have.has(t.videoId));
+      if (fresh.length === 0) {
+        setError("เพลงในเพลย์ลิสต์นี้อยู่ในกองครบแล้ว");
+        return;
+      }
+
+      await onImported([...existing, ...fresh]);
+      setUrl("");
+      toast(`เพิ่ม ${fresh.length} เพลงจากเพลย์ลิสต์แล้ว`, "success");
+    } catch (e) {
+      const code = e instanceof Error ? e.message : "";
+      setError(
+        code === "yt-api-blocked"
+          ? "โหลดตัวเล่นของ YouTube ไม่ได้ — ตัวบล็อกโฆษณาบางตัวบล็อกไว้ ลองปิดเฉพาะเว็บนี้"
+          : code === "playlist-timeout"
+            ? "อ่านเพลย์ลิสต์ไม่ทัน อาจเป็นเพลย์ลิสต์ส่วนตัวหรือลิงก์ไม่ถูก"
+            : "เปิดเพลย์ลิสต์นี้ไม่ได้ ต้องเป็นเพลย์ลิสต์ที่เปิดสาธารณะ",
+      );
+    } finally {
+      setBusy(false);
+      setStep(null);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="mb-2 text-sm font-medium text-ice/85">นำเข้าทั้งเพลย์ลิสต์</p>
+        <Input
+          value={url}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            setError(null);
+          }}
+          placeholder="https://www.youtube.com/watch?v=...&list=..."
+          inputMode="url"
+          autoComplete="off"
+          spellCheck={false}
+          aria-invalid={!!url.trim() && !listId}
+        />
+        <p className="mt-2 text-xs leading-relaxed text-muted">
+          วางลิงก์เพลย์ลิสต์หรือลิงก์คลิปที่มี <code>&amp;list=</code> ต่อท้ายก็ได้
+          ระบบจะดึงรายการเพลงมาใส่กองสำรองให้ (ไม่มีเสียงดังระหว่างนำเข้า)
+        </p>
+      </div>
+
+      {!!url.trim() && !listId && (
+        <p className="text-xs text-[#e79a9a]">
+          ลิงก์นี้ไม่มีรหัสเพลย์ลิสต์ — ต้องมี <code>list=</code> อยู่ในลิงก์
+        </p>
+      )}
+
+      {isMix && (
+        <p className="text-xs leading-relaxed text-muted">
+          นี่คือเพลย์ลิสต์แบบ Mix ที่ YouTube ปั้นให้อัตโนมัติ
+          รายการที่ได้จะเป็นภาพ ณ ตอนนำเข้า ไม่ได้อัปเดตตามทีหลัง
+        </p>
+      )}
+
+      {error && <p className="text-xs text-[#e79a9a]">{error}</p>}
+      {step && <p className="num text-xs text-champagne">{step}</p>}
+
+      <Button
+        onClick={() => void run()}
+        disabled={!listId}
+        loading={busy}
+        variant="outline"
+        className="w-full sm:w-auto"
+      >
+        ดึงเพลงจากเพลย์ลิสต์
+      </Button>
+    </div>
+  );
+}
+
+/* =========================================================================
    เพลย์ลิสต์สำรอง
    ========================================================================= */
 
@@ -410,6 +522,15 @@ function Filler({
           พอมีคนขอเพลงเข้ามาจริง เพลงของเขาจะแทรกขึ้นก่อนเพลงสำรองที่ยังไม่ได้เล่น
         </p>
       </div>
+
+      <span className="rule block h-px" />
+
+      <ImportPlaylist
+        existing={tracks}
+        onImported={async (merged) => {
+          await save(merged);
+        }}
+      />
 
       <span className="rule block h-px" />
 

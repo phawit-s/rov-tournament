@@ -27,6 +27,7 @@ import {
   watchSongQueue,
 } from "@/lib/song/store";
 import { thumbUrl, watchUrl } from "@/lib/song/youtube";
+import { YT_STATE, loadYouTubeApi, type YTPlayer } from "@/lib/song/yt-api";
 import type { FillerTrack, SongRequest } from "@/lib/song/types";
 import Button from "../ui/Button";
 import Panel, { PanelHeader } from "../ui/Panel";
@@ -50,74 +51,6 @@ import SongConsole from "./SongConsole";
 
 const EMPTY: SongRequest[] = [];
 const VOLUME_KEY = "tourney-hub/song/volume";
-
-/* ---------- YouTube IFrame API ---------- */
-
-/** สถานะจาก YouTube — ประกาศเองเพราะต้องใช้ก่อน YT โหลดเสร็จ */
-const YT_STATE = {
-  UNSTARTED: -1,
-  ENDED: 0,
-  PLAYING: 1,
-  PAUSED: 2,
-  BUFFERING: 3,
-  CUED: 5,
-} as const;
-
-type YTPlayer = {
-  loadVideoById: (id: string) => void;
-  playVideo: () => void;
-  pauseVideo: () => void;
-  setVolume: (v: number) => void;
-  getPlayerState: () => number;
-  destroy: () => void;
-};
-
-type YTNamespace = {
-  Player: new (
-    el: HTMLElement,
-    opts: {
-      height: string;
-      width: string;
-      playerVars?: Record<string, string | number>;
-      events?: {
-        onReady?: () => void;
-        onStateChange?: (e: { data: number }) => void;
-        onError?: () => void;
-      };
-    },
-  ) => YTPlayer;
-};
-
-declare global {
-  interface Window {
-    YT?: YTNamespace;
-    onYouTubeIframeAPIReady?: () => void;
-  }
-}
-
-/** โหลดสคริปต์ของ YouTube ครั้งเดียวต่อหน้า แล้วแชร์ผลให้ทุกคนที่รอ */
-let apiPromise: Promise<YTNamespace> | null = null;
-function loadYouTubeApi(): Promise<YTNamespace> {
-  if (apiPromise) return apiPromise;
-  apiPromise = new Promise((resolve, reject) => {
-    if (window.YT?.Player) {
-      resolve(window.YT);
-      return;
-    }
-    const prev = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => {
-      prev?.();
-      if (window.YT) resolve(window.YT);
-      else reject(new Error("yt-api-missing"));
-    };
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    tag.async = true;
-    tag.onerror = () => reject(new Error("yt-api-blocked"));
-    document.head.appendChild(tag);
-  });
-  return apiPromise;
-}
 
 function readVolume(): number {
   if (typeof window === "undefined") return 70;
