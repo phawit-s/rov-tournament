@@ -122,6 +122,8 @@ export function SongPlayerCore({
   const { playing, queued, done } = useMemo(() => splitQueue(queue), [queue]);
   /** แท็บนี้เป็นคนคุมคิวจริงไหม ผู้ชมห้ามทั้งเล่นและห้ามเดินคิว */
   const active = lock === "leader";
+  /** กติกาบังคับให้ byUid ตรงกับคนที่เขียน ยังไม่รู้ว่าใครล็อกอินก็เขียนอะไรไม่ได้ */
+  const uid = authStore.user()?.uid ?? null;
 
   /* ---------- คิว ---------- */
   useEffect(() => {
@@ -197,8 +199,6 @@ export function SongPlayerCore({
     if (manualRef.current) return;
 
     const pick = pickFiller(filler, queue, fillerMode);
-    // กติกาบังคับให้ byUid ตรงกับคนที่เขียน ยังไม่ล็อกอินก็เขียนไม่ได้
-    const uid = authStore.user()?.uid;
     if (!pick || !uid) return;
 
     fillingRef.current = true;
@@ -216,7 +216,15 @@ export function SongPlayerCore({
     ).finally(() => {
       fillingRef.current = false;
     });
-  }, [channelId, active, queued.length, queue, filler, fillerMode]);
+    /*
+      uid ต้องอยู่ใน deps ด้วย
+
+      Firebase ใช้เวลาสักครู่กว่าจะบอกว่าใครล็อกอินอยู่ ถ้าเอฟเฟกต์นี้รันตอนที่ยังไม่รู้
+      มันจะออกไปเฉยๆ แล้วไม่มีอะไรมาปลุกให้ลองใหม่ เพราะตัวอื่นใน deps ไม่ขยับเลย
+      (คิวว่างอยู่แล้ว จึงไม่มี snapshot ใหม่มาเปลี่ยน queue) ผลคือกองสำรองไม่ถูกเติม
+      ทั้งที่มีเพลงรออยู่เป็นร้อย และหน้าจอค้างว่าที่ "คิวถัดไป 0" ไปตลอด
+    */
+  }, [channelId, active, uid, queued.length, queue, filler, fillerMode]);
 
   /* ---------- ตัวเล่น ---------- */
   useEffect(() => {
@@ -385,7 +393,6 @@ export function SongPlayerCore({
 
   const playTrackNow = (track: FillerTrack) =>
     pickAndPlay(async () => {
-      const uid = authStore.user()?.uid;
       if (!uid) return null;
       return addSongToQueue(
         channelId,

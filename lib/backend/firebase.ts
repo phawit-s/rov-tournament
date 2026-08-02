@@ -80,7 +80,18 @@ export type AuthUser = {
 
 let currentUser: AuthUser | null = null;
 let authReady = false;
-let snapshot = "signed-out";
+
+/*
+  ค่าเริ่มต้นต้องเป็น "loading" ไม่ใช่ "signed-out"
+
+  Firebase ใช้เวลาสักครู่กว่าจะอ่านเซสชันจาก IndexedDB เสร็จแล้วบอกกลับมาว่าใครล็อกอินอยู่
+  ถ้าช่วงนั้นเราตอบว่า "ออกจากระบบแล้ว" หน้าที่มีด่านล็อกอินจะเด้งขึ้นหน้า
+  "ยังไม่ได้ล็อกอิน" ทันทีทุกครั้งที่เปลี่ยนหน้า ทั้งที่เซสชันยังอยู่ครบ
+  แล้วค่อยหายไปเองตอนข้อมูลกลับมา — อาการคือกะพริบเข้าหน้าล็อกอินเป็นระยะ
+
+  ไม่มีหลังบ้าน = ไม่มีอะไรให้รอ ตอบ signed-out ได้เลย
+*/
+let snapshot = hasBackend ? "loading" : "signed-out";
 const listeners = new Set<() => void>();
 
 function publish() {
@@ -92,7 +103,9 @@ function publish() {
 function startWatching() {
   const client = getAuthClient();
   if (!client) {
+    // ไม่มีตัวจัดการล็อกอินให้รอ ต้องเลิกค้างที่ "loading" ทันที
     authReady = true;
+    publish();
     return;
   }
   onAuthStateChanged(client, (user: User | null) => {
