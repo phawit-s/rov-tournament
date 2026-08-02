@@ -20,7 +20,7 @@ import { inspectSlip } from "@/lib/slip";
 import { formatMoney } from "@/lib/tournament/prize";
 import { safeImageSrc, safeUrl } from "@/lib/safe";
 import type { Donation, MemberTier } from "@/lib/tournament/types";
-import SongRequestPanel from "../song/SongRequestPanel";
+import Link from "next/link";
 import Button from "../ui/Button";
 import Corners from "../ui/Corners";
 import Panel from "../ui/Panel";
@@ -734,8 +734,27 @@ export default function ChannelSupport() {
             </Panel>
           )}
 
-          {/* ขอเพลง — ตัวมันเองซ่อนเองถ้าช่องยังไม่เปิดระบบนี้ */}
-          <SongRequestPanel channel={channel} />
+          {/* ขอเพลงย้ายไปหน้าของตัวเองแล้ว เหลือแค่ทางไป
+              เอาฟอร์มมาต่อท้ายหน้าโอนเงินคนอ่านไม่ออกว่าตกลงหน้านี้ให้ทำอะไร */}
+          {channel.songs?.enabled && (
+            <Panel className="flex flex-wrap items-center gap-4 p-6">
+              <div className="min-w-0 flex-1">
+                <p className="slug">Song request</p>
+                <p className="mt-1.5 font-display text-base text-ice">
+                  อยากขอเพลงด้วยไหม
+                </p>
+                <p className="mt-1 text-sm text-muted">
+                  วางลิงก์ YouTube แล้วส่งเข้าคิว ไม่ต้องโอนก็ขอได้
+                </p>
+              </div>
+              <Link
+                href={`/song/#h=${channel.handle || channel.id}`}
+                className="hover-tile tile shrink-0 rounded-xl px-4 py-2.5 font-display text-xs text-ice/85 transition-colors hover:text-champagne"
+              >
+                ไปหน้าขอเพลง →
+              </Link>
+            </Panel>
+          )}
         </div>
       </div>
     </div>

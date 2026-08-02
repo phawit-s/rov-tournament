@@ -18,7 +18,7 @@ import Button from "../ui/Button";
 import Panel from "../ui/Panel";
 import { toast } from "../ui/Toast";
 import { IconExternal } from "../ui/icons";
-import { Badge, EmptyState, Input, Label, Skeleton } from "../tournament/ui";
+import { Badge, EmptyState, Input, Skeleton } from "../tournament/ui";
 
 /** อ้างอิงคงที่ ไม่งั้น setQueue ตอนไม่มีหลังบ้าน/ตอน error จะรีเรนเดอร์ไม่จบ */
 const EMPTY: SongRequest[] = [];
@@ -45,8 +45,19 @@ const NONE: Preview = { state: "none" };
  *
  * คนดูส่วนใหญ่ไม่มีบัญชีในเว็บนี้ จึงล็อกอินนิรนามให้ตอนกดส่ง
  * ระบบยังได้ uid ไว้นับโควตาต่อคนและให้สตรีมเมอร์แบนคนกวนได้
+ *
+ * ตัวนี้เป็นทั้งฟอร์มและคิวในใบเดียว ใช้บนหน้าขอเพลงโดยเฉพาะ (/song/)
+ * แยกออกมาจากหน้าสนับสนุนแล้ว เพราะขอเพลงกับโอนเงินเป็นคนละเรื่องกัน
+ * เอามารวมใบเดียวคนอ่านไม่ออกว่าตกลงหน้านี้ให้ทำอะไร
  */
-export default function SongRequestPanel({ channel }: { channel: Channel }) {
+export default function SongRequestPanel({
+  channel,
+  /** true = อยู่บนหน้าของตัวเอง ไม่ต้องมีหัวใบซ้ำกับหัวหน้า */
+  bare = false,
+}: {
+  channel: Channel;
+  bare?: boolean;
+}) {
   // อ่านชื่อจากบัญชี/โปรไฟล์เพื่อเติมช่อง "ชื่อผู้ขอ" ให้ล่วงหน้า
   useSyncExternalStore(
     profileStore.subscribe,
@@ -212,28 +223,46 @@ export default function SongRequestPanel({ channel }: { channel: Channel }) {
   if (!enabled) return null;
 
   const note = channel.songs?.note?.trim();
+  /** เพลงของเราที่ยังค้างคิวอยู่ ใช้บอกโควตาที่เหลือแบบตรงไปตรงมา */
+  const mineWaiting = queue.filter(
+    (s) => s.byUid === myUid && (s.status === "queued" || s.status === "playing"),
+  ).length;
+  const left = config.maxPerUser ? Math.max(0, config.maxPerUser - mineWaiting) : null;
 
-  return (
-    <Panel className="p-6 sm:p-7">
-      <Panel.Header eyebrow="Song request" title="ขอเพลง" count={queued.length} />
-
-      {note && <p className="-mt-2 mb-5 text-sm leading-relaxed text-muted">{note}</p>}
+  const form = (
+    <>
+      {note && (
+        <div className="tally mb-5 rounded-xl tile px-4 py-3">
+          <p className="slug slug-2">กติกาของช่องนี้</p>
+          <p className="mt-1 text-sm leading-relaxed text-ice/85">{note}</p>
+        </div>
+      )}
 
       {/* ---------- ฟอร์ม ---------- */}
-      <div className="space-y-4">
+      <div className="space-y-5">
+        {/* ช่องลิงก์เป็นพระเอกของหน้า ทำให้ใหญ่กว่าช่องอื่นชัดๆ
+            คำอธิบายย้ายไปไว้ใต้ช่อง หัวข้อจะได้เหลือบรรทัดเดียวเท่ากันทุกช่อง */}
         <div>
-          <Label hint="วางลิงก์จากแอป YouTube ได้เลย รองรับ youtu.be และ Shorts">
-            ลิงก์เพลง
-          </Label>
+          <label
+            htmlFor="song-link"
+            className="mb-2 block font-display text-lg font-light text-ice"
+          >
+            วางลิงก์เพลงที่อยากขอ
+          </label>
           <Input
+            id="song-link"
             value={link}
             onChange={(e) => onLink(e.target.value)}
             placeholder="https://www.youtube.com/watch?v=..."
             inputMode="url"
             autoComplete="off"
             spellCheck={false}
+            className="w-full px-4 py-3.5 text-base"
             aria-invalid={preview.state === "invalid" || preview.state === "missing"}
           />
+          <p className="mt-2 text-xs text-muted">
+            ก๊อปจากแอป YouTube มาวางได้เลย รองรับ youtu.be และ Shorts
+          </p>
 
           {/* ผลตรวจลิงก์ — จองที่ไว้ให้การ์ดพรีวิว เลย์เอาต์จะได้ไม่กระตุกตอนโหลดเสร็จ */}
           <div className="mt-3">
@@ -299,10 +328,18 @@ export default function SongRequestPanel({ channel }: { channel: Channel }) {
           </div>
         </div>
 
+        {/* หัวข้อทั้งสองช่องเป็นบรรทัดเดียวเท่ากัน ช่องกรอกถึงจะอยู่ระดับเดียวกัน
+            คำว่า "ไม่บังคับ" ย้ายไปอยู่ในหัวข้อแทนที่จะเป็นบรรทัดที่สอง */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label>ชื่อผู้ขอ</Label>
+            <label
+              htmlFor="song-by"
+              className="mb-2 block text-sm font-medium text-ice/85"
+            >
+              ชื่อผู้ขอ
+            </label>
             <Input
+              id="song-by"
               value={name}
               onChange={(e) => setTypedName(e.target.value)}
               placeholder="ชื่อที่จะขึ้นจอ"
@@ -310,8 +347,15 @@ export default function SongRequestPanel({ channel }: { channel: Channel }) {
             />
           </div>
           <div>
-            <Label hint="ไม่บังคับ ไม่เกิน 120 ตัวอักษร">ข้อความถึงสตรีมเมอร์</Label>
+            <label
+              htmlFor="song-msg"
+              className="mb-2 block text-sm font-medium text-ice/85"
+            >
+              ข้อความถึงสตรีมเมอร์{" "}
+              <span className="font-normal text-muted">(ไม่บังคับ)</span>
+            </label>
             <Input
+              id="song-msg"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="เปิดเพลงนี้หน่อยยย"
@@ -320,9 +364,9 @@ export default function SongRequestPanel({ channel }: { channel: Channel }) {
           </div>
         </div>
 
-        {error && <p className="text-xs text-[#e79a9a]">{error}</p>}
+        {error && <p className="text-sm text-[#e79a9a]">{error}</p>}
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-hair pt-5">
           <Button
             onClick={submit}
             loading={busy}
@@ -331,23 +375,29 @@ export default function SongRequestPanel({ channel }: { channel: Channel }) {
           >
             ส่งเข้าคิว
           </Button>
-          {placed != null && (
+          {placed != null ? (
             <motion.p
               initial={{ opacity: 0, y: calm ? 0 : 4 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-xs text-muted"
+              className="text-sm text-muted"
             >
               ส่งแล้ว — เพลงของคุณอยู่คิวที่{" "}
               <span className="num text-champagne">{placed}</span>
             </motion.p>
+          ) : (
+            left != null && (
+              <p className="text-sm text-muted">
+                ขอได้อีก <span className="num text-champagne">{left}</span> เพลง
+              </p>
+            )
           )}
         </div>
       </div>
+    </>
+  );
 
-      <span className="rule my-6 block h-px" />
-
-      {/* ---------- คิวตอนนี้ ---------- */}
-      <div className="space-y-3">
+  const list = (
+    <div className="space-y-3">
         <p className="slug slug-2">Now playing</p>
 
         {playing ? (
@@ -407,7 +457,27 @@ export default function SongRequestPanel({ channel }: { channel: Channel }) {
             </AnimatePresence>
           </ul>
         )}
+    </div>
+  );
+
+  /* หน้าขอเพลงโดยเฉพาะ — ฟอร์มอยู่ซ้าย คิวอยู่ขวา มองเห็นพร้อมกันได้บนจอกว้าง */
+  if (bare) {
+    return (
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-start">
+        <Panel variant="feature" className="p-6 sm:p-7">
+          {form}
+        </Panel>
+        <Panel className="p-6 lg:sticky lg:top-6">{list}</Panel>
       </div>
+    );
+  }
+
+  return (
+    <Panel className="p-6 sm:p-7">
+      <Panel.Header eyebrow="Song request" title="ขอเพลง" count={queued.length} />
+      {form}
+      <span className="rule my-6 block h-px" />
+      {list}
     </Panel>
   );
 }

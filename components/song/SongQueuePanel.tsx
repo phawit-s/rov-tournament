@@ -88,7 +88,8 @@ export default function SongQueuePanel({
     typeof window !== "undefined"
       ? `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}`
       : "";
-  const requestUrl = `${origin}/c/#h=${channel.handle || channelId}`;
+  // หน้าขอเพลงแยกจากหน้าสนับสนุน (/c/) แล้ว คนดูจะได้ไม่ต้องเลื่อนผ่าน QR โอนเงิน
+  const requestUrl = `${origin}/song/#h=${channel.handle || channelId}`;
   // ใส่ #ch= ไปด้วย ผู้ดูแลที่กำลังแก้ช่องคนอื่นจะได้เปิดคิวของช่องนั้นถูกตัว
   const playerUrl = `${origin}/player/#ch=${channelId}`;
 

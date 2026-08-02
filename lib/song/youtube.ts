@@ -55,11 +55,15 @@ export const watchUrl = (videoId: string) =>
   `https://www.youtube.com/watch?v=${videoId}`;
 
 /**
- * รูปปก — ใช้ img.youtube.com ไม่ต้องผ่าน API
+ * รูปปก — ใช้ i.ytimg.com ไม่ต้องผ่าน API
  * hqdefault มีทุกคลิปเสมอ ส่วน maxresdefault บางคลิปไม่มีแล้วจะได้รูปเสีย
+ *
+ * ขนาด mq (320x180) ไว้ใช้กับที่แสดงผลเล็กๆ อย่าง widget บนสตรีม
+ * รูป hq (480x360) ที่ถูกย่อลงมาโชว์ 130px เปลืองทั้งแบนด์วิดท์และเวลาถอดรหัสภาพ
+ * ซึ่งบนเครื่องที่กำลังเข้ารหัสวิดีโออยู่คือของที่ควรประหยัด
  */
-export const thumbUrl = (videoId: string) =>
-  `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+export const thumbUrl = (videoId: string, size: "hq" | "mq" = "hq") =>
+  `https://i.ytimg.com/vi/${videoId}/${size}default.jpg`;
 
 export type YoutubeInfo = {
   videoId: string;
