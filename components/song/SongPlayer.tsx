@@ -240,9 +240,15 @@ export function SongPlayerCore({
         byName: "เพลย์ลิสต์สำรอง",
       },
       "filler",
-    ).finally(() => {
-      fillingRef.current = false;
-    });
+    )
+      .catch((err) => {
+        /* เงียบไปเฉยๆ แปลว่าคิวจะว่างทั้งไลฟ์โดยไม่มีใครรู้ว่าทำไม
+           ทั้งที่กองสำรองมีเพลงรออยู่เต็ม */
+        console.error("เติมเพลงสำรองเข้าคิวไม่สำเร็จ", err);
+      })
+      .finally(() => {
+        fillingRef.current = false;
+      });
     /*
       uid ต้องอยู่ใน deps ด้วย
 

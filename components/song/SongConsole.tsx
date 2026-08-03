@@ -262,18 +262,41 @@ function AddSong({
       toast("ต้องล็อกอินก่อนถึงจะใส่เพลงได้", "error");
       return;
     }
-    await addSongToQueue(
-      channelId,
-      {
-        videoId: info.videoId,
-        title: info.title,
-        author: info.author,
-        url: watchUrl(info.videoId),
-        byUid: user.uid,
-        byName: "สตรีมเมอร์",
-      },
-      "streamer",
-    );
+    /*
+      ต้องเช็คว่าเขียนลงจริงก่อนค่อยบอกว่าสำเร็จ
+
+      addSongToQueue คืน null เงียบๆ ได้ (ยังต่อฐานข้อมูลไม่ติด) และโยน error ได้
+      (สิทธิ์/เน็ต) ของเดิมเด้ง "ใส่คิวแล้ว" ทุกกรณี คนกดเลยนึกว่าเพลงเข้าคิวแล้ว
+      แต่ไม่มีอะไรเกิดขึ้น แล้วไปสงสัยว่าตัวเล่นพัง ทั้งที่เพลงไม่เคยถูกบันทึกเลย
+    */
+    let newId: string | null = null;
+    try {
+      newId = await addSongToQueue(
+        channelId,
+        {
+          videoId: info.videoId,
+          title: info.title,
+          author: info.author,
+          url: watchUrl(info.videoId),
+          byUid: user.uid,
+          byName: "สตรีมเมอร์",
+        },
+        "streamer",
+      );
+    } catch (err) {
+      console.error("ใส่เพลงเข้าคิวไม่สำเร็จ", err);
+      toast(
+        `ใส่คิวไม่สำเร็จ — ${err instanceof Error ? err.message : err}`,
+        "error",
+        7000,
+      );
+      return;
+    }
+    if (!newId) {
+      toast("ใส่คิวไม่สำเร็จ — ต่อฐานข้อมูลไม่ติด ลองรีเฟรชหน้าแล้วลองใหม่", "error", 7000);
+      return;
+    }
+
     setAdded(info.videoId);
     toast("ใส่คิวแล้ว", "success", 1600);
     window.setTimeout(() => setAdded(null), 1600);
