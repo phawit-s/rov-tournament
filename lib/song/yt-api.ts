@@ -29,6 +29,8 @@ export type YTNamespace = {
     opts: {
       height: string;
       width: string;
+      /** ใส่คลิปตั้งแต่ตอนสร้าง — ตัวเล่นที่ไม่มีคลิปเลยจะไม่ยิง onReady ออกมา */
+      videoId?: string;
       playerVars?: Record<string, string | number>;
       events?: {
         onReady?: () => void;

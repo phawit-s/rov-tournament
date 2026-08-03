@@ -21,7 +21,7 @@ import {
   type LockState,
 } from "@/lib/song/player-lock";
 import { pickFiller } from "@/lib/song/filler";
-import { setSongsEnabled } from "@/lib/song/config";
+import { saveFillerList, setSongsEnabled } from "@/lib/song/config";
 import {
   addSongToQueue,
   moveSongInQueue,
@@ -78,6 +78,7 @@ export function SongPlayerCore({
   compact = false,
   filler,
   fillerMode = "off",
+  onUnplayable,
 }: {
   channelId: string;
   /** true = ฝังอยู่ในหน้าอื่น ไม่ต้องโชว์คิวซ้ำกับที่หน้านั้นมีอยู่แล้ว */
@@ -85,6 +86,8 @@ export function SongPlayerCore({
   /** เพลย์ลิสต์สำรอง — ใส่มาแล้วคิวจะไม่มีวันว่างจนเงียบทั้งไลฟ์ */
   filler?: FillerTrack[];
   fillerMode?: "off" | "order" | "shuffle";
+  /** เพลงสำรองใบนี้ฝังเล่นไม่ได้ — ให้หน้าแม่เขี่ยออกจากกองถาวร */
+  onUnplayable?: (videoId: string, code: number) => void;
 }) {
   const reduced = useReducedMotion();
   // ต้องรู้ว่าใครล็อกอินอยู่ ตอนต่อเพลงสำรองต้องแปะ uid ไปกับใบ
@@ -99,6 +102,8 @@ export function SongPlayerCore({
   const [apiError, setApiError] = useState(false);
   /** เบราว์เซอร์ไม่ยอมให้เล่นเองเพราะยังไม่มีใครแตะหน้านี้ */
   const [blocked, setBlocked] = useState(false);
+  /** YouTube บอกว่าคลิปนี้เล่นไม่ได้ — ค้างไว้รอคนกดข้าม ไม่ข้ามให้เอง */
+  const [failed, setFailed] = useState(false);
   const [paused, setPaused] = useState(false);
   const [volume, setVolume] = useState(readVolume);
   /** มีอีกแท็บเล่นอยู่ไหม — ถ้ามี แท็บนี้ต้องเงียบ ไม่งั้นเสียงซ้อนกันออกไลฟ์ */
@@ -121,6 +126,13 @@ export function SongPlayerCore({
   const manualRef = useRef(false);
   /** เพลงที่กำลังยิงคำสั่งโปรโมตอยู่ กัน snapshot ยิงซ้ำแล้วเขียนซ้ำ */
   const promotingRef = useRef<string | null>(null);
+  /**
+   * คลิปที่โหลดล่าสุดเคยเล่นจริงแล้วหรือยัง
+   *
+   * ใช้แยก "จบเพลงจริง" ออกจาก "ยิงจบตั้งแต่ 0 วินาทีเพราะเล่นไม่ได้"
+   * ซึ่งหน้าตาเหมือนกันเป๊ะถ้าดูแค่ตัวอีเวนต์
+   */
+  const playedOkRef = useRef(false);
   const blockTimerRef = useRef<number | null>(null);
   /** บอกเรื่องเขียนความยาวคลิปไม่ผ่านไปแล้วหรือยัง กันเตือนซ้ำทุกเพลง */
   const durationSentRef = useRef<string | null>(null);
@@ -267,19 +279,57 @@ export function SongPlayerCore({
               if (e.data === YT_STATE.PLAYING) {
                 setBlocked(false);
                 setPaused(false);
+                setFailed(false);
+                playedOkRef.current = true;
                 if (blockTimerRef.current) {
                   window.clearTimeout(blockTimerRef.current);
                   blockTimerRef.current = null;
                 }
               }
               if (e.data === YT_STATE.PAUSED) setPaused(true);
-              // คลิปจบเอง = ไปเพลงถัดไป (ไม่ใช่ตอนกดหยุดหรือโหลดคลิปใหม่)
-              if (e.data === YT_STATE.ENDED) void advance(loadedRef.current ?? undefined);
+
+              /*
+                คลิปจบเอง = ไปเพลงถัดไป
+
+                แต่ต้องเคยเล่นจริงก่อน — คลิปที่เจ้าของห้ามฝังจำนวนมากยิง "จบแล้ว"
+                ตั้งแต่วินาทีที่ 0 ทั้งที่ไม่เคยเล่นอะไรเลย ถ้าเชื่อตามนั้น
+                มันจะข้ามเพลงถัดไปทันที แล้วเพลงถัดไปก็ยิงแบบเดียวกันอีก
+                กลายเป็นไล่ข้ามรวดเดียวจนคิวหมดภายในไม่กี่วินาที
+              */
+              if (e.data === YT_STATE.ENDED) {
+                const cur = loadedRef.current;
+                if (cur && playedOkRef.current) void advance(cur);
+              }
             },
-            // คลิปเสีย/เจ้าของปิดการฝัง ก็ข้ามไปเลย ไม่ให้คิวค้าง
-            onError: () => void advance(loadedRef.current ?? undefined),
+            /*
+              YouTube บอกว่าคลิปนี้เล่นไม่ได้ — จัดการต่างกันตามที่มาของเพลง
+
+              เพลงสำรอง: เป็นขยะในกองที่เราเป็นคนใส่เอง เอาออกจากกองถาวร
+              แล้วไปเพลงถัดไป ถ้าปล่อยไว้มันจะวนกลับมาค้างซ้ำที่เดิมไม่จบ
+              (สแกนกองจริงแล้วพบว่า 37 จาก 89 เพลงติดรหัส 150 = เจ้าของปิดการฝัง)
+
+              เพลงที่คนดูขอมา: ห้ามข้ามให้เอง เป็นของที่เขาตั้งใจขอมาครั้งเดียว
+              ค้างไว้แล้วขึ้นข้อความให้คนดูแลตัดสินใจกดข้ามเอง
+            */
+            onError: (e) => {
+              const cur = loadedRef.current;
+              const song = cur
+                ? stateRef.current.queue.find((x) => x.id === cur)
+                : undefined;
+              if (cur && song?.source === "filler") {
+                onUnplayable?.(song.videoId, e.data);
+                /* ลบใบทิ้งเลย ไม่ใช่ปิดเป็น "เล่นจบแล้ว" — มันไม่เคยเล่น
+                   ใส่ไว้ในประวัติก็มีแต่จะรกโดยไม่ได้บอกอะไร
+                   พอใบหาย ตัวดันคิวจะหยิบเพลงถัดไปขึ้นมาให้เอง */
+                void removeSongRequest(stateRef.current.channelId, cur);
+                return;
+              }
+              setFailed(true);
+            },
             /* หมายเหตุ: loadedRef เก็บ id ใบคำขอ ไม่ใช่ videoId
-               advance จึงเทียบใบต่อใบได้ตรงตัว แม้คลิปเดียวกันถูกขอซ้ำ */
+               advance จึงเทียบใบต่อใบได้ตรงตัว แม้คลิปเดียวกันถูกขอซ้ำ
+               และห้ามเรียก advance โดยไม่ส่ง id — ไม่มี id แล้วมันจะข้าม
+               "เพลงที่กำลังเล่นอยู่ตอนนี้" ซึ่งอาจไม่ใช่ใบที่มีปัญหาแล้วก็ได้ */
           },
         });
       })
@@ -291,7 +341,7 @@ export function SongPlayerCore({
       playerRef.current?.destroy();
       playerRef.current = null;
     };
-  }, [advance]);
+  }, [advance, onUnplayable]);
 
   /*
     ปรับตัวเล่นให้ตรงกับคิวเสมอ
@@ -336,6 +386,8 @@ export function SongPlayerCore({
 
     loadedRef.current = playing.id;
     manualPauseRef.current = false;
+    playedOkRef.current = false;
+    setFailed(false);
     p.loadVideoById(playing.videoId);
 
     /*
@@ -543,6 +595,23 @@ export function SongPlayerCore({
               ย้ายมาเล่นที่นี่
             </Button>
           </div>
+        </div>
+      )}
+
+      {/*
+        คลิปเล่นไม่ได้ — บอกให้เห็นแล้วมีปุ่มข้ามให้ตรงนั้นเลย
+        ไม่ข้ามให้เองเพราะกองสำรองที่เต็มไปด้วยคลิปแบบนี้จะโดนไล่ข้ามจนเกลี้ยง
+        ซ่อนตอน blocked เพราะกรณีนั้นไม่ใช่ความผิดของคลิป กดเริ่มแล้วเล่นได้
+      */}
+      {failed && !blocked && playing && active && !apiError && (
+        <div className="absolute inset-x-0 bottom-0 grid place-items-center bg-black/88 px-6 py-5 text-center backdrop-blur-sm">
+          <p className="font-display text-sm text-ice">คลิปนี้เล่นในเว็บอื่นไม่ได้</p>
+          <p className="mt-1 max-w-md text-xs leading-relaxed text-muted">
+            เจ้าของคลิปปิดการฝังไว้ ต้องไปดูในเว็บ YouTube เท่านั้น
+          </p>
+          <Button size="sm" variant="ghost" onClick={() => void skip()} className="mt-3">
+            ข้ามเพลงนี้
+          </Button>
         </div>
       )}
 
@@ -1008,6 +1077,26 @@ export default function SongPlayer() {
         channelId={channelId}
         filler={channel?.songs?.filler}
         fillerMode={channel?.songs?.fillerMode ?? "off"}
+        onUnplayable={(videoId, code) => {
+          /*
+            เพลงสำรองที่ฝังไม่ได้ = ขยะในกองที่เราใส่เอง เขี่ยออกถาวร
+            ถ้าไม่เอาออก โหมดสุ่มจะวนกลับมาเจอใบเดิมค้างซ้ำที่เดิมไม่จบ
+            (กองจริงของช่องนี้มี 37 จาก 89 เพลงที่เจ้าของปิดการฝัง)
+          */
+          const list = channel?.songs?.filler ?? [];
+          const gone = list.find((t) => t.videoId === videoId);
+          if (!gone) return;
+          void saveFillerList(
+            channelId,
+            list.filter((t) => t.videoId !== videoId),
+          ).then(() =>
+            toast(
+              `"${gone.title.slice(0, 26)}" เจ้าของปิดการฝัง (รหัส ${code}) — เอาออกจากกองแล้ว`,
+              "info",
+              5000,
+            ),
+          );
+        }}
       />
       <SongConsole channelId={channelId} channel={channel} />
     </div>

@@ -12,6 +12,7 @@ import {
   submitSongRequest,
   watchSongQueue,
 } from "@/lib/song/store";
+import { canEmbed } from "@/lib/song/embeddable";
 import { DEFAULT_SONG_CONFIG, type SongRequest } from "@/lib/song/types";
 import {
   lookupVideo,
@@ -41,6 +42,10 @@ type Preview =
   | { state: "invalid" }
   | { state: "loading" }
   | { state: "missing" }
+  /* เจ้าของคลิปปิดการฝังในเว็บอื่น — ต้องกันตั้งแต่ตรงนี้ ไม่ใช่ปล่อยเข้าคิว
+     แล้วไปค้างกลางไลฟ์ (สแกนกองจริงเจอ 37 จาก 89 เพลงเป็นแบบนี้)
+     รู้ได้ทางเดียวคือลองโหลดจริง — oEmbed ตอบ 200 เหมือนกันหมด */
+  | { state: "blocked"; info: YoutubeInfo }
   | { state: "ok"; info: YoutubeInfo };
 
 const NONE: Preview = { state: "none" };
@@ -152,9 +157,20 @@ export default function SongRequestPanel({
 
     setPreview({ state: "loading" });
     timer.current = window.setTimeout(() => {
-      void lookupVideo(videoId).then((info) => {
+      void lookupVideo(videoId).then(async (info) => {
         if (token !== seq.current) return;
-        setPreview(info ? { state: "ok", info } : { state: "missing" });
+        if (!info) {
+          setPreview({ state: "missing" });
+          return;
+        }
+        /* โชว์ชื่อเพลงก่อนเลย แล้วค่อยตรวจว่าฝังเล่นได้ไหมตามหลัง
+           การตรวจใช้เวลาไม่ถึงครึ่งวินาที แต่ถ้ารอให้เสร็จก่อนค่อยโชว์
+           คนวางลิงก์จะเห็นช่องว่างนานขึ้นโดยไม่ได้อะไรเพิ่ม */
+        setPreview({ state: "ok", info });
+        const verdict = await canEmbed(info.videoId);
+        if (token !== seq.current) return;
+        // ตอบไม่ได้ = ปล่อยผ่าน ห้ามกันเพลงดีๆ ทิ้งเพราะเน็ตสะดุด
+        if (verdict === "blocked") setPreview({ state: "blocked", info });
       });
     }, LOOKUP_DELAY);
   };
@@ -168,6 +184,7 @@ export default function SongRequestPanel({
     return "ส่งไม่สำเร็จ ลองใหม่อีกครั้ง";
   };
 
+  // ใบที่ฝังไม่ได้ต้องส่งไม่ได้ ไม่ใช่แค่ขึ้นเตือนแล้วยังกดได้อยู่
   const info = preview.state === "ok" ? preview.info : null;
   const canSubmit = !!info && !!name.trim() && !busy;
 
@@ -299,6 +316,12 @@ export default function SongRequestPanel({
                 {preview.state === "invalid" && (
                   <p className="text-xs text-[#e79a9a]">
                     ลิงก์ไม่ถูกต้อง วางลิงก์ YouTube หรือไอดีคลิป
+                  </p>
+                )}
+                {preview.state === "blocked" && (
+                  <p className="text-xs leading-relaxed text-[#e79a9a]">
+                    เจ้าของคลิปนี้ปิดไม่ให้เล่นนอกเว็บ YouTube — ขอเพลงนี้ไม่ได้
+                    ลองหาคลิปเดียวกันจากช่องอื่น เช่นเวอร์ชัน Lyrics หรือ Audio
                   </p>
                 )}
                 {preview.state === "missing" && (
