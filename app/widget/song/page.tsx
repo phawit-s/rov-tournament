@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useHashParam } from "@/hooks/useClient";
 import { useWidgetOptions } from "@/hooks/useLiveTournament";
+import { hasBackend } from "@/lib/backend/firebase";
 import { watchChannel } from "@/lib/channel/store";
 import { splitQueue, watchSongQueue } from "@/lib/song/store";
 import type { SongRequest } from "@/lib/song/types";
@@ -56,12 +57,23 @@ export default function SongWidget() {
    * หรือใช้รหัสช่องเก่าที่ลบไปแล้ว แล้วไม่มีอะไรบอกให้รู้เลยสักตัว
    */
   const [channelFound, setChannelFound] = useState<boolean | null>(null);
+  /**
+   * อ่านคิวไม่สำเร็จเพราะอะไร — null = ไม่มีปัญหา
+   *
+   * เดิมกลืนไว้เงียบๆ แล้วปล่อยให้คิวว่าง ผลคือจอขาวโดยไม่มีอะไรบอกสาเหตุเลย
+   * ซึ่งแยกไม่ออกจาก "ยังไม่มีเพลง" — ทั้งที่คนละเรื่องกันคนละขั้ว
+   * (ส่วนขยายกันโฆษณาบางตัวบล็อก googleapis.com, เน็ตองค์กรบล็อก, กติกาเปลี่ยน)
+   */
+  const [queueError, setQueueError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!channelId) return;
     const stopQueue = watchSongQueue(channelId, setQueue, {
       onlyOpen: true,
-      onError: () => setQueue(EMPTY),
+      onError: (e) => {
+        setQueue(EMPTY);
+        setQueueError(e.message || "อ่านคิวไม่ได้");
+      },
     });
     const stopChannel = watchChannel(
       channelId,
@@ -85,6 +97,25 @@ export default function SongWidget() {
           เติม <code>#ch=รหัสช่อง</code> ท้ายลิงก์ widget เช่น{" "}
           <code>/widget/song/#ch=abc123</code> (ถ้าโปรแกรมสตรีมตัด <code>#</code> ทิ้ง
           ใช้ <code>?ch=</code> แทนได้)
+        </WidgetHint>
+      </WidgetShell>
+    );
+  }
+
+  /*
+    ต่อฐานข้อมูลไม่ได้เลย — อาการจะเหมือนจอขาวเปล่าทุกประการ
+    ต้องบอกให้รู้ ไม่งั้นคนเปิดจะไปไล่แก้ผิดจุด (นึกว่าลิงก์ผิดหรือ widget พัง)
+  */
+  if (!hasBackend || queueError) {
+    return (
+      <WidgetShell>
+        <WidgetHint setup title="ต่อฐานข้อมูลไม่ได้">
+          {!hasBackend
+            ? "เว็บชุดนี้ถูกสร้างมาโดยไม่มีค่าเชื่อมต่อฐานข้อมูล จึงอ่านคิวไม่ได้เลย"
+            : `อ่านคิวไม่สำเร็จ — ${queueError}`}
+          <br />
+          ถ้าเครื่องอื่นเปิดได้แต่เครื่องนี้ไม่ได้ ลองปิดส่วนขยายกันโฆษณาเฉพาะเว็บนี้
+          หรือเปลี่ยนเครือข่าย (บางที่บล็อก googleapis.com)
         </WidgetHint>
       </WidgetShell>
     );
