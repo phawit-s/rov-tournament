@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans_Thai, Prompt } from "next/font/google";
 import { BRAND } from "@/lib/brand";
+import { CHUNK_RECOVERY_SCRIPT } from "@/lib/chunk-recovery";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme-script";
 import "./globals.css";
 
@@ -61,6 +62,13 @@ export default function RootLayout({
            เพราะธีมถูกตั้งไปตั้งแต่โหลดครั้งแรก หลังจากนั้น themeStore ดูแลต่อ)
         */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+
+        {/*
+          ต้องอยู่ใน <head> แบบฝังในหน้าเลย ห้ามแยกเป็นไฟล์
+          เพราะหน้าที่ของมันคือกู้กรณี "ไฟล์โหลดไม่ได้" — ถ้าตัวมันเองอยู่ในไฟล์แยก
+          ก็จะโหลดไม่ได้ไปพร้อมกัน แล้วไม่มีใครกู้
+        */}
+        <script dangerouslySetInnerHTML={{ __html: CHUNK_RECOVERY_SCRIPT }} />
       </head>
       <body className="antialiased">{children}</body>
     </html>
