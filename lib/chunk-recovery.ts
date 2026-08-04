@@ -13,18 +13,19 @@
  * วิธีแก้: ดักตอนไฟล์โหลดไม่ได้ แล้วโหลดหน้าใหม่พร้อมพารามิเตอร์กันแคช
  * ทำให้เครื่องนั้นได้ HTML ชุดใหม่ที่ชี้ไปไฟล์ที่มีอยู่จริง
  *
- * กันวนไม่จบด้วย sessionStorage — ลองใหม่ได้ครั้งเดียวต่อแท็บ
- * ถ้าโหลดสำเร็จค่อยล้างธงทิ้ง เพื่อให้ deploy รอบหน้ายังกู้ตัวเองได้อีก
+ * กันวนไม่จบด้วยการจำ "เวลาที่ลองล่าสุด" ไม่ใช่แค่ธงเปิด/ปิด
+ *
+ * เคยเขียนเป็นธงแล้วล้างทิ้งตอนหน้าโหลดเสร็จ ซึ่งผิด — หน้าที่ไฟล์หายก็ยิง load
+ * ได้เหมือนกัน (เฟรมเวิร์กโหลดผ่าน แต่ไฟล์ของหน้านั้นหาย) พอล้างธงแล้วเจอ error
+ * อีกตัวก็สั่งโหลดใหม่ซ้ำ วนไม่จบจนเว็บกระพริบทั้งวัน — ทดสอบแล้วเจอจริง
+ *
+ * เก็บเป็นเวลาแทน จึงลองใหม่ได้อย่างมากรอบละ 10 นาทีต่อแท็บ
+ * พอกู้หลัง deploy และวนไม่ได้ไม่ว่าจะพังแบบไหน
  */
 export const CHUNK_RECOVERY_SCRIPT = `
 (function () {
-  var KEY = "rov/chunk-retry";
-  function retried() {
-    try { return sessionStorage.getItem(KEY) === "1"; } catch (e) { return true; }
-  }
-  function mark() {
-    try { sessionStorage.setItem(KEY, "1"); } catch (e) {}
-  }
+  var KEY = "rov/chunk-retry-at";
+  var COOLDOWN = 600000;
   // ต้องดักแบบ capture — error ของ <script>/<link> ไม่ลอยขึ้นมาถึง window
   window.addEventListener(
     "error",
@@ -33,21 +34,26 @@ export const CHUNK_RECOVERY_SCRIPT = `
       if (!el || (el.tagName !== "SCRIPT" && el.tagName !== "LINK")) return;
       var url = el.src || el.href || "";
       if (url.indexOf("/_next/") < 0) return;
-      if (retried()) return;
-      mark();
+
+      var now = Date.now();
+      try {
+        var last = Number(sessionStorage.getItem(KEY) || 0);
+        if (now - last < COOLDOWN) return;
+        sessionStorage.setItem(KEY, String(now));
+      } catch (err) {
+        // เขียนที่เก็บไม่ได้ (โหมดส่วนตัว) = กันวนไม่ได้ ไม่ต้องโหลดใหม่ดีกว่า
+        return;
+      }
+
       try {
         var u = new URL(window.location.href);
-        u.searchParams.set("_r", Date.now().toString(36));
+        u.searchParams.set("_r", now.toString(36));
         window.location.replace(u.toString());
-      } catch (err) {
+      } catch (err2) {
         window.location.reload();
       }
     },
     true,
   );
-  // บูตผ่านแล้ว = ล้างธง คราวหน้าถ้าเจออีกจะได้ลองใหม่ได้
-  window.addEventListener("load", function () {
-    try { sessionStorage.removeItem(KEY); } catch (e) {}
-  });
 })();
 `.trim();
