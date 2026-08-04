@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { useReducedMotion } from "motion/react";
 import { useWidgetOptions } from "@/hooks/useLiveTournament";
 import Corners from "@/components/ui/Corners";
 
@@ -81,29 +81,19 @@ export default function WidgetShell({
       >
         {/*
           ม่านกวาดซ้าย→ขวาตอนสลับซีนใน OBS แทนที่จะโผล่พรึ่บ
-          inset ติดลบเพื่อกันไม่ให้ clip-path เฉือนเงา/แสงรอบการ์ดทิ้ง
+
+          เคยทำด้วย motion โดยตั้ง initial เป็น opacity 0 + clip-path ปิดสนิท
+          แล้วให้ JS ค่อยเปิดออก — ซึ่งแปลว่า "มองเห็น widget ไหม" ไปขึ้นอยู่กับว่า
+          แอนิเมชันวิ่งจนจบหรือเปล่า พอมันไม่วิ่ง (แท็บหลังบ้าน rAF ถูกพัก /
+          เบราว์เซอร์ interpolate clip-path ไม่ได้) widget จะค้างที่ opacity 0
+          ทั้งที่โค้ดรันครบ ข้อมูลมาครบ รูปโหลดครบ — เห็นเป็นจอขาวเปล่าโดยไม่มีอะไรบอก
+          (เจอของจริง: network 200 ทุกเส้น รูปปกโหลดสำเร็จ แต่จอขาว)
+
+          เปลี่ยนมาใช้ CSS ที่ "สถานะปกติคือมองเห็น" แล้วแอนิเมชันแค่วิ่งผ่าน
+          ถ้ามันไม่วิ่งด้วยเหตุใดก็ตาม ผลคือเห็น widget ตามปกติ ไม่ใช่หายไปเลย
+          และตัดเบลอออกด้วย — มันบังคับวาดใหม่ทุกเฟรม ผิดกติกาที่ widget ตั้งไว้เอง
         */}
-        {reduced ? (
-          <div>{children}</div>
-        ) : (
-          <motion.div
-            initial={{
-              opacity: 0,
-              y: 10,
-              filter: "blur(6px)",
-              clipPath: "inset(-30% 100% -30% -30%)",
-            }}
-            animate={{
-              opacity: 1,
-              y: 0,
-              filter: "blur(0px)",
-              clipPath: "inset(-30% -30% -30% -30%)",
-            }}
-            transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
-          >
-            {children}
-          </motion.div>
-        )}
+        <div className={reduced ? undefined : "widget-enter"}>{children}</div>
       </div>
     </div>
   );
