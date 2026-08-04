@@ -49,7 +49,7 @@ export default function TimerWidget() {
   if (targetMs === null) {
     return (
       <WidgetShell>
-        <WidgetHint title="ยังไม่ได้ตั้งเวลาเป้าหมาย">
+        <WidgetHint setup title="ยังไม่ได้ตั้งเวลาเป้าหมาย">
           <p>เติมท้ายลิงก์อย่างใดอย่างหนึ่ง:</p>
           <ul className="num mt-2 space-y-1">
             <li>

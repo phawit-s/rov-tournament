@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useHashParam } from "@/hooks/useClient";
 import { useWidgetOptions } from "@/hooks/useLiveTournament";
+import { watchChannel } from "@/lib/channel/store";
 import { splitQueue, watchSongQueue } from "@/lib/song/store";
 import type { SongRequest } from "@/lib/song/types";
 import { thumbUrl } from "@/lib/song/youtube";
@@ -47,13 +48,31 @@ export default function SongWidget() {
   const shape: CardShape | null =
     cardParam === "wide" ? "wide" : cardParam === "1" || cardParam === "tall" ? "tall" : null;
   const [queue, setQueue] = useState<SongRequest[]>(EMPTY);
+  /**
+   * มีช่องนี้อยู่จริงไหม — null = ยังไม่รู้
+   *
+   * รหัสช่องผิดกับคิวว่างให้ผลหน้าตาเหมือนกันเป๊ะ คือไม่มีอะไรโผล่มาเลย
+   * ซึ่งเป็นสาเหตุอันดับต้นๆ ของ "widget หน้าขาว" — คนตั้งค่าคัดลอกรหัสมาไม่ครบ
+   * หรือใช้รหัสช่องเก่าที่ลบไปแล้ว แล้วไม่มีอะไรบอกให้รู้เลยสักตัว
+   */
+  const [channelFound, setChannelFound] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!channelId) return;
-    return watchSongQueue(channelId, setQueue, {
+    const stopQueue = watchSongQueue(channelId, setQueue, {
       onlyOpen: true,
       onError: () => setQueue(EMPTY),
     });
+    const stopChannel = watchChannel(
+      channelId,
+      (c) => setChannelFound(!!c),
+      // อ่านไม่ได้ (เน็ต/สิทธิ์) ไม่ใช่ "ไม่มีช่อง" — อย่าไปกล่าวหาว่ารหัสผิด
+      () => setChannelFound(true),
+    );
+    return () => {
+      stopQueue();
+      stopChannel();
+    };
   }, [channelId]);
 
   const { playing, queued } = splitQueue(queue);
@@ -62,10 +81,23 @@ export default function SongWidget() {
   if (!channelId) {
     return (
       <WidgetShell>
-        <WidgetHint title="ยังไม่รู้ว่าจะฟังคิวของช่องไหน">
+        <WidgetHint setup title="ยังไม่รู้ว่าจะฟังคิวของช่องไหน">
           เติม <code>#ch=รหัสช่อง</code> ท้ายลิงก์ widget เช่น{" "}
           <code>/widget/song/#ch=abc123</code> (ถ้าโปรแกรมสตรีมตัด <code>#</code> ทิ้ง
           ใช้ <code>?ch=</code> แทนได้)
+        </WidgetHint>
+      </WidgetShell>
+    );
+  }
+
+  // รหัสช่องมีมาแต่ไม่มีช่องนั้นจริง = ตั้งค่าผิด บอกให้รู้แทนที่จะปล่อยจอว่าง
+  if (channelFound === false) {
+    return (
+      <WidgetShell>
+        <WidgetHint setup title="ไม่พบช่องนี้">
+          รหัสช่อง <code>{channelId}</code> ไม่มีอยู่จริง
+          — คัดลอกลิงก์ใหม่จากหน้า <code>/widgets/</code> อีกครั้ง
+          (รหัสอาจขาดหายตอนคัดลอก หรือเป็นช่องที่ถูกลบไปแล้ว)
         </WidgetHint>
       </WidgetShell>
     );

@@ -63,6 +63,8 @@ function AdminLocked() {
   const [wrong, setWrong] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showPin, setShowPin] = useState(!hasBackend);
+  const [verifying, setVerifying] = useState(false);
+  const [checking, setChecking] = useState(false);
 
   const submit = async () => {
     setBusy(true);
@@ -183,6 +185,80 @@ function AdminLocked() {
                       {user.email ?? user.name}
                     </p>
                   </div>
+
+                  {/*
+                    อีเมลยังไม่ยืนยัน = สาเหตุที่พบบ่อยที่สุดของ "อยู่ๆ สิทธิ์หาย"
+
+                    กติกาฝั่งเซิร์ฟเวอร์ให้สิทธิ์เจ้าของเว็บจาก email_verified ในโทเคน
+                    เข้าด้วย Google จะได้ true มาให้เลย แต่พอเปลี่ยนมาเข้าด้วย
+                    อีเมล/รหัสผ่านของอีเมลเดียวกัน ค่านั้นเป็น false สิทธิ์เลยหายทั้งที่
+                    เป็นคนเดิม — ถ้าไม่บอกตรงนี้จะไม่มีทางเดาถูกเลย
+                  */}
+                  {!user.emailVerified && (
+                    <div
+                      className="mt-4 rounded-xl p-4"
+                      style={{
+                        background: "rgb(var(--st-live) / 0.08)",
+                        boxShadow: "inset 0 0 0 1px rgb(var(--st-live) / 0.28)",
+                      }}
+                    >
+                      <p className="font-display text-sm text-ice">
+                        อีเมลนี้ยังไม่ได้ยืนยัน
+                      </p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-muted">
+                        สิทธิ์ผู้ดูแลของเจ้าของเว็บผูกกับอีเมลที่ยืนยันแล้ว
+                        ถ้าปกติเข้าด้วย Google แล้วใช้ได้ แต่มาเข้าด้วยรหัสผ่านแล้วไม่ได้
+                        คือติดตรงนี้ — กดยืนยันแล้วเข้าได้เหมือนเดิม
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          loading={verifying}
+                          onClick={() => {
+                            setVerifying(true);
+                            void authStore
+                              .sendVerifyEmail()
+                              .then(() =>
+                                toast(
+                                  "ส่งลิงก์ยืนยันไปที่อีเมลแล้ว กดลิงก์ในเมลแล้วกลับมากด “ยืนยันแล้ว”",
+                                  "success",
+                                  7000,
+                                ),
+                              )
+                              .catch((err) =>
+                                toast(
+                                  `ส่งไม่สำเร็จ — ${err instanceof Error ? err.message : err}`,
+                                  "error",
+                                  7000,
+                                ),
+                              )
+                              .finally(() => setVerifying(false));
+                          }}
+                        >
+                          ส่งลิงก์ยืนยันอีเมล
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          loading={checking}
+                          onClick={() => {
+                            setChecking(true);
+                            void authStore
+                              .refreshUser()
+                              .then(() => toast("ตรวจสถานะใหม่แล้ว", "info"))
+                              .catch(() => toast("ตรวจไม่สำเร็จ", "error"))
+                              .finally(() => setChecking(false));
+                          }}
+                        >
+                          ยืนยันแล้ว ตรวจใหม่
+                        </Button>
+                      </div>
+                      <p className="mt-2.5 text-[11px] leading-relaxed text-muted/80">
+                        ทางลัด: เข้าด้วยปุ่ม Google ด้วยอีเมลเดิม ก็ได้สิทธิ์คืนทันที
+                      </p>
+                    </div>
+                  )}
 
                   <p className="mt-4 text-sm leading-relaxed text-muted">
                     บัญชีนี้ยังไม่มีสิทธิ์ผู้ดูแล

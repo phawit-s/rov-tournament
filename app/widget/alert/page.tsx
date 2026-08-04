@@ -94,7 +94,7 @@ export default function AlertWidget() {
   if (!tournament && !channel) {
     return (
       <WidgetShell align="center">
-        <WidgetHint title="ยังเชื่อมช่องไม่ได้">
+        <WidgetHint setup title="ยังเชื่อมช่องไม่ได้">
           ลิงก์ต้องมี <code>#ch=รหัสช่อง</code> (หรือ <code>#c=รหัสทัวร์</code>)
           และต้องเชื่อม Firebase แล้ว
         </WidgetHint>

@@ -13,6 +13,7 @@ import {
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
+  sendEmailVerification,
   sendPasswordResetEmail,
   signInAnonymously,
   signInWithEmailAndPassword,
@@ -76,6 +77,16 @@ export type AuthUser = {
   photo: string | null;
   /** ล็อกอินแบบไม่ระบุตัวตน (มาจากหน้าโดเนท) */
   anonymous: boolean;
+  /**
+   * ยืนยันอีเมลแล้วหรือยัง
+   *
+   * เข้าด้วย Google จะเป็น true ให้เลย แต่สมัครด้วยอีเมล/รหัสผ่านจะเป็น false
+   * จนกว่าจะกดลิงก์ในเมล — และกติกาฝั่งเซิร์ฟเวอร์ผูกสิทธิ์เจ้าของเว็บไว้กับ
+   * email_verified ในโทเคน ถ้าไม่รู้ค่านี้ก็จะงงว่าทำไมอยู่ๆ สิทธิ์หาย
+   */
+  emailVerified: boolean;
+  /** ล็อกอินมาด้วยวิธีไหน ('password' | 'google.com' | ...) */
+  provider: string | null;
 };
 
 let currentUser: AuthUser | null = null;
@@ -116,6 +127,8 @@ function startWatching() {
           email: user.email,
           photo: user.photoURL,
           anonymous: user.isAnonymous,
+          emailVerified: user.emailVerified,
+          provider: user.providerData?.[0]?.providerId ?? null,
         }
       : null;
     authReady = true;
@@ -168,9 +181,44 @@ export const authStore = {
         email: cred.user.email,
         photo: cred.user.photoURL,
         anonymous: false,
+        emailVerified: cred.user.emailVerified,
+        provider: cred.user.providerData?.[0]?.providerId ?? null,
       };
       publish();
     }
+  },
+
+  /** ส่งลิงก์ยืนยันอีเมลให้บัญชีที่ล็อกอินอยู่ */
+  async sendVerifyEmail() {
+    const client = getAuthClient();
+    if (!client?.currentUser) throw new Error("ยังไม่ได้ล็อกอิน");
+    await sendEmailVerification(client.currentUser);
+  },
+
+  /**
+   * ดึงสถานะบัญชีใหม่จากเซิร์ฟเวอร์
+   *
+   * ต้องบังคับต่ออายุโทเคนด้วย (getIdToken(true)) ไม่ใช่แค่ reload() —
+   * กติกา Firestore อ่าน email_verified จาก "โทเคน" ที่ออกไว้ก่อนหน้า
+   * กดยืนยันในเมลแล้วโทเคนเก่ายังบอกว่ายังไม่ยืนยันอยู่ดีจนกว่าจะต่ออายุ
+   * (โทเคนมีอายุ 1 ชั่วโมง ถ้าไม่บังคับก็ต้องรอครบชั่วโมงหรือล็อกอินใหม่)
+   */
+  async refreshUser() {
+    const client = getAuthClient();
+    const user = client?.currentUser;
+    if (!user) return;
+    await user.reload();
+    await user.getIdToken(true);
+    currentUser = {
+      uid: user.uid,
+      name: user.displayName ?? user.email?.split("@")[0] ?? "ผู้ใช้",
+      email: user.email,
+      photo: user.photoURL,
+      anonymous: user.isAnonymous,
+      emailVerified: user.emailVerified,
+      provider: user.providerData?.[0]?.providerId ?? null,
+    };
+    publish();
   },
 
   async resetPassword(email: string) {
