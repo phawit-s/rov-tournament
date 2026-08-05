@@ -226,10 +226,27 @@ const RECEIVER_NAME_PATHS = [
   "data.receiverName",
 ];
 
+/**
+ * เลขบัญชีปลายทาง — เก็บ "ทุก" path ที่เจอ ไม่ใช่อันแรกที่เจอ
+ *
+ * ปลายทางใบเดียวมีได้หลายเลขพร้อมกัน: เลขบัญชีธนาคาร กับพร็อกซีพร้อมเพย์
+ * (เบอร์มือถือ/เลขบัตร) ซึ่งไม่เท่ากันเลยสักหลัก ถ้าเอาแค่อันแรกที่เจอมาเทียบ
+ * ช่องที่ตั้งพร้อมเพย์เป็นเบอร์มือถือจะถูกตัดสินว่า "บัญชีไม่ตรง" ทั้งที่โอนถูกบัญชี
+ * — เทียบทีละอันแล้วผ่านถ้ามีอันไหนตรง จึงเป็นวิธีเดียวที่ไม่ปัดตกสลิปที่ถูกต้อง
+ *
+ * Thunder v2 ห่อของจริงไว้ใต้ data.rawSlip เหมือน AMOUNT/DATE/BANK ต้องมีให้ครบ
+ * ไม่งั้นจะอ่านเลขปลายทางไม่เจอเลย แล้วกลายเป็น "เทียบไม่ได้" ทุกใบ
+ */
 const RECEIVER_ACCOUNT_PATHS = [
+  "data.rawSlip.receiver.account.value",
+  "data.rawSlip.receiver.account.bank.account",
+  "data.rawSlip.receiver.account.proxy.account",
+  "data.rawSlip.receiver.account.proxy.value",
+  "data.rawSlip.receiver.proxy.value",
   "data.receiver.account.value",
   "data.receiver.account.bank.account",
   "data.receiver.account.proxy.account",
+  "data.receiver.account.proxy.value",
   "data.receiver.proxy.value",
   "data.receiver.account",
   "data.receivingBank",
@@ -270,21 +287,42 @@ function normalize(json) {
   const bank = firstOf(json, BANK_PATHS, isNonEmptyString) ?? null;
   const receiver = firstOf(json, RECEIVER_NAME_PATHS, isNonEmptyString) ?? null;
 
-  // เลขบัญชีปลายทางอาจเป็นสตริงตรงๆ หรือเป็น object ที่ห่อไว้อีกชั้น
-  const account = firstOf(json, RECEIVER_ACCOUNT_PATHS, isSomething);
-  let receiverAccount = null;
-  if (typeof account === "string" || typeof account === "number") {
-    receiverAccount = String(account);
-  } else if (account && typeof account === "object") {
-    receiverAccount =
-      firstOf(
-        account,
-        ["value", "account", "bank.account", "proxy.account", "proxy.value"],
-        isNonEmptyString,
-      ) ?? null;
-  }
+  const receiverAccounts = collectAccounts(json);
 
-  return { amount, at: when, bank, receiver, receiverAccount };
+  return {
+    amount,
+    at: when,
+    bank,
+    receiver,
+    // อันแรกไว้โชว์ในใบ ส่วนการเทียบใช้ทั้งลิสต์
+    receiverAccount: receiverAccounts[0] ?? null,
+    receiverAccounts,
+  };
+}
+
+/**
+ * เก็บเลขบัญชีปลายทางที่เป็นไปได้ทั้งหมดจากผลของผู้ให้บริการ
+ * แต่ละ path อาจเป็นสตริงตรงๆ หรือเป็น object ที่ห่อเลขไว้อีกชั้น
+ */
+function collectAccounts(json) {
+  const found = [];
+  const push = (value) => {
+    if (typeof value !== "string" && typeof value !== "number") return;
+    const text = String(value).trim();
+    if (text && !found.includes(text)) found.push(text);
+  };
+
+  for (const path of RECEIVER_ACCOUNT_PATHS) {
+    const value = at(json, path);
+    if (value && typeof value === "object") {
+      for (const key of ["value", "account", "bank.account", "proxy.account", "proxy.value"]) {
+        push(at(value, key));
+      }
+    } else {
+      push(value);
+    }
+  }
+  return found;
 }
 
 /**
@@ -344,12 +382,20 @@ function digitsOnly(value) {
  * เทียบเลขบัญชีปลายทาง — ดูแค่หลักท้าย เพราะสลิปกับ API ปิดเลขไม่เหมือนกัน
  * ถ้าฝั่งใดฝั่งหนึ่งสั้นเกินจนเทียบไม่ได้ ให้ถือว่า "เทียบไม่ได้" (null)
  * ไม่ใช่ "ไม่ตรง" จะได้ไม่ปัดตกสลิปที่ถูกต้อง
+ *
+ * actual รับได้ทั้งค่าเดียวและลิสต์ ปลายทางใบเดียวมีทั้งเลขบัญชีและพร็อกซี
+ * ตรงอันไหนก็ถือว่าตรง จะไม่ตรงได้ก็ต่อเมื่อเทียบได้ครบทุกอันแล้วไม่ตรงสักอัน
  */
 function accountMatches(expect, actual) {
   const a = digitsOnly(expect);
-  const b = digitsOnly(actual);
-  if (a.length < ACCOUNT_TAIL || b.length < ACCOUNT_TAIL) return null;
-  return a.slice(-ACCOUNT_TAIL) === b.slice(-ACCOUNT_TAIL);
+  if (a.length < ACCOUNT_TAIL) return null;
+
+  const list = (Array.isArray(actual) ? actual : [actual])
+    .map(digitsOnly)
+    .filter((b) => b.length >= ACCOUNT_TAIL);
+  if (list.length === 0) return null;
+
+  return list.some((b) => b.slice(-ACCOUNT_TAIL) === a.slice(-ACCOUNT_TAIL));
 }
 
 /* ------------------------------------------------------------------ *
@@ -422,6 +468,12 @@ const fsUrl = (env, path) =>
  * อ่านใบก่อนเสมอ แล้วเทียบยอดกับที่เพิ่งตรวจได้จริง
  * เพราะคนเรียก Worker เป็นเบราว์เซอร์ของคนโอน ซึ่งจะส่ง donationId อะไรมาก็ได้
  * ถ้าไม่เทียบ ก็เท่ากับใครก็สั่งอนุมัติใบของคนอื่นได้ด้วยสลิปของตัวเอง
+ *
+ * เทียบ "ปลายทาง" ด้วย ไม่ใช่แค่ยอด และต้องอ่านเลขพร้อมเพย์จาก Firestore เอง
+ * ห้ามใช้ expectAccount ที่เบราว์เซอร์ส่งมาเด็ดขาด เพราะคนยิงเป็นคนโอน:
+ * โอนเข้าบัญชี "ตัวเอง" ให้ยอดตรงกับใบ แล้วบอก Worker ว่าปลายทางคือบัญชีตัวเอง
+ * สลิปก็จริงทุกอย่าง ผ่านการตรวจกับธนาคารจริง แต่เงินไม่เคยไปถึงเจ้าของช่อง
+ * — ใบขึ้นจอสตรีมพร้อมยอดเต็ม และไปบวกเงินรางวัลทัวร์ด้วย โดยไม่มีใครจ่ายอะไรเลย
  */
 async function approveDonation(env, channelId, donationId, verified) {
   if (!env.BOT_EMAIL || !env.BOT_PASSWORD || !env.FIREBASE_API_KEY || !env.FIREBASE_PROJECT) {
@@ -432,8 +484,14 @@ async function approveDonation(env, channelId, donationId, verified) {
   const token = await botLogin_(env);
   const auth = { Authorization: `Bearer ${token}` };
   const path = `channels/${encodeURIComponent(channelId)}/donations/${encodeURIComponent(donationId)}`;
+  const channelPath = `channels/${encodeURIComponent(channelId)}`;
 
-  const cur = await fetch(fsUrl(env, path), { headers: auth }).then((r) => r.json());
+  // ดึงพร้อมกัน คนโอนรออยู่หน้าเว็บ ไม่ต้องต่อคิวสองรอบ
+  const [cur, channel] = await Promise.all([
+    fetch(fsUrl(env, path), { headers: auth }).then((r) => r.json()),
+    fetch(fsUrl(env, channelPath), { headers: auth }).then((r) => r.json()),
+  ]);
+
   if (!cur.fields) return "donation-not-found";
   if (cur.fields.status?.stringValue !== "pending") return "not-pending";
 
@@ -443,6 +501,25 @@ async function approveDonation(env, channelId, donationId, verified) {
   if (claimed === null || Math.abs(claimed - verified.amount) > AMOUNT_TOLERANCE) {
     return "amount-mismatch";
   }
+
+  /*
+    ปลายทางต้องเป็นบัญชีของช่องนี้จริง
+
+    เทียบไม่ได้ (null) ไม่ใช่เรื่องเล็กตรงนี้ เพราะขาตัดสินใจนี้ไม่มีคนดูอยู่
+    ปล่อยผ่านเมื่อ "ไม่รู้" = เปิดช่องให้สลิปที่โอนเข้าบัญชีตัวเองผ่านได้ทันที
+    ที่ผู้ให้บริการไม่ส่งเลขปลายทางกลับมา จึงต้องตกไปให้เจ้าของช่องดูด้วยตาแทน
+    (ใบยังอยู่ครบในสถานะ pending ไม่ได้หายไปไหน)
+  */
+  const payTo =
+    channel?.fields?.donate?.mapValue?.fields?.promptPayId?.stringValue ?? "";
+  if (!payTo) return "channel-has-no-account";
+
+  const toUs = accountMatches(
+    payTo,
+    verified.receiverAccounts ?? verified.receiverAccount,
+  );
+  if (toUs === false) return "account-mismatch";
+  if (toUs === null) return "account-unconfirmed";
 
   // เขียนเฉพาะฟิลด์ที่ตั้งใจ updateMask กันเผลอทับฟิลด์อื่นทั้งเอกสาร
   const mask = [
@@ -818,11 +895,14 @@ const handler = {
         }
       }
 
-      // ---- ตรวจบัญชีปลายทาง ----
+      /* ---- ตรวจบัญชีปลายทาง ----
+         ค่านี้มาจากเบราว์เซอร์ จึงเป็นได้แค่ "ตัวกรองชั้นแรก" ไว้บอกคนโอนเร็วๆ
+         ว่าโอนผิดบัญชี — เชื่อเป็นหลักฐานไม่ได้ เพราะคนยิงแก้ค่าเองได้
+         ตัวที่นับจริงคือการเทียบกับเลขพร้อมเพย์ของช่องใน approveDonation */
       const expectAccount =
         typeof body.expectAccount === "string" ? body.expectAccount.trim() : "";
       if (expectAccount) {
-        const match = accountMatches(expectAccount, info.receiverAccount);
+        const match = accountMatches(expectAccount, info.receiverAccounts);
         // match === null คือข้อมูลไม่พอเทียบ ปล่อยผ่านแต่ติดธงไว้ให้ผู้จัดรู้
         if (match === false) {
           return reply({ ok: false, reason: "account-mismatch", ...base }, cors);
