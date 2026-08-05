@@ -153,11 +153,23 @@ service cloud.firestore {
         // เจ้าของกับผู้ดูแลเห็นทุกใบ คนอื่นเห็นเฉพาะใบที่อนุมัติแล้ว (widget แจ้งเตือน)
         allow read: if canManageChannel() || resource.data.status == 'approved';
 
-        // ต้องล็อกอินก่อน (หน้าโดเนทล็อกอินแบบไม่ระบุตัวตนให้เอง)
-        // และเปิดรับเฉพาะตอนเจ้าของเปิดระบบไว้
+        /*
+          ต้องล็อกอินก่อน (หน้าโดเนทล็อกอินแบบไม่ระบุตัวตนให้เอง)
+          และเปิดรับเฉพาะตอนเจ้าของเปิดระบบไว้
+
+          ★ ฟิลด์ "ผลตรวจ" ทุกตัวต้องล็อกไว้ตรงนี้ ★
+          หน้าตั้งค่าของผู้จัดอนุมัติใบให้อัตโนมัติเมื่อเห็น slipCheck == 'verified'
+          ถ้าไม่ล็อก คนส่งใบก็แค่แก้โค้ดหน้าเว็บให้เขียน 'verified' มาตั้งแต่แรก
+          แล้วใบปลอมจะขึ้นจอสตรีมเองโดยไม่มีสลิปจริงสักใบ
+          ค่าพวกนี้เป็นของ Worker ที่ตรวจกับธนาคารแล้วเท่านั้น (เขียนผ่าน update)
+
+          เขียนเป็น "ไม่มีฟิลด์ก็ได้ แต่ถ้ามีต้องเป็นค่านี้" เพื่อให้หน้าเว็บรุ่นเก่า
+          ที่ยังค้างอยู่บนเครื่องคนอื่นส่งใบได้ตามปกติระหว่างรอ deploy รอบใหม่
+        */
         allow create: if request.auth != null
           && (channel().donate.enabled == true || channel().member.enabled == true)
           && request.resource.data.status == 'pending'
+          && request.resource.data.kind in ['tip', 'member']
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
           && request.resource.data.name.size() <= 40
@@ -166,7 +178,24 @@ service cloud.firestore {
           && request.resource.data.amount <= 1000000
           && request.resource.data.message.size() <= 140
           && (request.resource.data.slip == null
-              || request.resource.data.slip.size() <= 400000);
+              || request.resource.data.slip.size() <= 400000)
+          // ผลตรวจจากธนาคารยังไม่เกิด ณ ตอนสร้างใบ อย่างมากได้แค่ "อ่าน QR ได้ ไม่ซ้ำ"
+          && (!('slipCheck' in request.resource.data)
+              || request.resource.data.slipCheck in ['none', 'unique'])
+          && (!('autoApproved' in request.resource.data)
+              || request.resource.data.autoApproved == false)
+          && (!('slipAmount' in request.resource.data)
+              || request.resource.data.slipAmount == null)
+          && (!('slipAt' in request.resource.data)
+              || request.resource.data.slipAt == null)
+          && (!('slipBank' in request.resource.data)
+              || request.resource.data.slipBank == null)
+          // วันหมดอายุสมาชิกคิดตอนอนุมัติ ไม่ใช่ตอนสมัคร
+          && (!('expiresAt' in request.resource.data)
+              || request.resource.data.expiresAt == null)
+          // ปลอมเป็นคนอื่นไม่ได้ — ใบที่โดนสแปมจะได้ตามรอยกลับไปที่บัญชีต้นทางได้
+          && (!('byUid' in request.resource.data)
+              || request.resource.data.byUid == request.auth.uid);
 
         allow update, delete: if canManageChannel();
       }

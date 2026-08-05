@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useHashParam } from "@/hooks/useClient";
-import { authStore, hasBackend } from "@/lib/backend/firebase";
+import { authStore, getAuthClient, hasBackend } from "@/lib/backend/firebase";
 import {
   claimSlipRef,
   submitChannelDonation,
@@ -40,6 +40,16 @@ import {
 
 type Mode = "tip" | "member";
 const MONTHS = [1, 3, 6, 12];
+
+/** ลองใหม่อีกครั้งหลังเว้นจังหวะสั้นๆ ใช้กับงานที่ล้มแล้วย้อนคืนไม่ได้ */
+async function retryOnce<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    return run();
+  }
+}
 
 /**
  * ผลอ่าน QR บนสลิปที่ผู้ใช้เพิ่งเลือก
@@ -190,16 +200,31 @@ export default function ChannelSupport() {
     if (!canSubmit) return;
     setBusy(true);
     setError(null);
+
+    /*
+      ไม่มี QR ก็ส่งได้ตามปกติ แค่ติดป้ายไว้ว่าผู้จัดต้องตรวจด้วยตา
+      ใบที่สร้างจากตรงนี้ยังไม่มีผลตรวจจากธนาคาร เพราะ Worker เป็นคนเติมให้
+      ทีหลังพร้อมกับพลิกสถานะเป็น approved — ฝั่งเบราว์เซอร์เขียนเองไม่ได้
+
+      ประกาศไว้นอก try เพราะตอนพลาดต้องรู้ให้ได้ว่าจองลายนิ้วมือไปแล้วหรือยัง
+      ข้อความบอกคนโอนต่างกันคนละเรื่องเลย
+    */
+    let slipRef: string | null = null;
+    let slipCheck: Donation["slipCheck"] = "none";
+
     try {
       await authStore.ensureSignedIn();
-
       /*
-        ไม่มี QR ก็ส่งได้ตามปกติ แค่ติดป้ายไว้ว่าผู้จัดต้องตรวจด้วยตา
-        ใบที่สร้างจากตรงนี้ยังไม่มีผลตรวจจากธนาคาร เพราะ Worker เป็นคนเติมให้
-        ทีหลังพร้อมกับพลิกสถานะเป็น approved — ฝั่งเบราว์เซอร์เขียนเองไม่ได้
+        อ่าน uid จาก Firebase ตรงๆ ไม่ผ่าน authStore
+        เพราะ authStore อัปเดตผ่าน onAuthStateChanged ซึ่งอาจยังไม่ยิงกลับมา
+        ในจังหวะที่ ensureSignedIn เพิ่ง resolve — จะได้ uid ว่างแล้วโดนกติกาปฏิเสธ
       */
-      let slipRef: string | null = null;
-      let slipCheck: Donation["slipCheck"] = "none";
+      const uid = getAuthClient()?.currentUser?.uid ?? "";
+      if (!uid) {
+        setError("เข้าสู่ระบบไม่สำเร็จ ลองใหม่อีกครั้ง");
+        toast("เข้าสู่ระบบไม่สำเร็จ", "error");
+        return;
+      }
 
       if (slipScan.state === "ok") {
         setPhase("กำลังตรวจสลิป…");
@@ -218,7 +243,6 @@ export default function ChannelSupport() {
           slipRef = slipScan.fingerprint;
           slipCheck = "unique";
         }
-
       }
 
       /*
@@ -228,19 +252,30 @@ export default function ChannelSupport() {
          ให้ตัวเองได้โดยไม่ต้องโอนจริง)
       */
       setPhase("กำลังส่งใบ…");
-      const donationId = await submitChannelDonation(channel.id, {
-        kind: mode,
-        name: name.trim(),
-        amount: finalAmount,
-        message: message.trim() || undefined,
-        slip: slip ?? undefined,
-        tierId: tier?.id,
-        tierName: tier?.name,
-        months: mode === "member" ? months : undefined,
-        tournamentId: tournamentId ?? undefined,
-        slipRef,
-        slipCheck,
-      });
+      /*
+        ลองซ้ำอีกครั้งถ้าพลาด ไม่ใช่เพื่อความชัวร์เฉยๆ
+
+        ลายนิ้วมือสลิปถูกจองไปแล้วในขั้นบน และจองแล้วถอนคืนไม่ได้
+        (กติกาปิด update/delete ไว้ ซึ่งเป็นเหตุผลเดียวกับที่มันกันสลิปซ้ำได้)
+        ถ้าปล่อยให้ล้มตรงนี้ สลิปใบนั้นจะส่งไม่ได้อีกเลยตลอดกาล ทั้งที่โอนมาจริง
+        เน็ตสะดุดวินาทีเดียวจึงไม่ควรแลกด้วยราคาเท่านั้น
+      */
+      const donationId = await retryOnce(() =>
+        submitChannelDonation(channel.id, {
+          kind: mode,
+          name: name.trim(),
+          amount: finalAmount,
+          byUid: uid,
+          message: message.trim() || undefined,
+          slip: slip ?? undefined,
+          tierId: tier?.id,
+          tierName: tier?.name,
+          months: mode === "member" ? months : undefined,
+          tournamentId: tournamentId ?? undefined,
+          slipRef,
+          slipCheck,
+        }),
+      );
 
       if (slipScan.state === "ok" && verifyEndpoint) {
         setPhase("กำลังยืนยันกับธนาคาร…");
@@ -258,7 +293,18 @@ export default function ChannelSupport() {
 
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "ส่งไม่สำเร็จ ลองใหม่อีกครั้ง");
+      /*
+        พลาดหลังจองลายนิ้วมือไปแล้ว = สลิปใบนี้ส่งซ้ำไม่ได้อีก
+        บอกให้ตรงว่าต้องทำอะไรต่อ ดีกว่าปล่อยให้กด "ส่งใหม่" แล้วเจอ
+        "สลิปใบนี้ถูกใช้ไปแล้ว" ซึ่งอ่านแล้วเหมือนถูกกล่าวหาว่าโกง
+      */
+      setError(
+        slipRef
+          ? "ส่งใบไม่สำเร็จ และสลิปใบนี้ถูกจองไว้แล้วจึงส่งซ้ำไม่ได้ — ทักหาเจ้าของช่องพร้อมสลิปได้เลย"
+          : err instanceof Error
+            ? err.message
+            : "ส่งไม่สำเร็จ ลองใหม่อีกครั้ง",
+      );
     } finally {
       setBusy(false);
       setPhase(null);

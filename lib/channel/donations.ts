@@ -26,6 +26,8 @@ export type ChannelDonation = Donation & {
   /** ถ้าโดเนทผ่านหน้าทัวร์ จะมี id ทัวร์ติดมาด้วย */
   tournamentId?: string | null;
   tournamentName?: string | null;
+  /** uid ของคนส่งใบ — ใบเก่าก่อนมีฟิลด์นี้จะไม่มี */
+  byUid?: string;
 };
 
 /**
@@ -44,6 +46,8 @@ export async function submitChannelDonation(
     kind: "tip" | "member";
     name: string;
     amount: number;
+    /** uid ของคนส่ง (หน้าโดเนทล็อกอินแบบไม่ระบุตัวตนให้เอง) — กติกาบังคับว่าปลอมไม่ได้ */
+    byUid: string;
     message?: string;
     slip?: string;
     tierId?: string;
@@ -54,9 +58,6 @@ export async function submitChannelDonation(
     /** SHA-256 ของ QR บนสลิป — มีค่าก็ต่อเมื่อจอง slipRefs สำเร็จแล้ว */
     slipRef?: string | null;
     slipCheck?: Donation["slipCheck"];
-    slipAmount?: number | null;
-    slipAt?: string | null;
-    slipBank?: string | null;
   },
 ): Promise<string> {
   const db = getDb();
@@ -66,6 +67,7 @@ export async function submitChannelDonation(
     kind: data.kind,
     name: data.name.slice(0, 40),
     amount: data.amount,
+    byUid: data.byUid,
     message: (data.message ?? "").slice(0, 140),
     slip: data.slip ?? null,
     tierId: data.tierId ?? null,
@@ -75,9 +77,11 @@ export async function submitChannelDonation(
     tournamentName: data.tournamentName ?? null,
     slipRef: data.slipRef ?? null,
     slipCheck: data.slipCheck ?? "none",
-    slipAmount: data.slipAmount ?? null,
-    slipAt: data.slipAt ?? null,
-    slipBank: data.slipBank ?? null,
+    /*
+      ยอด/เวลา/ธนาคารจากสลิป กับธง autoApproved ไม่ได้เขียนตรงนี้โดยตั้งใจ
+      มันคือ "ผลตรวจกับธนาคาร" ซึ่งเกิดทีหลัง และเป็นของ Worker ฝ่ายเดียว
+      กติกา Firestore ปฏิเสธถ้าใบใหม่พกค่าพวกนี้มาเอง
+    */
     autoApproved: false,
     createdAt: new Date().toISOString(),
     status: "pending",
