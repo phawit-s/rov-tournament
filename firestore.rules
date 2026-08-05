@@ -1,7 +1,11 @@
 rules_version = '2';
 
 // กติกาความปลอดภัยของ Tourney Hub
-// เอาไปวางที่ Firebase Console → Firestore Database → Rules → Publish
+//
+// ส่งขึ้นไปด้วย  npx firebase-tools deploy --only firestore:rules --project rov-tournament
+// หรือวางทั้งไฟล์ที่ Firebase Console → Firestore Database → Rules → Publish
+//
+// ไฟล์นี้ไม่ได้ขึ้นตามตอน deploy เว็บ แก้แล้วต้องสั่งส่งเองทุกครั้ง
 //
 // หลักคิด:
 // - ทัวร์ที่ตั้ง isPublic = true ใครก็อ่านได้ (widget ใน OBS ไม่ได้ล็อกอิน)
