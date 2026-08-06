@@ -269,7 +269,14 @@ body {
     ),
     rgb(13 13 18 / 0.9);
   border: 1px solid rgb(255 255 255 / 0.075);
-  backdrop-filter: blur(20px) saturate(120%);
+  /*
+    ไม่มี backdrop-filter โดยตั้งใจ — พื้นการ์ดทึบ 0.9 อยู่แล้ว การเบลอจึงมีผลกับ
+    อีก 10% ที่เหลือเท่านั้น ซึ่งแทบมองไม่ออก แต่ราคาคือทุกการ์ดกลายเป็นเลเยอร์ที่
+    ต้องไปสุ่มพื้นหลังทั้งจอมาเบลอใหม่ทุกครั้งที่ของข้างหลังขยับ
+    หนักที่สุดที่หน้า /player ซึ่งมีวิดีโอเล่นอยู่ — วิดีโอขยับทุกเฟรม เท่ากับสั่งให้
+    การ์ดทุกใบบนหน้าเบลอใหม่ 30-60 ครั้งต่อวินาที
+    ลำดับชั้นของการ์ดใช้เงากับเส้นขอบเป็นตัวบอกอยู่แล้ว (ดูหัวข้อสเกลความสูงด้านบน)
+  */
   box-shadow:
     0 1px 0 0 rgb(255 255 255 / 0.06) inset,
     0 30px 70px -40px rgb(0 0 0 / 0.95);
@@ -450,24 +457,39 @@ body {
   filter: blur(3px) saturate(1.05);
 }
 
-/* แสงกวาดเฉียงผ่านจอทุก 26 วิ */
-.scene-sweep {
+/*
+  แสงกวาดเฉียงผ่านจอทุก 26 วิ
+
+  ตัวที่ขยับคือ transform ของแผ่นลูก ไม่ใช่ background-position ของตัวเอง
+  เบราว์เซอร์ประกอบ transform ได้บน compositor แต่ background-position ทำไม่ได้
+  ต้องทาสีใหม่ทั้งเลเยอร์ทุกเฟรม ซึ่งเลเยอร์นี้กินเต็มจอและวิ่งอยู่ตลอดทุกหน้า
+
+  ระยะที่แปลงมา: พื้นกว้าง 260% ของจอ ของเดิมวิ่ง background-position 130% -> -30%
+  เท่ากับภาพเลื่อนจาก -2.08 เท่าความกว้างจอ ไป +0.48 เท่า คิดเป็นสัดส่วนของแผ่นเอง
+  (2.6 เท่าของจอ) ได้ -80% ถึง +18.46%
+*/
+.scene-sweep::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 260%;
   background: linear-gradient(
     108deg,
     transparent 38%,
     color-mix(in srgb, var(--color-champagne) 9%, transparent) 50%,
     transparent 62%
   );
-  background-size: 260% 100%;
   animation: scene-sweep 26s ease-in-out infinite;
 }
 @keyframes scene-sweep {
   0%,
   100% {
-    background-position: 130% 0;
+    transform: translate3d(-80%, 0, 0);
   }
   50% {
-    background-position: -30% 0;
+    transform: translate3d(18.4615%, 0, 0);
   }
 }
 

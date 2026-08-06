@@ -89,6 +89,8 @@ export default function BackgroundFX() {
     let height = 0;
     let motes: Mote[] = [];
     let raf = 0;
+    /** วาดภาพนิ่งไปแล้วหรือยัง — ใช้เฉพาะโหมดลดแอนิเมชัน */
+    let drawn = false;
 
     const seed = () => {
       const count = Math.min(30, Math.max(12, Math.round(width / 68)));
@@ -107,7 +109,12 @@ export default function BackgroundFX() {
     };
 
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      /*
+        เพดาน 1.5 ไม่ใช่ 2 — ชั้นนี้มีแต่จุดกลมขนาด 0.6-2px ความทึบไม่ถึง 0.35
+        รายละเอียดที่ได้เพิ่มจาก dpr 2 มองไม่ออก แต่ผืนที่ต้องล้างและวาดใหม่
+        ทุกเฟรมโตขึ้นเกือบสองเท่า (จอ 1440p: 14.7 ล้านพิกเซล เทียบกับ 8.3 ล้าน)
+      */
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       width = window.innerWidth;
       height = window.innerHeight;
       canvas.width = Math.floor(width * dpr);
@@ -116,15 +123,43 @@ export default function BackgroundFX() {
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       seed();
+      drawn = false;
     };
 
     resize();
     window.addEventListener("resize", resize);
 
+    /*
+      30fps พอสำหรับชั้นนี้ ฝุ่นลอยขึ้นแค่ 3-7 พิกเซลต่อวินาที ที่ 30fps คือขยับ
+      0.1-0.23 พิกเซลต่อเฟรม ตาไม่มีทางแยกออกจาก 60fps แต่จำนวนครั้งที่ต้องล้าง
+      แล้ววาดผืนเต็มจอใหม่ลดลงครึ่งหนึ่ง
+    */
+    const FRAME_MS = 32;
+
     let last = 0;
     const draw = (time: number) => {
+      if (last && time - last < FRAME_MS) {
+        raf = requestAnimationFrame(draw);
+        return;
+      }
       const dt = last ? Math.min((time - last) / 1000, 0.05) : 0.016;
       last = time;
+      /* ตัวคูณเทียบกับ 60fps — ค่าคงที่ด้านล่างเขียนไว้ต่อเฟรมที่ 60fps
+         ถ้าใช้ตรงๆ ความเร็วจะผูกกับรีเฟรชเรตของจอ (จอ 144Hz ฝุ่นจะหยุดเร็วกว่า
+         จอ 60Hz สองเท่าครึ่ง) แปลงเป็นต่อวินาทีเสียเลย จะได้เท่ากันทุกจอ */
+      const step = dt * 60;
+
+      /*
+        โหมดลดแอนิเมชัน: ฝุ่นไม่ลอย ไม่กะพริบ และไม่หลบเมาส์ ภาพจึงนิ่งสนิท
+        ล้างแล้ววาดใหม่ทุกเฟรมได้ผลลัพธ์เดิมเป๊ะ — วาดครั้งเดียวพอ
+        เหลือลูปไว้ให้คลื่นตอนคลิกเดินจนจาง แล้วกลับไปนิ่งเหมือนเดิม
+      */
+      if (reduced && drawn && ripplesRef.current.length === 0) {
+        raf = requestAnimationFrame(draw);
+        return;
+      }
+      drawn = true;
+
       ctx.clearRect(0, 0, width, height);
 
       const light = document.documentElement.dataset.theme === "light";
@@ -152,10 +187,10 @@ export default function BackgroundFX() {
             mote.vx += (dx / dist) * force;
             mote.vy += (dy / dist) * force;
           }
-          mote.vx *= 0.92;
-          mote.vy *= 0.92;
-          mote.vx += -mote.vx * 0.05;
-          mote.vy += -mote.vy * 0.05;
+          // 0.92 * 0.95 = 0.874 ต่อเฟรมที่ 60fps — ยุบเหลือตัวเดียวแล้วคิดตามเวลาจริง
+          const damp = Math.pow(0.874, step);
+          mote.vx *= damp;
+          mote.vy *= damp;
         }
 
         const x = mote.x + drift + mote.vx;
@@ -180,8 +215,8 @@ export default function BackgroundFX() {
       const ripples = ripplesRef.current;
       for (let i = ripples.length - 1; i >= 0; i--) {
         const ripple = ripples[i];
-        ripple.r += (260 - ripple.r) * 0.055;
-        ripple.alpha *= 0.955;
+        ripple.r += (260 - ripple.r) * (1 - Math.pow(1 - 0.055, step));
+        ripple.alpha *= Math.pow(0.955, step);
         if (ripple.alpha < 0.01) {
           ripples.splice(i, 1);
           continue;
@@ -219,7 +254,15 @@ export default function BackgroundFX() {
       {/* ลำแสงนวลจากด้านบน */}
       <div className="scene-top-glow absolute inset-x-0 top-0 h-[70vh]" />
 
-      {/* ก้อนแสงลอย — ขยับตามเมาส์แบบหน่วงมาก บวกหายใจเข้าออกช้าๆ */}
+      {/*
+        ก้อนแสงลอย — ขยับตามเมาส์แบบหน่วงมาก บวกหายใจเข้าออกช้าๆ
+
+        การหายใจใช้ opacity อย่างเดียว ไม่แตะ scale โดยตั้งใจ:
+        สามก้อนนี้เป็นเลเยอร์ blur 140-160px ขนาดหลายร้อยพิกเซล ถ้าขยับ scale
+        เบราว์เซอร์ต้องเบลอใหม่ทั้งก้อนทุกเฟรมตลอดเวลาที่หน้าเปิดอยู่
+        ส่วน opacity เปลี่ยนได้บน compositor เลย ใช้พื้นผิวที่เบลอไว้แล้วซ้ำได้
+        ตาเห็นเหมือนเดิมคือ "แสงเต้นช้าๆ" แต่ราคาต่างกันคนละเรื่อง
+      */}
       <motion.div
         aria-hidden
         className="absolute h-184 w-184 rounded-full blur-[150px]"
@@ -231,7 +274,7 @@ export default function BackgroundFX() {
           background:
             "radial-gradient(circle, rgba(184,146,84,0.32) 0%, rgba(184,146,84,0) 68%)",
         }}
-        animate={{ scale: [1, 1.12, 1], opacity: [0.34, 0.46, 0.34] }}
+        animate={{ opacity: [0.34, 0.46, 0.34] }}
         transition={{ duration: 24, repeat: Infinity, ease: "easeInOut" }}
       />
       <motion.div
@@ -245,7 +288,7 @@ export default function BackgroundFX() {
           background:
             "radial-gradient(circle, rgba(84,110,178,0.28) 0%, rgba(84,110,178,0) 68%)",
         }}
-        animate={{ scale: [1.08, 0.94, 1.08], opacity: [0.3, 0.42, 0.3] }}
+        animate={{ opacity: [0.3, 0.42, 0.3] }}
         transition={{ duration: 31, repeat: Infinity, ease: "easeInOut" }}
       />
       <motion.div
@@ -259,7 +302,7 @@ export default function BackgroundFX() {
           background:
             "radial-gradient(circle, rgba(150,110,190,0.2) 0%, rgba(150,110,190,0) 70%)",
         }}
-        animate={{ scale: [0.95, 1.15, 0.95], opacity: [0.22, 0.34, 0.22] }}
+        animate={{ opacity: [0.22, 0.34, 0.22] }}
         transition={{ duration: 38, repeat: Infinity, ease: "easeInOut" }}
       />
 
