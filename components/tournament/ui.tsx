@@ -11,11 +11,11 @@ export const STATUS_META: Record<
   TournamentStatus,
   { label: string; rgb: string; hex: string }
 > = {
-  draft: { label: "ร่าง", rgb: "155 160 179", hex: "#9ba0b3" },
-  registration: { label: "เปิดรับสมัคร", rgb: "109 146 219", hex: "#6d92db" },
-  ready: { label: "ปิดรับแล้ว", rgb: "221 175 100", hex: "#ddaf64" },
-  running: { label: "กำลังแข่ง", rgb: "77 181 145", hex: "#4db591" },
-  finished: { label: "จบแล้ว", rgb: "160 121 216", hex: "#a079d8" },
+  draft: { label: "ร่าง", rgb: "138 142 168", hex: "#8a8ea8" },
+  registration: { label: "เปิดรับสมัคร", rgb: "110 155 240", hex: "var(--color-info)" },
+  ready: { label: "ปิดรับแล้ว", rgb: "169 155 255", hex: "var(--color-iris)" },
+  running: { label: "กำลังแข่ง", rgb: "52 227 176", hex: "var(--color-win)" },
+  finished: { label: "จบแล้ว", rgb: "196 130 255", hex: "#c482ff" },
 };
 
 export function StatusBadge({ status }: { status: TournamentStatus }) {
@@ -76,16 +76,16 @@ export function Badge({
 
 const REG_STATUS: Record<string, { label: string; rgb: string; tone: "plain" | "live" | "done" }> =
   {
-    pending: { label: "รอตรวจ", rgb: "230 200 148", tone: "plain" },
-    approved: { label: "อนุมัติแล้ว", rgb: "77 181 145", tone: "done" },
-    rejected: { label: "ปฏิเสธ", rgb: "224 86 107", tone: "plain" },
+    pending: { label: "รอตรวจ", rgb: "169 155 255", tone: "plain" },
+    approved: { label: "อนุมัติแล้ว", rgb: "52 227 176", tone: "done" },
+    rejected: { label: "ปฏิเสธ", rgb: "255 91 122", tone: "plain" },
   };
 
 /** แปลงสถานะใบสมัคร/โดเนทจากคำอังกฤษดิบเป็นป้ายภาษาไทย */
 export function RegStatusBadge({ status }: { status: string }) {
   const meta = REG_STATUS[status] ?? {
     label: status,
-    rgb: "155 160 179",
+    rgb: "138 142 168",
     tone: "plain" as const,
   };
   return (
@@ -103,11 +103,11 @@ export function LiveBadge({ url, title }: { url: string; title?: string }) {
       href={href}
       target="_blank"
       rel="noreferrer noopener"
-      className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#e0566b]/15 px-3 py-1 font-display text-[11px] text-[#e0566b] transition-colors hover:bg-[#e0566b]/25"
+      className="inline-flex shrink-0 items-center gap-2 rounded-full bg-live/15 px-3 py-1 font-display text-[11px] text-live transition-colors hover:bg-live/25"
       style={{ boxShadow: "inset 0 0 0 1px rgba(224,86,107,0.35)" }}
     >
       <motion.span
-        className="h-1.5 w-1.5 rounded-full bg-[#e0566b]"
+        className="h-1.5 w-1.5 rounded-full bg-live"
         animate={{ opacity: [1, 0.25, 1] }}
         transition={{ duration: 1.6, repeat: Infinity }}
       />
@@ -146,7 +146,7 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...rest}
-      className={`field ${widthClass(className)} rounded-xl px-3.5 py-2.5 text-sm text-ice outline-none placeholder:text-muted/80 ${className}`}
+      className={`field ${widthClass(className)} min-h-11 rounded-xl px-3.5 py-2.5 text-sm text-ice outline-none placeholder:text-muted/80 ${className}`}
     />
   );
 }
@@ -182,7 +182,7 @@ export function NumberInput({
         if (!Number.isFinite(next)) return;
         onChange(Math.min(max ?? Number.MAX_SAFE_INTEGER, Math.max(min, next)));
       }}
-      className={`field ${widthClass(className)} rounded-xl px-3.5 py-2.5 text-sm text-ice outline-none placeholder:text-muted/80 ${className}`}
+      className={`field ${widthClass(className)} min-h-11 rounded-xl px-3.5 py-2.5 text-sm text-ice outline-none placeholder:text-muted/80 ${className}`}
     />
   );
 }
@@ -214,7 +214,7 @@ export function Stat({
         {label}
       </p>
       <p
-        className={`num mt-1 font-display text-lg ${accent ? "text-champagne" : "text-ice"}`}
+        className={`num mt-1 font-display text-lg ${accent ? "text-iris" : "text-ice"}`}
       >
         {value}
       </p>
@@ -250,7 +250,7 @@ const art = (children: ReactNode) => (
     strokeWidth="1.2"
     strokeLinecap="round"
     strokeLinejoin="round"
-    className="h-30 w-30 text-champagne/45"
+    className="h-30 w-30 text-iris/45"
     aria-hidden
   >
     {children}

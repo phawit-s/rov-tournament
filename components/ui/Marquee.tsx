@@ -56,7 +56,7 @@ export default function Marquee({
           {items.slice(0, 4).map((t) => (
             <span
               key={t}
-              className="font-display text-[clamp(1rem,3vw,1.8rem)] tracking-luxe text-champagne/25 uppercase"
+              className="font-display text-[clamp(1rem,3vw,1.8rem)] tracking-luxe text-iris/25 uppercase"
             >
               {t}
             </span>
@@ -71,7 +71,7 @@ export default function Marquee({
       className="band space-y-1 overflow-hidden border-y border-hair py-3"
       aria-hidden
     >
-      <Row items={items} speed={speed} className="text-champagne/25" />
+      <Row items={items} speed={speed} className="text-iris/25" />
       {rows === 2 && (
         <Row
           items={items}

@@ -209,7 +209,7 @@ export default function BracketCanvas({
                       onChange={(e) =>
                         onChangeBo(round, Number(e.target.value) as BestOf)
                       }
-                      className="field num cursor-pointer rounded-lg px-2 py-1 font-display text-xs text-champagne outline-none"
+                      className="field num cursor-pointer rounded-lg px-2 py-1 font-display text-xs text-iris outline-none"
                     >
                       {BEST_OF_OPTIONS.map((bo) => (
                         <option key={bo} value={bo}>
@@ -218,7 +218,7 @@ export default function BracketCanvas({
                       ))}
                     </select>
                   ) : (
-                    <span className="num font-display text-xs text-champagne">
+                    <span className="num font-display text-xs text-iris">
                       BO{matches[0]?.bestOf ?? 3}
                     </span>
                   )}
@@ -266,7 +266,7 @@ export default function BracketCanvas({
                 fill="none"
                 stroke={
                   lit
-                    ? "var(--color-champagne)"
+                    ? "var(--color-iris)"
                     : link.flowed
                       ? "rgb(var(--st-win))"
                       : "rgb(var(--hair) / var(--hair-a))"

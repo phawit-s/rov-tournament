@@ -56,7 +56,7 @@ export default function WidgetLayout({
             #widget-boot-fallback span {
               font-size: 12px;
               line-height: 1.6;
-              color: #9ba0b3;
+              color: #8a8ea8;
             }
             @keyframes widget-boot-show { to { opacity: 1; } }
           `,

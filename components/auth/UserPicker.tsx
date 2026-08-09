@@ -145,7 +145,7 @@ export default function UserPicker({
                       onClick={() => onChange(on ? null : u)}
                       className={`tile flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
                         on
-                          ? "border border-champagne/45 bg-champagne/10"
+                          ? "border border-iris/45 bg-iris/10"
                           : "hover-tile border border-transparent"
                       }`}
                     >
@@ -160,7 +160,7 @@ export default function UserPicker({
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          <span className="font-display text-xs text-champagne">
+                          <span className="font-display text-xs text-iris">
                             {displayName(u).slice(0, 1).toUpperCase()}
                           </span>
                         )}
@@ -179,7 +179,7 @@ export default function UserPicker({
 
                       {on && (
                         <IconCheck
-                          className="h-4 w-4 shrink-0 text-champagne"
+                          className="h-4 w-4 shrink-0 text-iris"
                           strokeWidth={2}
                         />
                       )}

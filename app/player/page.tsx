@@ -5,7 +5,7 @@ import AuthGate from "@/components/auth/AuthGate";
 import SongPlayer from "@/components/song/SongPlayer";
 
 export const metadata: Metadata = {
-  title: "เล่นเพลงตามคิว — Tourney Hub",
+  title: "เล่นเพลงตามคิว — Steamer Hub",
   description: "หน้าเล่นเพลงของสตรีมเมอร์ ไล่ตามคิวที่คนดูขอเข้ามา",
 };
 

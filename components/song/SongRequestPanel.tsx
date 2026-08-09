@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useHydrated } from "@/hooks/useClient";
 import { authStore, getAuthClient } from "@/lib/backend/firebase";
 import { profileStore } from "@/lib/backend/users";
 import type { Channel } from "@/lib/channel/types";
@@ -21,9 +29,10 @@ import {
   type YoutubeInfo,
 } from "@/lib/song/youtube";
 import Button from "../ui/Button";
+import MiniBtn from "../ui/MiniBtn";
 import Panel from "../ui/Panel";
 import { toast } from "../ui/Toast";
-import { IconExternal } from "../ui/icons";
+import { IconCheck, IconCopy, IconExternal, IconPlay } from "../ui/icons";
 import { Badge, EmptyState, Input, Skeleton } from "../tournament/ui";
 
 /** อ้างอิงคงที่ ไม่งั้น setQueue ตอนไม่มีหลังบ้าน/ตอน error จะรีเรนเดอร์ไม่จบ */
@@ -64,9 +73,17 @@ export default function SongRequestPanel({
   channel,
   /** true = อยู่บนหน้าของตัวเอง ไม่ต้องมีหัวใบซ้ำกับหัวหน้า */
   bare = false,
+  onPlayingChange,
 }: {
   channel: Channel;
   bare?: boolean;
+  /**
+   * บอกหน้าแม่ว่าตอนนี้เพลงไหนกำลังเล่น — หน้าแม่เอาไปทำฉากหลัง
+   *
+   * ส่งขึ้นไปแทนที่จะให้หน้าแม่เปิด listener ของตัวเอง เพราะคิวชุดเดียวกัน
+   * ไม่ควรถูกฟังสองรอบ (เปลืองโควตาอ่านของ Firestore ไปเท่าตัวโดยไม่ได้อะไร)
+   */
+  onPlayingChange?: (videoId: string | null) => void;
 }) {
   // อ่านชื่อจากบัญชี/โปรไฟล์เพื่อเติมช่อง "ชื่อผู้ขอ" ให้ล่วงหน้า
   useSyncExternalStore(
@@ -81,13 +98,13 @@ export default function SongRequestPanel({
   );
 
   const calm = useReducedMotion();
+  const hydrated = useHydrated();
 
   const [queue, setQueue] = useState<SongRequest[]>(EMPTY);
   const [link, setLink] = useState("");
   const [preview, setPreview] = useState<Preview>(NONE);
   /** null = ยังไม่ได้แก้เอง ให้ใช้ชื่อจากบัญชี — เก็บแบบนี้จะได้ไม่ต้อง setState ใน effect */
   const [typedName, setTypedName] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** คิวที่เท่าไหร่ของเพลงที่เพิ่งส่งไป โชว์ค้างไว้จนกว่าจะส่งใบใหม่ */
@@ -133,6 +150,13 @@ export default function SongRequestPanel({
 
   const { playing, queued } = splitQueue(queue);
   const myUid = user?.uid ?? "";
+
+  /* แจ้งหน้าแม่เมื่อ "คลิปที่เล่นอยู่" เปลี่ยน — ผูก deps กับ videoId ไม่ใช่ทั้งใบ
+     ใบคำขอเป็นอ็อบเจกต์ใหม่ทุกสแนปช็อต ถ้าใส่ทั้งใบจะยิงซ้ำทุกครั้งที่คิวขยับ */
+  const playingVideoId = playing?.videoId ?? null;
+  useEffect(() => {
+    onPlayingChange?.(playingVideoId);
+  }, [playingVideoId, onPlayingChange]);
 
   /**
    * ทุกอย่างเกิดใน onChange ของช่องกรอก ไม่ใช่ใน effect ที่คอยดูค่า
@@ -231,7 +255,6 @@ export default function SongRequestPanel({
           url: info.url,
           byUid: uid,
           byName: name.trim(),
-          message: message.trim() || undefined,
         },
         queue,
         config,
@@ -248,7 +271,6 @@ export default function SongRequestPanel({
       setPlaced(queued.length + 1);
       setLink("");
       setPreview(NONE);
-      setMessage("");
       toast("ส่งเพลงเข้าคิวแล้ว", "success");
     } catch {
       setError("ส่งไม่สำเร็จ ลองใหม่อีกครั้ง");
@@ -268,40 +290,101 @@ export default function SongRequestPanel({
   ).length;
   const left = config.maxPerUser ? Math.max(0, config.maxPerUser - mineWaiting) : null;
 
+  /*
+    ปุ่มวางจากคลิปบอร์ด
+
+    คนส่วนใหญ่เข้าหน้านี้จากการสแกน QR บนไลฟ์ด้วยมือถือ ซึ่งเพิ่งกดก๊อปลิงก์
+    มาจากแอป YouTube หมาดๆ — การกดค้างในช่องแล้วเล็งเมนู "วาง" บนมือถือ
+    เป็นขั้นที่พลาดง่ายที่สุดของทั้งหน้า มีปุ่มให้กดทีเดียวจบดีกว่า
+
+    เช็คหลัง hydrate เท่านั้น เพราะฝั่งเซิร์ฟเวอร์ไม่มี navigator
+    (Safari รุ่นเก่ากับ Firefox ไม่มี readText ปุ่มก็จะไม่โผล่ ไม่ได้พัง)
+  */
+  const canPaste =
+    hydrated && typeof navigator?.clipboard?.readText === "function";
+
+  const pasteLink = async () => {
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      if (!text) {
+        toast("คลิปบอร์ดว่าง — ก๊อปลิงก์จาก YouTube มาก่อน", "info");
+        return;
+      }
+      onLink(text);
+    } catch {
+      toast("เบราว์เซอร์ไม่ให้อ่านคลิปบอร์ด — วางเองในช่องได้เลย", "info");
+    }
+  };
+
   const form = (
     <>
-      {note && (
-        <div className="tally mb-5 rounded-xl tile px-4 py-3">
+      {/* สรุปสถานะคิวไว้หัวฟอร์ม — คนที่เพิ่งสแกน QR เข้ามาจะได้รู้ตั้งแต่บรรทัดแรก
+          ว่าคิวยาวแค่ไหนและตัวเองขอได้อีกกี่เพลง ก่อนจะเสียเวลาหาลิงก์ */}
+      <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl tile px-4 py-3">
+        <Stat label="คิวตอนนี้" value={`${queued.length} เพลง`} />
+        {left != null && (
+          <Stat label="คุณขอได้อีก" value={`${left} เพลง`} tone={left === 0 ? "out" : "on"} />
+        )}
+        <Stat
+          label="กำลังเล่น"
+          value={playing ? playing.title : "ยังไม่มีเพลง"}
+          className="min-w-0 flex-1 basis-40"
+          truncate
+        />
+      </div>
+
+      {/*
+        กติกาของช่อง — โชว์เฉพาะตอนที่เจ้าของช่องเขียนเองจริงๆ
+
+        ค่าเริ่มต้นของระบบคือ "วางลิงก์ YouTube ได้เลย เพลงจะเข้าคิวรอสตรีมเมอร์เปิด"
+        ซึ่งพูดเรื่องเดียวกับหัวข้อขั้นที่ 1 กับ placeholder ในช่องเป๊ะๆ
+        ช่องที่ไม่เคยแก้ข้อความนี้จึงได้กล่องข้อความซ้ำซ้อนมาฟรีๆ หนึ่งกล่อง
+      */}
+      {note && note !== DEFAULT_SONG_CONFIG.note && (
+        <div
+          className="tally mb-5 rounded-xl tile px-4 py-3"
+          style={{ ["--st" as string]: "var(--st-next)" }}
+        >
           <p className="slug slug-2">กติกาของช่องนี้</p>
           <p className="mt-1 text-sm leading-relaxed text-ice/85">{note}</p>
         </div>
       )}
 
       {/* ---------- ฟอร์ม ---------- */}
-      <div className="space-y-5">
+      <div className="space-y-6">
         {/* ช่องลิงก์เป็นพระเอกของหน้า ทำให้ใหญ่กว่าช่องอื่นชัดๆ
             คำอธิบายย้ายไปไว้ใต้ช่อง หัวข้อจะได้เหลือบรรทัดเดียวเท่ากันทุกช่อง */}
         <div>
-          <label
-            htmlFor="song-link"
-            className="mb-2 block font-display text-lg font-light text-ice"
-          >
-            วางลิงก์เพลงที่อยากขอ
-          </label>
-          <Input
-            id="song-link"
-            value={link}
-            onChange={(e) => onLink(e.target.value)}
-            placeholder="https://www.youtube.com/watch?v=..."
-            inputMode="url"
-            autoComplete="off"
-            spellCheck={false}
-            className="w-full px-4 py-3.5 text-base"
-            aria-invalid={preview.state === "invalid" || preview.state === "missing"}
-          />
-          <p className="mt-2 text-xs text-muted">
-            ก๊อปจากแอป YouTube มาวางได้เลย รองรับ youtu.be และ Shorts
-          </p>
+          <Step no={1}>
+            <label htmlFor="song-link" className="cursor-pointer">
+              วางลิงก์เพลงที่อยากขอ
+            </label>
+          </Step>
+
+          <div className="flex gap-2">
+            <Input
+              id="song-link"
+              value={link}
+              onChange={(e) => onLink(e.target.value)}
+              placeholder="https://www.youtube.com/watch?v=..."
+              inputMode="url"
+              autoComplete="off"
+              spellCheck={false}
+              className="min-w-0 flex-1 px-4 py-3.5 text-base"
+              aria-invalid={preview.state === "invalid" || preview.state === "missing"}
+            />
+            {canPaste && (
+              <MiniBtn
+                onClick={() => void pasteLink()}
+                title="วางลิงก์จากคลิปบอร์ด"
+                className="shrink-0 px-3.5"
+              >
+                <IconCopy className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">วาง</span>
+              </MiniBtn>
+            )}
+          </div>
+
 
           {/* ผลตรวจลิงก์ — จองที่ไว้ให้การ์ดพรีวิว เลย์เอาต์จะได้ไม่กระตุกตอนโหลดเสร็จ */}
           <div className="mt-3">
@@ -314,18 +397,18 @@ export default function SongRequestPanel({
                 transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
               >
                 {preview.state === "invalid" && (
-                  <p className="text-xs text-[#e79a9a]">
+                  <p className="text-xs text-danger">
                     ลิงก์ไม่ถูกต้อง วางลิงก์ YouTube หรือไอดีคลิป
                   </p>
                 )}
                 {preview.state === "blocked" && (
-                  <p className="text-xs leading-relaxed text-[#e79a9a]">
+                  <p className="text-xs leading-relaxed text-danger">
                     เจ้าของคลิปนี้ปิดไม่ให้เล่นนอกเว็บ YouTube — ขอเพลงนี้ไม่ได้
                     ลองหาคลิปเดียวกันจากช่องอื่น เช่นเวอร์ชัน Lyrics หรือ Audio
                   </p>
                 )}
                 {preview.state === "missing" && (
-                  <p className="text-xs text-[#e79a9a]">
+                  <p className="text-xs text-danger">
                     หาคลิปนี้ไม่เจอ อาจถูกลบหรือตั้งเป็นส่วนตัว
                   </p>
                 )}
@@ -339,14 +422,24 @@ export default function SongRequestPanel({
                   </div>
                 )}
                 {preview.state === "ok" && (
-                  <div className="sunken hairline-top flex items-center gap-3.5 rounded-xl p-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={safeImageSrc(preview.info.thumb) ?? ""}
-                      alt=""
-                      loading="lazy"
-                      className="aspect-video w-24 shrink-0 rounded-lg object-cover sm:w-28"
-                    />
+                  /* ขีดเขียวชิดซ้าย = ลิงก์นี้ใช้ได้แล้ว กดส่งได้เลย
+                     เป็นสัญญาณเดียวกับที่ใช้บอกสถานะทั้งเว็บ ไม่ต้องเรียนรู้ใหม่ */
+                  <div
+                    className="tally sunken hairline-top flex items-center gap-3.5 rounded-xl p-3 pl-4"
+                    style={{ ["--st" as string]: "var(--st-win)" }}
+                  >
+                    <span className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-lg sm:w-28">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={safeImageSrc(preview.info.thumb) ?? ""}
+                        alt=""
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
+                      <span className="absolute inset-0 grid place-items-center bg-black/25">
+                        <IconPlay className="h-5 w-5 text-white/85" />
+                      </span>
+                    </span>
                     <div className="min-w-0 flex-1">
                       <p className="line-clamp-2 text-sm leading-snug text-ice">
                         {preview.info.title}
@@ -356,13 +449,20 @@ export default function SongRequestPanel({
                           {preview.info.author}
                         </p>
                       )}
+                      <p
+                        className="mt-1.5 inline-flex items-center gap-1 text-xs"
+                        style={{ color: "rgb(var(--st-win))" }}
+                      >
+                        <IconCheck className="h-3 w-3" strokeWidth={2} />
+                        เพลงนี้ขอได้
+                      </p>
                     </div>
                     <a
                       href={safeUrl(preview.info.url) ?? undefined}
                       target="_blank"
                       rel="noreferrer noopener"
                       aria-label="เปิดคลิปใน YouTube"
-                      className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:text-champagne"
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:text-iris"
                     >
                       <IconExternal className="h-4 w-4" />
                     </a>
@@ -375,74 +475,77 @@ export default function SongRequestPanel({
 
         {/* หัวข้อทั้งสองช่องเป็นบรรทัดเดียวเท่ากัน ช่องกรอกถึงจะอยู่ระดับเดียวกัน
             คำว่า "ไม่บังคับ" ย้ายไปอยู่ในหัวข้อแทนที่จะเป็นบรรทัดที่สอง */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label
-              htmlFor="song-by"
-              className="mb-2 block text-sm font-medium text-ice/85"
-            >
-              ชื่อผู้ขอ
-            </label>
-            <Input
-              id="song-by"
-              value={name}
-              onChange={(e) => setTypedName(e.target.value)}
-              placeholder="ชื่อที่จะขึ้นจอ"
-              maxLength={40}
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="song-msg"
-              className="mb-2 block text-sm font-medium text-ice/85"
-            >
-              ข้อความถึงสตรีมเมอร์{" "}
-              <span className="font-normal text-muted">(ไม่บังคับ)</span>
-            </label>
-            <Input
-              id="song-msg"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="เปิดเพลงนี้หน่อยยย"
-              maxLength={120}
-            />
-          </div>
+        <div>
+          <Step no={2}>บอกหน่อยว่าใครขอ</Step>
+          <label htmlFor="song-by" className="sr-only">
+            ชื่อผู้ขอ
+          </label>
+          <Input
+            id="song-by"
+            value={name}
+            onChange={(e) => setTypedName(e.target.value)}
+            placeholder="ชื่อที่จะขึ้นจอ"
+            maxLength={40}
+          />
         </div>
 
-        {error && <p className="text-sm text-[#e79a9a]">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-hair pt-5">
-          <Button
-            onClick={submit}
-            loading={busy}
-            disabled={!canSubmit}
-            className="w-full sm:w-auto"
-          >
-            ส่งเข้าคิว
-          </Button>
-          {placed != null ? (
-            <motion.p
-              initial={{ opacity: 0, y: calm ? 0 : 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-sm text-muted"
+        {/*
+          ปุ่มส่งเต็มความกว้างบนมือถือและใหญ่กว่าปุ่มอื่นในหน้า
+
+          หน้านี้มีงานให้ทำอย่างเดียวคือส่งเพลง ปุ่มจึงไม่ต้องแย่งน้ำหนักกับใคร
+          และข้อความบอกผลย้ายมาอยู่ "เหนือ" ปุ่ม ไม่ใช่ข้างๆ — บนมือถือของที่อยู่
+          ข้างปุ่มจะตกไปอยู่ใต้ปุ่มซึ่งเลยขอบจอไปแล้วตอนกดส่ง
+        */}
+        <div className="space-y-3 border-t border-hair pt-5">
+          <AnimatePresence mode="wait" initial={false}>
+            {placed != null && (
+              <motion.p
+                key="placed"
+                initial={{ opacity: 0, y: calm ? 0 : 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="tally rounded-xl tile px-4 py-3 text-sm text-ice/85"
+                style={{ ["--st" as string]: "var(--st-win)" }}
+              >
+                ส่งแล้ว — เพลงของคุณอยู่คิวที่{" "}
+                <span className="num font-display text-iris">{placed}</span>
+              </motion.p>
+            )}
+          </AnimatePresence>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              onClick={submit}
+              loading={busy}
+              disabled={!canSubmit}
+              size="lg"
+              className="w-full sm:w-auto"
             >
-              ส่งแล้ว — เพลงของคุณอยู่คิวที่{" "}
-              <span className="num text-champagne">{placed}</span>
-            </motion.p>
-          ) : (
-            left != null && (
+              ส่งเข้าคิว
+            </Button>
+            {left === 0 ? (
               <p className="text-sm text-muted">
-                ขอได้อีก <span className="num text-champagne">{left}</span> เพลง
+                คิวของคุณเต็มแล้ว รอเพลงเล่นจบก่อนถึงจะขอเพิ่มได้
               </p>
-            )
-          )}
+            ) : (
+              left != null && (
+                <p className="text-sm text-muted">
+                  ขอได้อีก <span className="num text-iris">{left}</span> เพลง
+                </p>
+              )
+            )}
+          </div>
         </div>
       </div>
     </>
   );
 
   const list = (
-    <div className="space-y-3">
+    /* flex-1 กับ min-h-0 คู่กันคือสิ่งที่ทำให้ลิสต์ยืดเต็มใบได้จริง —
+       ขาด min-h-0 เมื่อไหร่ ลูกที่ยาวเกินจะดันกล่องให้สูงกว่าพี่น้องแทนที่จะเลื่อน */
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
         <p className="slug slug-2">Now playing</p>
 
         {playing ? (
@@ -451,15 +554,16 @@ export default function SongRequestPanel({
           <p className="text-sm text-muted">ยังไม่มีเพลงที่กำลังเล่น</p>
         )}
 
-        <p className="slug slug-2 pt-2">Up next</p>
+        <div className="flex items-center gap-3 pt-1">
+          <span className="slug slug-2 shrink-0">Up next</span>
+          <span className="rule h-px flex-1" />
+          <span className="num shrink-0 text-xs text-muted">{queued.length}</span>
+        </div>
 
         {queued.length === 0 ? (
-          <EmptyState
-            title="คิวยังว่าง"
-            description="วางลิงก์แล้วกดส่ง เพลงของคุณจะได้เล่นเป็นเพลงถัดไป"
-          />
+          <EmptyState title="คิวยังว่าง" />
         ) : (
-          <ul className="space-y-2">
+          <ul className="no-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto">
             <AnimatePresence initial={false}>
               {queued.map((song, i) => (
                 <motion.li
@@ -494,7 +598,7 @@ export default function SongRequestPanel({
                   </div>
                   {song.byUid === myUid && (
                     <>
-                      <Badge rgb="207 167 101" className="hidden sm:inline-flex">
+                      <Badge rgb="169 155 255" className="hidden sm:inline-flex">
                         ของคุณ
                       </Badge>
                       {/* ถอนได้เฉพาะของตัวเองที่ยังรอคิว — กติกาฝั่งเซิร์ฟเวอร์
@@ -505,7 +609,7 @@ export default function SongRequestPanel({
                         onClick={() => void pull(song)}
                         title="ถอนเพลงนี้ออกจากคิว"
                         aria-label="ถอนเพลงนี้ออกจากคิว"
-                        className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg text-muted transition-colors hover:bg-[#e79a9a]/12 hover:text-[#e79a9a] disabled:cursor-not-allowed disabled:opacity-40"
+                        className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg text-muted transition-colors hover:bg-danger/12 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         ✕
                       </button>
@@ -519,14 +623,23 @@ export default function SongRequestPanel({
     </div>
   );
 
-  /* หน้าขอเพลงโดยเฉพาะ — ฟอร์มอยู่ซ้าย คิวอยู่ขวา มองเห็นพร้อมกันได้บนจอกว้าง */
+  /*
+    หน้าขอเพลงโดยเฉพาะ — ฟอร์มซ้าย คิวขวา สองใบกว้างเท่ากันและสูงเท่ากัน
+
+    ของเดิมซ้ายกว้างกว่านิดหน่อย (1.05 : 0.95) แล้ว items-start ปล่อยให้ใบขวา
+    สูงตามเนื้อหาของตัวเอง — พอคิวมีสองเพลง ใบขวาเลยเตี้ยกว่าใบซ้ายครึ่งจอ
+    เหลือรูโหว่ใหญ่ๆ ข้างขวา ซึ่งเป็นสิ่งแรกที่ตาไปเกาะเวลาเปิดหน้านี้บนคอม
+
+    1fr เท่ากันสองใบ + items-stretch แก้ทั้งสองเรื่องพร้อมกัน
+    แล้วให้ลิสต์คิวยืดกินที่ว่างที่เหลือในใบขวาแทนที่จะทิ้งว่าง
+  */
   if (bare) {
     return (
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-start">
-        <Panel variant="feature" className="p-6 sm:p-7">
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-stretch">
+        <Panel variant="feature" className="flex flex-col p-6 sm:p-7">
           {form}
         </Panel>
-        <Panel className="p-6 lg:sticky lg:top-6">{list}</Panel>
+        <Panel className="flex flex-col p-6 sm:p-7">{list}</Panel>
       </div>
     );
   }
@@ -538,6 +651,51 @@ export default function SongRequestPanel({
       <span className="rule my-6 block h-px" />
       {list}
     </Panel>
+  );
+}
+
+/**
+ * หัวข้อขั้นตอนพร้อมเลขวงกลม
+ *
+ * ฟอร์มนี้มีสองขั้นจริงๆ (หาลิงก์ / บอกชื่อ) แต่ของเดิมเป็นหัวข้อลอยๆ สองอัน
+ * ที่อ่านแล้วไม่รู้ว่ามีทั้งหมดกี่ขั้นและอยู่ขั้นไหน เลขวงกลมตอบให้ในพริบตา
+ */
+function Step({ no, children }: { no: number; children: ReactNode }) {
+  return (
+    <div className="mb-2.5 flex items-center gap-2.5">
+      <span className="num grid h-6 w-6 shrink-0 place-items-center rounded-full bg-iris/12 font-display text-eyebrow text-iris ring-1 ring-iris/30">
+        {no}
+      </span>
+      <span className="font-display text-base font-light text-ice">{children}</span>
+    </div>
+  );
+}
+
+/** ตัวเลขสรุปหนึ่งช่องในแถบหัวฟอร์ม */
+function Stat({
+  label,
+  value,
+  tone = "on",
+  truncate = false,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  tone?: "on" | "out";
+  truncate?: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <p className="slug slug-2">{label}</p>
+      <p
+        className={`mt-0.5 text-sm ${truncate ? "truncate" : ""} ${
+          tone === "out" ? "text-muted" : "text-ice"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
   );
 }
 
@@ -567,10 +725,10 @@ function SongNowPlaying({
       />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge rgb="224 86 107" hex="#e0566b" tone={calm ? "plain" : "live"}>
+          <Badge rgb="255 91 122" hex="var(--color-live)" tone={calm ? "plain" : "live"}>
             กำลังเล่น
           </Badge>
-          {mine && <Badge rgb="207 167 101">ของคุณ</Badge>}
+          {mine && <Badge rgb="169 155 255">ของคุณ</Badge>}
         </div>
         <p className="mt-1.5 line-clamp-2 text-sm leading-snug text-ice">{song.title}</p>
         <p className="mt-0.5 truncate text-xs text-muted">ขอโดย {song.byName}</p>

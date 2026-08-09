@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { BRAND_MARK } from "@/lib/brand";
 import { gateStore } from "@/lib/gate";
 import { useAccess } from "@/hooks/useAdmin";
 import { IconLock, IconUnlock } from "./ui/icons";
@@ -51,7 +50,7 @@ export default function Footer() {
                           href={item.href}
                           className="group flex items-baseline gap-2.5 py-1.5 text-sm text-muted transition-colors hover:text-ice"
                         >
-                          <span className="num text-eyebrow text-champagne/45 transition-colors group-hover:text-champagne">
+                          <span className="num text-eyebrow text-iris/45 transition-colors group-hover:text-iris">
                             {item.no}
                           </span>
                           <span className="truncate">{item.label}</span>
@@ -74,7 +73,7 @@ export default function Footer() {
             </p>
             <Link
               href="/"
-              className="mt-3 inline-flex items-center gap-2 font-display text-xs text-champagne transition-colors hover:text-ice"
+              className="mt-3 inline-flex items-center gap-2 font-display text-xs text-iris transition-colors hover:text-ice"
             >
               กลับหน้าแรก
               <span aria-hidden>→</span>
@@ -100,7 +99,7 @@ export default function Footer() {
           <div className="flex items-center gap-1">
             {/* ทางเข้าโหมดผู้จัด — วางท้ายเล่มไว้ ผู้ชมทั่วไปไม่ต้องสนใจ */}
             {access === "verified" ? (
-              <span className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-champagne">
+              <span className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-iris">
                 <IconUnlock className="h-3.5 w-3.5" />
                 ผู้ดูแลระบบ
               </span>
@@ -108,7 +107,7 @@ export default function Footer() {
               <button
                 type="button"
                 onClick={() => gateStore.lock()}
-                className="flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-champagne transition-colors hover:bg-champagne/10"
+                className="flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-iris transition-colors hover:bg-iris/10"
               >
                 <IconUnlock className="h-3.5 w-3.5" />
                 ออกจากโหมดผู้จัด
@@ -116,7 +115,7 @@ export default function Footer() {
             ) : (
               <Link
                 href="/tournaments/"
-                className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-muted transition-colors hover:text-champagne"
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-muted transition-colors hover:text-iris"
               >
                 <IconLock className="h-3.5 w-3.5" />
                 ผู้จัดแข่ง
@@ -139,15 +138,14 @@ export default function Footer() {
         </div>
       </div>
 
-      {/* wordmark ปิดเล่ม — ตัดครึ่งตัวอักษรให้จมขอบล่างจอ */}
-      <div className="band mt-6 overflow-hidden">
-        <p
-          aria-hidden
-          className="fig text-gold-grad h-[0.62em] overflow-hidden text-center text-[clamp(2.2rem,12vw,8rem)] leading-none whitespace-nowrap select-none"
-        >
-          {BRAND_MARK}
-        </p>
-      </div>
+      {/*
+        เอา wordmark ยักษ์ท้ายเล่มออกแล้ว
+
+        มันคือชื่อแบรนด์ตัวโตที่ถูกตัดครึ่งให้จมขอบล่างจอ ซึ่งอ่านออกว่าเป็นลูกเล่น
+        ก็ต่อเมื่อสีมันจางมากพอ พอเป็นม่วงสว่างมันกลายเป็นตัวหนังสือครึ่งตัว
+        ที่ดูเหมือนเลย์เอาต์พัง และไม่ได้ทำหน้าที่อะไรนอกจากพูดชื่อแบรนด์ซ้ำ
+        ซึ่งบอกไปแล้วสองที่ในหน้าเดียว (แถบเมนูบนสุด กับหัวท้ายเล่ม)
+      */}
     </footer>
   );
 }

@@ -5,7 +5,7 @@ import AuthGate from "@/components/auth/AuthGate";
 import TournamentsView from "@/components/tournament/TournamentsView";
 
 export const metadata: Metadata = {
-  title: "ทัวร์นาเมนต์ — Tourney Hub",
+  title: "ทัวร์นาเมนต์ — Steamer Hub",
   description: "สร้างทัวร์นาเมนต์ รับสมัครทีม จัดสายแข่ง และเก็บประวัติผลการแข่ง",
 };
 

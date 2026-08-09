@@ -196,14 +196,14 @@ export default function NavBar() {
           href="/"
           className="group flex shrink-0 items-center gap-2.5 rounded-full py-1 pr-3 pl-1"
         >
-          <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full border border-champagne/40 bg-[radial-gradient(circle_at_35%_25%,rgba(242,220,176,0.25),transparent_65%)]">
+          <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full border border-iris/40 bg-[radial-gradient(circle_at_35%_25%,rgba(242,220,176,0.25),transparent_65%)]">
             <span className="absolute inset-0 animate-halo rounded-full" />
-            <span className="font-display text-sm font-medium text-champagne">
+            <span className="font-display text-sm font-medium text-iris">
               {BRAND_MONOGRAM}
             </span>
           </span>
           <span className="hidden font-display text-sm font-medium tracking-[0.18em] lg:block">
-            <span className="text-gold-grad">{BRAND_MARK}</span>
+            <span className="text-accent-grad">{BRAND_MARK}</span>
           </span>
         </Link>
 
@@ -220,13 +220,13 @@ export default function NavBar() {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={`group relative flex shrink-0 items-center gap-2 rounded-full px-2.5 py-2 font-display text-xs whitespace-nowrap transition-colors duration-300 sm:px-3.5 ${
-                  active ? "text-[#1b1509]" : "text-muted hover:text-ice"
+                  active ? "text-onaccent" : "text-muted hover:text-ice"
                 }`}
               >
                 {active && (
                   <motion.span
                     layoutId="nav-active"
-                    className="absolute inset-0 rounded-full bg-[linear-gradient(180deg,#f4e0b6_0%,#d9b273_55%,#c09a58_100%)] shadow-[0_6px_20px_-8px_rgba(207,167,101,0.95)]"
+                    className="absolute inset-0 rounded-full accent-fill shadow-[0_6px_20px_-8px_rgba(207,167,101,0.95)]"
                     transition={{ type: "spring", stiffness: 380, damping: 34 }}
                   />
                 )}
@@ -276,7 +276,7 @@ export default function NavBar() {
               }}
               title="ออกจากโหมดผู้จัด"
               aria-label="ออกจากโหมดผู้จัด"
-              className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full text-champagne transition-colors hover:bg-champagne/10"
+              className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full text-iris transition-colors hover:bg-iris/10"
             >
               <IconUnlock className="h-4 w-4" />
             </button>
@@ -295,7 +295,7 @@ export default function NavBar() {
                   href="/account/"
                   title={`${user.name} — โปรไฟล์ของฉัน`}
                   aria-label="โปรไฟล์ของฉัน"
-                  className="relative ml-0.5 grid h-9 w-9 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-full border border-champagne/45 transition-transform hover:scale-105"
+                  className="relative ml-0.5 grid h-9 w-9 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-full border border-iris/45 transition-transform hover:scale-105"
                 >
                   <span className="pointer-events-none absolute inset-0 animate-halo rounded-full" />
                   {user.photo ? (
@@ -307,7 +307,7 @@ export default function NavBar() {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <span className="font-display text-xs text-champagne">
+                    <span className="font-display text-xs text-iris">
                       {user.name.slice(0, 1)}
                     </span>
                   )}
@@ -447,7 +447,7 @@ function IconButton({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-all duration-300 hover:bg-champagne/12 hover:text-champagne active:scale-90"
+      className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-all duration-300 hover:bg-iris/12 hover:text-iris active:scale-90"
     >
       {children}
     </button>

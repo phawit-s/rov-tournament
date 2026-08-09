@@ -21,8 +21,8 @@ type Fleck = {
 };
 
 const TONES = {
-  dark: ["#f2dcb0", "#d9b273", "#e6c894", "#ffffff"],
-  light: ["#a37f38", "#8a6a2c", "#c2a05a", "#6c521f"],
+  dark: ["#cfc7ff", "#a99bff", "#a99bff", "#ffffff"],
+  light: ["#6c5ce7", "#5b4bd6", "#8a79f2", "#3a2e9e"],
 };
 
 const DEPTH = [

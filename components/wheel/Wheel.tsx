@@ -180,9 +180,9 @@ export default function Wheel({
       cx + radius,
       cy + radius,
     );
-    rim.addColorStop(0, "#f2dcb0");
-    rim.addColorStop(0.5, "#cfa765");
-    rim.addColorStop(1, "#9a7a44");
+    rim.addColorStop(0, "#cfc7ff");
+    rim.addColorStop(0.5, "#7c6cf5");
+    rim.addColorStop(1, "#4b3dbf");
     ctx.beginPath();
     ctx.arc(cx, cy, pegR, 0, TWO_PI);
     ctx.strokeStyle = rim;
@@ -246,9 +246,9 @@ export default function Wheel({
     ctx.beginPath();
     ctx.arc(cx, cy, hubR, 0, TWO_PI);
     const hub = ctx.createLinearGradient(cx - hubR, cy - hubR, cx + hubR, cy + hubR);
-    hub.addColorStop(0, "#f2dcb0");
-    hub.addColorStop(0.55, "#d9b273");
-    hub.addColorStop(1, "#9a7a44");
+    hub.addColorStop(0, "#cfc7ff");
+    hub.addColorStop(0.55, "#a99bff");
+    hub.addColorStop(1, "#4b3dbf");
     ctx.fillStyle = hub;
     ctx.fill();
     ctx.strokeStyle = "rgba(0,0,0,0.35)";
@@ -313,13 +313,13 @@ export default function Wheel({
           >
             <defs>
               <linearGradient id="wheel-blade" x1="0" y1="0" x2="1" y2="0.6">
-                <stop offset="0" stopColor="#f2dcb0" />
+                <stop offset="0" stopColor="#cfc7ff" />
                 <stop offset="0.5" stopColor="#dcb87c" />
-                <stop offset="1" stopColor="#9a7a44" />
+                <stop offset="1" stopColor="#4b3dbf" />
               </linearGradient>
               <linearGradient id="wheel-pivot" x1="0.2" y1="0" x2="0.8" y2="1">
                 <stop offset="0" stopColor="#fdf1d8" />
-                <stop offset="0.55" stopColor="#d9b273" />
+                <stop offset="0.55" stopColor="#a99bff" />
                 <stop offset="1" stopColor="#8d6f3d" />
               </linearGradient>
             </defs>

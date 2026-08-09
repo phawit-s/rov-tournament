@@ -17,9 +17,15 @@ export type YTPlayer = {
   pauseVideo: () => void;
   mute: () => void;
   setVolume: (v: number) => void;
+  unMute: () => void;
+  isMuted: () => boolean;
   getPlayerState: () => number;
   /** ความยาวคลิปเป็นวินาที — เป็น 0 จนกว่าคลิปจะโหลดข้อมูลเสร็จ */
   getDuration: () => number;
+  /** ตำแหน่งที่เล่นอยู่เป็นวินาที */
+  getCurrentTime: () => number;
+  /** allowSeekAhead = ยอมโหลดช่วงที่ยังไม่ได้บัฟเฟอร์ ใช้ตอนคนปล่อยนิ้วแล้ว */
+  seekTo: (seconds: number, allowSeekAhead: boolean) => void;
   destroy: () => void;
 };
 

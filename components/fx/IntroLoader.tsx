@@ -138,7 +138,7 @@ export default function IntroLoader() {
                 {WORDS.map((word, i) => (
                   <span key={word} className="block overflow-hidden">
                     <motion.span
-                      className="text-gold-grad block"
+                      className="text-accent-grad block"
                       initial={{ y: "110%" }}
                       animate={{ y: 0 }}
                       transition={{
@@ -166,7 +166,7 @@ export default function IntroLoader() {
             {/* แถบโหลดยาวเต็มหน้า เป็นเส้นฐานของหน้าปก */}
             <span className="absolute inset-x-[6vw] bottom-[6vh] block h-px overflow-hidden bg-[rgb(var(--hair)/var(--hair-a))]">
               <span
-                className="block h-full origin-left bg-[linear-gradient(90deg,#8f7038,#f2dcb0)] transition-transform duration-100"
+                className="block h-full origin-left bg-[linear-gradient(90deg,#5b4bd6,#cfc7ff)] transition-transform duration-100"
                 style={{ transform: `scaleX(${count / 100})` }}
               />
             </span>

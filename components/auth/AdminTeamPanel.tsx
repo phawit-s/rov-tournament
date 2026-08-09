@@ -108,7 +108,7 @@ function TeamPanel() {
                   .catch(() => toast("คัดลอกไม่สำเร็จ", "error"));
               }}
               aria-label="คัดลอกรหัสผู้ใช้"
-              className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-lg text-champagne transition-colors hover:bg-champagne/10"
+              className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-lg text-iris transition-colors hover:bg-iris/10"
             >
               {copied ? (
                 <IconCheck className="h-4 w-4" strokeWidth={2} />
@@ -154,7 +154,7 @@ function TeamPanel() {
                           className="h-full w-full object-cover"
                         />
                       ) : (
-                        <span className="font-display text-xs text-champagne">
+                        <span className="font-display text-xs text-iris">
                           {name.slice(0, 1).toUpperCase()}
                         </span>
                       )}

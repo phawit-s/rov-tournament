@@ -277,7 +277,7 @@ export default function OrbitalObject({
 
         ctx.beginPath();
         ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = light ? "#8a6a2c" : "#f6e0b2";
+        ctx.fillStyle = light ? "#5b4bd6" : "#f6e0b2";
         ctx.fill();
       }
 

@@ -141,7 +141,7 @@ const OBS_STEPS: ReactNode[] = [
   </>,
   <>
     ปล่อยช่อง <b>Custom CSS</b> ไว้ตามค่าเริ่มต้น (
-    <code className="text-xs text-champagne">
+    <code className="text-xs text-iris">
       body {`{ background-color: rgba(0,0,0,0); margin: 0; overflow: hidden; }`}
     </code>
     ) — หน้าเว็บทำพื้นโปร่งใสมาให้แล้ว
@@ -292,7 +292,7 @@ export default function WidgetBuilder() {
                     onClick={() => setPickedChannelId(c.id)}
                     className={`min-h-11 shrink-0 cursor-pointer rounded-xl px-4 py-2 text-left transition-colors ${
                       on
-                        ? "bg-champagne/14 text-champagne ring-1 ring-champagne/45"
+                        ? "bg-iris/14 text-iris ring-1 ring-iris/45"
                         : "tile hover-tile text-muted hover:text-ice"
                     }`}
                   >
@@ -445,7 +445,7 @@ export default function WidgetBuilder() {
                       <h3 className="mt-1 font-display text-base text-ice">{widget.name}</h3>
                       <p className="mt-1 text-xs text-muted">{widget.detail}</p>
                     </div>
-                    <span className="num tile shrink-0 rounded-lg px-2.5 py-1 font-display text-[11px] text-champagne">
+                    <span className="num tile shrink-0 rounded-lg px-2.5 py-1 font-display text-[11px] text-iris">
                       {widget.w} × {widget.h}
                     </span>
                   </div>
@@ -469,7 +469,7 @@ export default function WidgetBuilder() {
                       href={url}
                       target="_blank"
                       rel="noreferrer noopener"
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-hair px-4 py-2 font-display text-xs text-muted transition-colors hover:text-champagne"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-hair px-4 py-2 font-display text-xs text-muted transition-colors hover:text-iris"
                     >
                       <IconExternal className="h-3.5 w-3.5" />
                       เปิดเต็มจอ
@@ -494,7 +494,7 @@ export default function WidgetBuilder() {
           />
           {OBS_STEPS.map((node, i) => (
             <li key={i} className="relative flex gap-4">
-              <span className="tile relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-full font-display text-[11px] text-champagne">
+              <span className="tile relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-full font-display text-[11px] text-iris">
                 {i + 1}
               </span>
               <span className="min-w-0 flex-1 pt-1 text-sm text-ice/85">{node}</span>
@@ -619,7 +619,7 @@ function SourceBtn({
       disabled={disabled}
       className={`flex-1 cursor-pointer rounded-lg px-3 py-2 font-display text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
         active
-          ? "bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)] text-[#1b1509]"
+          ? "accent-fill"
           : "text-muted hover:text-ice"
       }`}
     >

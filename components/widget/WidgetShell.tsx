@@ -5,7 +5,7 @@ import { useReducedMotion } from "motion/react";
 import { useWidgetOptions } from "@/hooks/useLiveTournament";
 import Corners from "@/components/ui/Corners";
 
-/** "#e6c894" -> "230 200 148" ใช้ป้อนโทเคน --accent ที่คลาสกลางทั้งเว็บอ่าน */
+/** "#a99bff" -> "169 155 255" ใช้ป้อนโทเคน --accent ที่คลาสกลางทั้งเว็บอ่าน */
 function rgbTriplet(hex: string): string {
   const h = hex.replace("#", "");
   const full =
@@ -16,7 +16,7 @@ function rgbTriplet(hex: string): string {
           .join("")
       : h.slice(0, 6).padEnd(6, "0");
   const n = Number.parseInt(full, 16);
-  if (!Number.isFinite(n)) return "230 200 148";
+  if (!Number.isFinite(n)) return "169 155 255";
   return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
 }
 
@@ -36,17 +36,17 @@ function widgetTokens(accent: string): CSSProperties {
     "--field-a": "0.3",
     "--sunken": "0 0 0",
     "--sunken-a": "0.35",
-    "--st-live": "224 86 107",
-    "--st-next": "230 200 148",
-    "--st-win": "77 181 145",
-    "--st-out": "146 151 172",
-    "--st-idle": "155 160 179",
-    "--color-ice": "#edeff6",
-    "--color-muted": "#9ba0b3",
-    "--color-champagne": "#e6c894",
-    "--color-gold": "#cfa765",
-    "--color-gold-deep": "#9a7a44",
-    "--color-platinum": "#d3d8e6",
+    "--st-live": "255 91 122",
+    "--st-next": "169 155 255",
+    "--st-win": "52 227 176",
+    "--st-out": "126 130 153",
+    "--st-idle": "138 142 168",
+    "--color-ice": "#e7e9f5",
+    "--color-muted": "#8a8ea8",
+    "--color-iris": "#a99bff",
+    "--color-gold": "#7c6cf5",
+    "--color-iris-deep": "#4b3dbf",
+    "--color-platinum": "#c7cce4",
   } as CSSProperties;
 }
 
@@ -71,7 +71,7 @@ export default function WidgetShell({
       }`}
       style={{
         ...widgetTokens(accent),
-        background: solid ? "#0a0a0e" : "transparent",
+        background: solid ? "#07080f" : "transparent",
         colorScheme: "dark",
       }}
     >
@@ -120,7 +120,7 @@ export function WidgetCard({
   accent?: string;
   frame?: WidgetFrame;
 }) {
-  const a = accent ?? "#e6c894";
+  const a = accent ?? "#a99bff";
   const chamfered = frame === "plate";
   const shape = chamfered
     ? "chamfer"
@@ -129,22 +129,21 @@ export function WidgetCard({
       : "rounded-2xl";
 
   return (
-    // clip-path เฉือน box-shadow ทิ้ง เงาของแผ่นตัดมุมเลยต้องมาจาก drop-shadow ของพ่อ
-    <div
-      className="relative"
-      style={
-        chamfered
-          ? { filter: "drop-shadow(0 20px 38px rgba(0,0,0,0.72))" }
-          : undefined
-      }
-    >
+    /*
+      ไม่มีเงาทอดออกนอกกล่องโดยตั้งใจ
+
+      พื้นหลัง widget โปร่งใส เงาจึงไม่ได้ตกลงบนอะไรเลย มันแค่ย้อมภาพเกม
+      ที่อยู่ข้างหลังให้เป็นคราบดำฟุ้งตามรูปกล่อง ซึ่งเห็นชัดมากตอนวางบนฉากสว่าง
+      ขอบกล่องอ่านออกอยู่แล้วจากเส้นขอบสีเน้นกับพื้นเข้มด้านใน
+    */
+    <div className="relative">
       <div
         className={`relative overflow-hidden ${shape} ${className}`}
         style={{
           background: "linear-gradient(180deg, rgba(12,12,18,0.94), rgba(8,8,12,0.9))",
           boxShadow: chamfered
             ? `inset 0 0 0 1px ${a}55, inset 0 0 0 3px rgb(0 0 0 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.14)`
-            : `0 0 0 1px ${a}55, inset 0 0 0 1px rgb(255 255 255 / 0.07), inset 0 1px 0 rgb(255 255 255 / 0.14), 0 26px 70px -28px #000`,
+            : `0 0 0 1px ${a}55, inset 0 0 0 1px rgb(255 255 255 / 0.07), inset 0 1px 0 rgb(255 255 255 / 0.14)`,
           backdropFilter: "blur(6px)",
         }}
       >

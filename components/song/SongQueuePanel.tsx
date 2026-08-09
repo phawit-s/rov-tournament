@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { Channel } from "@/lib/channel/types";
 import {
@@ -12,13 +12,15 @@ import {
 } from "@/lib/song/store";
 import { DEFAULT_SONG_CONFIG, type SongConfig, type SongRequest } from "@/lib/song/types";
 import { thumbUrl, watchUrl } from "@/lib/song/youtube";
-import { sfx } from "@/lib/sound";
 import Button from "../ui/Button";
 import ConfirmDialog from "../ui/ConfirmDialog";
+import LinkRow from "../ui/LinkRow";
+import MiniBtn, { MiniLink } from "../ui/MiniBtn";
 import Panel from "../ui/Panel";
+import Switch from "../ui/Switch";
 import { toast } from "../ui/Toast";
 import { StatTile } from "../ui/hud";
-import { IconCheck, IconChevronDown, IconCopy, IconExternal } from "../ui/icons";
+import { IconCheck, IconChevronDown } from "../ui/icons";
 import {
   ArtCalendar,
   EmptyState,
@@ -71,7 +73,6 @@ export default function SongQueuePanel({
   const [working, setWorking] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
   const [askClear, setAskClear] = useState(false);
-  const [copied, setCopied] = useState(false);
   /** ตัวเล่นฝังอยู่ในหน้านี้เลย จะได้ไม่ต้องเปิดหน้าอื่น ซ่อนได้ถ้าเปิดแยกหน้าต่างไว้แล้ว */
   const [showPlayer, setShowPlayer] = useState(true);
 
@@ -214,48 +215,16 @@ export default function SongQueuePanel({
           />
           <p className="mt-2 text-xs leading-relaxed text-muted">
             ใช้ Worker ตัวเดียวกับที่ตรวจสลิปได้เลย แค่เพิ่มคีย์เข้าไปด้วย{" "}
-            <code className="text-champagne">wrangler secret put YT_API_KEY</code> —
+            <code className="text-iris">wrangler secret put YT_API_KEY</code> —
             คีย์ขอฟรีที่ Google Cloud Console (เปิด YouTube Data API v3)
             โควตาฟรีค้นได้ราววันละ 100 ครั้ง
           </p>
         </div>
 
-        {/* ลิงก์ที่เอาไปแปะให้คนดู — ใช้ handle ก่อนเพราะจำง่ายกว่า uid */}
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl tile p-3.5">
-          <div className="min-w-0 flex-1">
-            <span className="slug">หน้าขอเพลง</span>
-            <code className="mt-1.5 block truncate text-xs text-ice/75">
-              {requestUrl}
-            </code>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-1.5">
-            <MiniBtn
-              onClick={() => {
-                void navigator.clipboard.writeText(requestUrl);
-                setCopied(true);
-                toast("คัดลอกลิงก์แล้ว", "success", 1600);
-                window.setTimeout(() => setCopied(false), 1600);
-              }}
-            >
-              <span className="inline-flex items-center gap-1.5">
-                {copied ? (
-                  <IconCheck className="h-3 w-3" strokeWidth={2} />
-                ) : (
-                  <IconCopy className="h-3 w-3" />
-                )}
-                {copied ? "คัดลอกแล้ว" : "คัดลอก"}
-              </span>
-            </MiniBtn>
-            <a
-              href={requestUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-hair px-2.5 py-1.5 text-xs text-muted transition-colors hover:text-champagne"
-            >
-              <IconExternal className="h-3 w-3" />
-              เปิด
-            </a>
-          </div>
+        {/* ลิงก์ที่เอาไปแปะให้คนดู — ใช้ handle ก่อนเพราะจำง่ายกว่า uid
+            มี QR ให้ด้วย จะได้เอาขึ้นจอไลฟ์ให้คนดูสแกนจากมือถือได้เลย */}
+        <div className="mt-4">
+          <LinkRow label="หน้าขอเพลง" url={requestUrl} />
         </div>
 
         {!songs.enabled && (
@@ -278,15 +247,7 @@ export default function SongQueuePanel({
                 <MiniBtn onClick={() => setShowPlayer(!showPlayer)}>
                   {showPlayer ? "ซ่อนตัวเล่น" : "แสดงตัวเล่น"}
                 </MiniBtn>
-                <a
-                  href={playerUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-hair px-2.5 py-1.5 text-xs text-muted transition-colors hover:text-champagne"
-                >
-                  <IconExternal className="h-3 w-3" />
-                  แยกหน้าต่าง
-                </a>
+                <MiniLink href={playerUrl}>แยกหน้าต่าง</MiniLink>
               </div>
             }
           />
@@ -354,7 +315,7 @@ export default function SongQueuePanel({
                 <p className="mt-1 font-display text-base text-ice">{playing.title}</p>
                 <p className="mt-0.5 truncate text-xs text-muted">{playing.author}</p>
                 <p className="mt-2 text-xs text-ice/70">
-                  ขอโดย <span className="text-champagne">{playing.byName}</span>
+                  ขอโดย <span className="text-iris">{playing.byName}</span>
                   <span className="num ml-2 text-muted/80">
                     {timeText(playing.createdAt)}
                   </span>
@@ -372,7 +333,7 @@ export default function SongQueuePanel({
                   >
                     เล่นจบแล้ว
                   </Button>
-                  <YoutubeLink videoId={playing.videoId} />
+                  <MiniLink href={watchUrl(playing.videoId)}>เปิดใน YouTube</MiniLink>
                 </div>
               </div>
             </motion.div>
@@ -548,96 +509,3 @@ function Cover({ videoId, className = "" }: { videoId: string; className?: strin
   );
 }
 
-function YoutubeLink({ videoId }: { videoId: string }) {
-  return (
-    <a
-      href={watchUrl(videoId)}
-      target="_blank"
-      rel="noreferrer noopener"
-      className="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-hair px-2.5 py-1.5 text-xs text-muted transition-colors hover:text-champagne"
-    >
-      <IconExternal className="h-3 w-3" />
-      เปิดใน YouTube
-    </a>
-  );
-}
-
-function MiniBtn({
-  children,
-  onClick,
-  danger,
-  disabled,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-  danger?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`min-h-9 shrink-0 cursor-pointer rounded-lg border px-2.5 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-        danger
-          ? "border-[#e79a9a]/25 text-[#e79a9a]/90 hover:bg-[#e79a9a]/10"
-          : "border-hair text-muted hover:text-champagne"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-/**
- * สวิตช์ที่บอกสถานะเป็นตัวหนังสือในราง — สีอย่างเดียวอ่านยากบนธีมสว่าง
- * ทรงเดียวกับสวิตช์อื่นในหน้าตั้งค่าช่อง กล่องคลิกสูง 44px ตามขนาดนิ้วขั้นต่ำ
- */
-function Switch({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  const reduced = useReducedMotion();
-
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        sfx.unlock();
-        sfx.play("click");
-        onChange(!checked);
-      }}
-      className="relative grid h-11 w-21 shrink-0 cursor-pointer place-items-center"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-    >
-      <span
-        className={`relative block h-7 w-full rounded-full transition-colors duration-300 ${
-          checked ? "bg-[linear-gradient(90deg,#bd9350,#f0d8ab)]" : "rule"
-        }`}
-      >
-        <span
-          className={`pointer-events-none absolute inset-y-0 flex items-center font-display text-eyebrow tracking-luxe ${
-            checked ? "left-3 text-[#1b1509]" : "right-3 text-muted"
-          }`}
-        >
-          {checked ? "เปิด" : "ปิด"}
-        </span>
-        <motion.span
-          layout={!reduced}
-          transition={
-            reduced ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 34 }
-          }
-          className="absolute top-1 h-5 w-5 rounded-full bg-white shadow"
-          style={{ left: checked ? 60 : 4 }}
-        />
-      </span>
-    </button>
-  );
-}

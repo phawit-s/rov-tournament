@@ -110,10 +110,10 @@ export default function TournamentsView() {
       />
 
       {incoming && (
-        <Panel accent="109 146 219" state="next" className="p-5">
+        <Panel accent="110 155 240" state="next" className="p-5">
           <p className="slug">มีทัวร์ที่ถูกแชร์มา</p>
           <p className="mt-2 text-sm text-ice/90">
-            <span className="font-display text-champagne">{incoming.name}</span>{" "}
+            <span className="font-display text-iris">{incoming.name}</span>{" "}
             <span className="num text-muted">({incoming.teams.length} ทีม)</span>
           </p>
           <p className="mt-1.5 text-xs text-muted">
@@ -197,7 +197,7 @@ export default function TournamentsView() {
                   actions={
                     <Link
                       href={`/tournament/#t=${t.id}`}
-                      className="font-display text-xs text-champagne hover:underline"
+                      className="font-display text-xs text-iris hover:underline"
                     >
                       เปิดดู →
                     </Link>
@@ -250,7 +250,7 @@ function CardActions({
       <div className="flex items-center gap-2">
         <Link
           href={href}
-          className="inline-flex min-h-10 flex-1 items-center justify-center rounded-xl bg-[linear-gradient(180deg,#f2dcb0_0%,#d9b273_52%,#bd9350_100%)] px-4 py-2 font-display text-xs font-medium tracking-wide text-[#1b1509] shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_12px_34px_-18px_rgba(207,167,101,0.9)] transition-all duration-300 hover:-translate-y-px hover:brightness-105"
+          className="inline-flex min-h-10 flex-1 items-center justify-center rounded-xl accent-fill px-4 py-2 font-display text-xs font-medium tracking-wide text-onaccent shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_12px_34px_-18px_rgba(169,155,255,0.9)] transition-all duration-300 hover:-translate-y-px hover:brightness-105"
         >
           เปิดดู
         </Link>
@@ -260,7 +260,7 @@ function CardActions({
           aria-expanded={open}
           aria-label="ตัวเลือกอื่น"
           className={`tile hover-tile grid h-10 w-10 shrink-0 cursor-pointer place-items-center rounded-xl transition-colors ${
-            open ? "text-champagne" : "text-muted hover:text-ice"
+            open ? "text-iris" : "text-muted hover:text-ice"
           }`}
         >
           <motion.span
@@ -311,7 +311,7 @@ function MoreItem({
       onClick={onClick}
       className={`min-h-10 cursor-pointer rounded-lg px-2 text-xs transition-colors ${
         danger
-          ? "text-muted hover:bg-[#e79a9a]/10 hover:text-[#e79a9a]"
+          ? "text-muted hover:bg-danger/10 hover:text-danger"
           : "hover-tile text-ice/80 hover:text-ice"
       }`}
     >

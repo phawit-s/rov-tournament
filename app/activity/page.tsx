@@ -4,7 +4,7 @@ import AdminGate from "@/components/auth/AdminGate";
 import ActivityView from "@/components/ActivityView";
 
 export const metadata: Metadata = {
-  title: "ประวัติการทำงาน — Tourney Hub",
+  title: "ประวัติการทำงาน — Steamer Hub",
   description: "บันทึกกิจกรรมทั้งหมดที่เกิดขึ้นในเครื่องนี้",
 };
 

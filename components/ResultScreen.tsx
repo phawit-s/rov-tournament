@@ -67,7 +67,7 @@ export default function ResultScreen({ t }: { t: Tournament }) {
           transition={{ delay: 0.1, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
           className="mt-3 font-display text-h2 font-light"
         >
-          <span className="text-gold-grad">แบ่งทีมเรียบร้อย</span>
+          <span className="text-accent-grad">แบ่งทีมเรียบร้อย</span>
         </motion.h2>
 
         <p className="num mt-3 text-xs text-muted">{stamp}</p>
@@ -81,7 +81,7 @@ export default function ResultScreen({ t }: { t: Tournament }) {
           <GoldFigure value={derived.benchCount} label="สำรอง" className="sm:pl-6" />
           <div className="sm:pl-6">
             {/* seed เป็นตัวอักษรผสม จึงใช้ .num อย่างเดียว ไม่ใช้ .fig ที่บีบระยะไว้สำหรับตัวเลขล้วน */}
-            <span className="num text-gold-grad block truncate font-display text-[clamp(1.5rem,3.4vw,2.2rem)] leading-tight font-light tracking-[0.08em]">
+            <span className="num text-accent-grad block truncate font-display text-[clamp(1.5rem,3.4vw,2.2rem)] leading-tight font-light tracking-[0.08em]">
               {state.seed || "—"}
             </span>
             <p className="slug slug-2 mt-2">Seed</p>
@@ -155,7 +155,7 @@ export default function ResultScreen({ t }: { t: Tournament }) {
         <div className="flex flex-col items-center gap-4 pt-2">
           <p className="max-w-xl text-center text-sm text-muted">
             ผลชุดนี้ถูกล็อกไว้กับ seed{" "}
-            <span className="num font-display tracking-[0.16em] text-champagne">
+            <span className="num font-display tracking-[0.16em] text-iris">
               {state.seed}
             </span>{" "}
             แก้ไขจากลิงก์นี้ไม่ได้ ใครเปิดก็เห็นเหมือนกันทุกคน
@@ -227,7 +227,7 @@ function GoldFigure({
       ) : (
         <span
           ref={el}
-          className="fig num text-gold-grad block text-[clamp(2rem,4.5vw,3.4rem)]"
+          className="fig num text-accent-grad block text-[clamp(2rem,4.5vw,3.4rem)]"
         >
           0
         </span>

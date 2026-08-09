@@ -14,6 +14,7 @@ import { lookupVideo, thumbUrl, videoIdFrom, watchUrl } from "@/lib/song/youtube
 import type { YoutubeInfo } from "@/lib/song/youtube";
 import Button from "../ui/Button";
 import Panel from "../ui/Panel";
+import Tabs from "../ui/Tabs";
 import { toast } from "../ui/Toast";
 import { EmptyState, Input, Skeleton } from "../tournament/ui";
 
@@ -53,39 +54,19 @@ export default function SongConsole({
       (b.playedAt ?? b.createdAt ?? "").localeCompare(a.playedAt ?? a.createdAt ?? ""),
     );
 
-  const TABS: { key: Tab; label: string; count?: number }[] = [
-    { key: "add", label: "ใส่เพลงเอง" },
-    { key: "history", label: "ประวัติ", count: done.length },
-    { key: "filler", label: "เพลย์ลิสต์สำรอง", count: filler.length },
-  ];
-
   return (
     <Panel className="p-5 sm:p-6">
-      <div className="tile no-scrollbar mb-5 flex gap-1 overflow-x-auto rounded-xl p-1">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={`shrink-0 grow cursor-pointer rounded-lg px-3 py-2 font-display text-xs whitespace-nowrap transition-colors ${
-              tab === t.key
-                ? "bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)] text-[#1b1509]"
-                : "text-muted hover:text-ice"
-            }`}
-          >
-            {t.label}
-            {t.count != null && t.count > 0 && (
-              <span
-                className={`num ml-1.5 text-eyebrow ${
-                  tab === t.key ? "text-[#1b1509]/60" : "text-muted/70"
-                }`}
-              >
-                {t.count}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="เครื่องมือของสตรีมเมอร์"
+        className="mb-5"
+        value={tab}
+        onChange={setTab}
+        items={[
+          { key: "add", label: "ใส่เพลงเอง" },
+          { key: "history", label: "ประวัติ", count: done.length || null },
+          { key: "filler", label: "เพลย์ลิสต์สำรอง", count: filler.length || null },
+        ]}
+      />
 
       {tab === "add" && (
         <AddSong channelId={channelId} searchEndpoint={songs.searchEndpoint?.trim()} />
@@ -198,10 +179,10 @@ function LinkBox({
       </div>
 
       {state === "invalid" && (
-        <p className="text-xs text-[#e79a9a]">ลิงก์ไม่ถูกต้อง วางลิงก์ YouTube หรือไอดีคลิป</p>
+        <p className="text-xs text-danger">ลิงก์ไม่ถูกต้อง วางลิงก์ YouTube หรือไอดีคลิป</p>
       )}
       {state === "missing" && (
-        <p className="text-xs text-[#e79a9a]">หาคลิปนี้ไม่เจอ อาจถูกลบหรือตั้งเป็นส่วนตัว</p>
+        <p className="text-xs text-danger">หาคลิปนี้ไม่เจอ อาจถูกลบหรือตั้งเป็นส่วนตัว</p>
       )}
       {state === "loading" && (
         <div className="sunken flex items-center gap-3 rounded-xl p-3">
@@ -336,7 +317,7 @@ function AddSong({
             </Button>
           </div>
 
-          {err && <p className="text-xs text-[#e79a9a]">{err}</p>}
+          {err && <p className="text-xs text-danger">{err}</p>}
 
           {hits?.length === 0 && (
             <p className="text-sm text-muted">ไม่เจอเพลงที่ตรงกับคำค้นนี้</p>
@@ -369,7 +350,7 @@ function AddSong({
                     </span>
                     <span
                       className={`shrink-0 font-display text-xs ${
-                        added === h.videoId ? "text-[#4db591]" : "text-champagne"
+                        added === h.videoId ? "text-win" : "text-iris"
                       }`}
                     >
                       {added === h.videoId ? "ใส่แล้ว" : "+ ใส่คิว"}
@@ -608,7 +589,7 @@ function ImportPlaylist({
       </div>
 
       {!!url.trim() && !listId && (
-        <p className="text-xs text-[#e79a9a]">
+        <p className="text-xs text-danger">
           ลิงก์นี้ไม่มีรหัสเพลย์ลิสต์ — ต้องมี <code>list=</code> อยู่ในลิงก์
         </p>
       )}
@@ -620,8 +601,8 @@ function ImportPlaylist({
         </p>
       )}
 
-      {error && <p className="text-xs text-[#e79a9a]">{error}</p>}
-      {step && <p className="num text-xs text-champagne">{step}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
+      {step && <p className="num text-xs text-iris">{step}</p>}
 
       <Button
         onClick={() => void run()}
@@ -710,7 +691,7 @@ function Filler({
                 }
                 className={`cursor-pointer rounded-xl px-3 py-2.5 text-center transition-all duration-200 ${
                   on
-                    ? "bg-champagne/14 text-champagne ring-1 ring-champagne/45"
+                    ? "bg-iris/14 text-iris ring-1 ring-iris/45"
                     : "tile hover-tile text-muted hover:text-ice"
                 }`}
               >
@@ -785,7 +766,7 @@ function Filler({
                 type="button"
                 disabled={busy || !canEdit}
                 onClick={() => void save(tracks.filter((x) => x.videoId !== t.videoId)).catch(() => {})}
-                className="shrink-0 cursor-pointer px-2 text-xs text-muted transition-colors hover:text-[#e79a9a] disabled:cursor-not-allowed"
+                className="shrink-0 cursor-pointer px-2 text-xs text-muted transition-colors hover:text-danger disabled:cursor-not-allowed"
                 aria-label="เอาเพลงนี้ออก"
               >
                 ✕

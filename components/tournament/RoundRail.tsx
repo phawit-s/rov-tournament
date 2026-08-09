@@ -56,10 +56,10 @@ export default function RoundRail({ bracket, mode, active, onSelect }: Props) {
           className="sunken group hidden shrink-0 cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 transition-colors hover:text-ice sm:flex"
         >
           <span className="slug slug-2">seed</span>
-          <span className="num font-display text-xs tracking-[0.16em] text-champagne">
+          <span className="num font-display text-xs tracking-[0.16em] text-iris">
             {bracket.seed}
           </span>
-          <IconCopy className="h-3 w-3 text-muted transition-colors group-hover:text-champagne" />
+          <IconCopy className="h-3 w-3 text-muted transition-colors group-hover:text-iris" />
         </button>
 
         <span className="rule-v hidden h-6 shrink-0 sm:block" />
@@ -78,13 +78,13 @@ export default function RoundRail({ bracket, mode, active, onSelect }: Props) {
                     type="button"
                     onClick={() => pick(round)}
                     className={`relative shrink-0 cursor-pointer rounded-lg px-3 py-2 font-display text-xs transition-colors ${
-                      on ? "text-[#1b1509]" : "text-muted hover:text-ice"
+                      on ? "text-onaccent" : "text-muted hover:text-ice"
                     }`}
                   >
                     {on && (
                       <motion.span
                         layoutId="round-rail-chip"
-                        className="absolute inset-0 rounded-lg bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)]"
+                        className="absolute inset-0 rounded-lg accent-fill"
                         transition={{ type: "spring", stiffness: 340, damping: 32 }}
                       />
                     )}
@@ -125,7 +125,7 @@ export default function RoundRail({ bracket, mode, active, onSelect }: Props) {
                   />
                   <span
                     className={`font-display text-xs whitespace-nowrap transition-colors ${
-                      on ? "text-champagne" : "text-muted group-hover:text-ice"
+                      on ? "text-iris" : "text-muted group-hover:text-ice"
                     }`}
                   >
                     {roundLabel(round, bracket.rounds)}
@@ -140,7 +140,7 @@ export default function RoundRail({ bracket, mode, active, onSelect }: Props) {
 
         <p className="num shrink-0 font-display text-xs text-muted">
           จบแล้ว{" "}
-          <span className="text-champagne">
+          <span className="text-iris">
             {done}/{playable.length}
           </span>{" "}
           <span className="hidden sm:inline">แมตช์</span>

@@ -161,7 +161,7 @@ export default function DrawMachine({
     return () => window.removeEventListener("keydown", onKey);
   }, [roll]);
 
-  const accent = target?.identity.rgb ?? "207 167 101";
+  const accent = target?.identity.rgb ?? "169 155 255";
   const busy = stage !== "idle";
   const finished = !next;
   const blur = reduced ? 0 : Math.min(6, (40 / reel.interval) * 3);
@@ -229,7 +229,7 @@ export default function DrawMachine({
             {finished || !target ? (
               <>
                 <p className="slug">Ready</p>
-                <p className="mt-2.5 font-display text-xl font-medium text-champagne">
+                <p className="mt-2.5 font-display text-xl font-medium text-iris">
                   พร้อมดูผลลัพธ์แล้ว
                 </p>
               </>
@@ -443,7 +443,7 @@ function TextButton({
       }}
       disabled={disabled}
       className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-xs transition-colors duration-300 disabled:cursor-not-allowed disabled:opacity-30 ${
-        active ? "text-champagne" : "text-muted hover:text-ice"
+        active ? "text-iris" : "text-muted hover:text-ice"
       }`}
     >
       {children}

@@ -157,7 +157,7 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
                         <button
                           type="button"
                           onClick={() => set("cover", undefined)}
-                          className="cursor-pointer text-xs text-muted transition-colors hover:text-[#e79a9a]"
+                          className="cursor-pointer text-xs text-muted transition-colors hover:text-danger"
                         >
                           ลบรูป
                         </button>
@@ -165,7 +165,7 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
                     </div>
                   </div>
                   {coverError && (
-                    <p className="mt-2 text-xs text-[#e79a9a]">{coverError}</p>
+                    <p className="mt-2 text-xs text-danger">{coverError}</p>
                   )}
                 </div>
               </div>
@@ -204,7 +204,7 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
                           className="px-4 py-3 text-left"
                         >
                           <p
-                            className={`flex items-center gap-1.5 font-display text-sm ${active ? "text-champagne" : "text-ice"
+                            className={`flex items-center gap-1.5 font-display text-sm ${active ? "text-iris" : "text-ice"
                               }`}
                           >
                             {active && <IconCheck className="h-3.5 w-3.5" strokeWidth={2} />}
@@ -372,7 +372,7 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
                           className="px-2.5 py-1.5"
                         >
                           <span
-                            className={`text-xs ${active ? "text-champagne" : "text-muted"}`}
+                            className={`text-xs ${active ? "text-iris" : "text-muted"}`}
                           >
                             {preset.name}
                           </span>
@@ -419,7 +419,7 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
                       onChange={(e) =>
                         set("live", { ...draft.live, isLive: e.target.checked })
                       }
-                      className="h-4 w-4 accent-[#e0566b]"
+                      className="h-4 w-4 accent-live"
                     />
                     ตอนนี้กำลังไลฟ์อยู่ (จะขึ้นป้าย LIVE)
                   </label>

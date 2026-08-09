@@ -112,7 +112,7 @@ export default function TournamentDetail() {
     return (
       <EmptyNote>
         ไม่พบทัวร์นาเมนต์นี้ในเครื่อง —{" "}
-        <Link href="/tournaments/" className="text-champagne underline-offset-2 hover:underline">
+        <Link href="/tournaments/" className="text-iris underline-offset-2 hover:underline">
           กลับไปหน้ารายการ
         </Link>
       </EmptyNote>
@@ -220,7 +220,7 @@ export default function TournamentDetail() {
           <div className="relative z-10 p-6 sm:p-8">
             <Link
               href="/tournaments/"
-              className="slug slug-2 inline-block transition-colors hover:text-champagne"
+              className="slug slug-2 inline-block transition-colors hover:text-iris"
             >
               ← ทัวร์นาเมนต์ทั้งหมด
             </Link>
@@ -228,7 +228,7 @@ export default function TournamentDetail() {
             <p className="slug mt-4">Tournament</p>
             <h2 className="mt-1.5 font-display text-display font-light text-ice">
               {finished ? (
-                <span className="text-gold-grad">{tournament.name}</span>
+                <span className="text-accent-grad">{tournament.name}</span>
               ) : (
                 tournament.name
               )}
@@ -387,7 +387,7 @@ export default function TournamentDetail() {
               ปลดล็อก
             </Button>
           </div>
-          {pinError && <p className="mt-2 text-xs text-[#e79a9a]">PIN ไม่ถูก</p>}
+          {pinError && <p className="mt-2 text-xs text-danger">PIN ไม่ถูก</p>}
         </Panel>
       )}
 
@@ -461,14 +461,14 @@ export default function TournamentDetail() {
                 off
                   ? "cursor-not-allowed text-muted opacity-40"
                   : tab === item.key
-                    ? "text-[#1b1509]"
+                    ? "text-onaccent"
                     : "text-muted hover:text-ice"
               }`}
             >
               {tab === item.key && !off && (
                 <motion.span
                   layoutId="tournament-tab"
-                  className="absolute inset-0 rounded-lg bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)]"
+                  className="absolute inset-0 rounded-lg accent-fill"
                   transition={{ type: "spring", stiffness: 340, damping: 32 }}
                 />
               )}
@@ -477,7 +477,7 @@ export default function TournamentDetail() {
                 {count != null && (
                   <span
                     className={`num text-eyebrow ${
-                      tab === item.key && !off ? "text-[#1b1509]/60" : "text-muted/70"
+                      tab === item.key && !off ? "text-onaccent/60" : "text-muted/70"
                     }`}
                   >
                     {count}
@@ -622,14 +622,14 @@ function Overview({
 
         {champName && (
           <Panel
-            accent="207 167 101"
+            accent="169 155 255"
             interactive={false}
             className="relative overflow-hidden p-6 text-center"
           >
             <Corners len={14} o={0.45} />
             <p className="slug">Champion</p>
             <p className="fig mt-3 text-3xl">
-              <span className="text-gold-grad">{champName}</span>
+              <span className="text-accent-grad">{champName}</span>
             </p>
           </Panel>
         )}

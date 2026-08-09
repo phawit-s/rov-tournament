@@ -83,7 +83,7 @@ export default function SetupScreen({ t }: Props) {
               onChange={(e) => setBulkText(e.target.value)}
               rows={6}
               placeholder={"วางรายชื่อทีละบรรทัด\nหรือคั่นด้วยลูกน้ำ"}
-              className="w-full resize-y field rounded-xl px-4 py-3 text-sm text-ice outline-none placeholder:text-muted/80 focus:border-champagne/50"
+              className="w-full resize-y field rounded-xl px-4 py-3 text-sm text-ice outline-none placeholder:text-muted/80 focus:border-iris/50"
             />
             <div className="flex gap-2">
               <Button
@@ -123,7 +123,7 @@ export default function SetupScreen({ t }: Props) {
           {derived.total === 0 ? (
             <div className="grid h-32 place-items-center rounded-xl tile-dashed">
               <div className="text-center">
-                <p className="font-display text-sm tracking-[0.2em] text-champagne/70">
+                <p className="font-display text-sm tracking-[0.2em] text-iris/70">
                   ยังไม่มีรายชื่อ
                 </p>
                 <p className="mt-1.5 text-xs text-muted">
@@ -143,7 +143,7 @@ export default function SetupScreen({ t }: Props) {
                     exit={{ opacity: 0, scale: 0.8 }}
                     transition={{ type: "spring", stiffness: 380, damping: 30 }}
                   >
-                    <div className="flex items-center gap-2 tile rounded-lg py-1.5 pr-1.5 pl-3 transition-colors duration-300 hover:border-champagne/35 hover-tile">
+                    <div className="flex items-center gap-2 tile rounded-lg py-1.5 pr-1.5 pl-3 transition-colors duration-300 hover:border-iris/35 hover-tile">
                       <span className="font-display text-[11px] text-muted tabular-nums">
                         {String(index + 1).padStart(2, "0")}
                       </span>
@@ -179,7 +179,7 @@ export default function SetupScreen({ t }: Props) {
                         type="button"
                         aria-label={`ลบ ${player.name}`}
                         onClick={() => dispatch({ type: "removePlayer", id: player.id })}
-                        className="grid h-6 w-6 cursor-pointer place-items-center rounded-md text-muted transition-colors hover-tile hover:text-[#e79a9a]"
+                        className="grid h-6 w-6 cursor-pointer place-items-center rounded-md text-muted transition-colors hover-tile hover:text-danger"
                       >
                         ✕
                       </button>
@@ -240,7 +240,7 @@ export default function SetupScreen({ t }: Props) {
         <div>
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <p className="text-sm font-medium text-ice/85">พรีวิวผลลัพธ์</p>
-            <p className="num font-display text-sm text-champagne">
+            <p className="num font-display text-sm text-iris">
               {summary.teams} ทีม
               {summary.bench > 0 && (
                 <span className="ml-1.5 text-muted">+ สำรอง {summary.bench}</span>
@@ -347,7 +347,7 @@ export default function SetupScreen({ t }: Props) {
               <input
                 value={state.seed}
                 onChange={(e) => dispatch({ type: "setSeed", seed: e.target.value })}
-                className="min-w-0 flex-1 field rounded-xl px-3.5 py-2.5 font-display text-sm tracking-[0.18em] text-champagne uppercase outline-none focus:border-champagne/50"
+                className="min-w-0 flex-1 field rounded-xl px-3.5 py-2.5 font-display text-sm tracking-[0.18em] text-iris uppercase outline-none focus:border-iris/50"
               />
               <button
                 type="button"
@@ -355,7 +355,7 @@ export default function SetupScreen({ t }: Props) {
                   sfx.play("click");
                   dispatch({ type: "reseed" });
                 }}
-                className="cursor-pointer rounded-xl border border-hair tile px-3.5 text-sm text-ice/80 transition-colors hover:border-champagne/40 hover:text-champagne"
+                className="cursor-pointer rounded-xl border border-hair tile px-3.5 text-sm text-ice/80 transition-colors hover:border-iris/40 hover:text-iris"
                 title="สุ่ม seed ใหม่"
               >
                 ↻
@@ -505,8 +505,8 @@ function Chip({
       }}
       className={`cursor-pointer rounded-lg border px-3 py-1.5 text-xs transition-all duration-300 ${
         danger
-          ? "border-[#e79a9a]/25 text-[#e79a9a]/90 hover:bg-[#e79a9a]/10"
-          : "border-hair text-ice/75 hover:border-champagne/35 hover:text-champagne"
+          ? "border-danger/25 text-danger/90 hover:bg-danger/10"
+          : "border-hair text-ice/75 hover:border-iris/35 hover:text-iris"
       }`}
     >
       {children}
@@ -548,12 +548,12 @@ function Segmented({
             }}
             className={`relative flex-1 cursor-pointer rounded-lg px-2 py-2.5 font-display transition-colors duration-300 ${
               small ? "text-xs" : "text-sm"
-            } ${active ? "text-[#1b1509]" : "text-ice/65 hover:text-ice"}`}
+            } ${active ? "text-onaccent" : "text-ice/65 hover:text-ice"}`}
           >
             {active && (
               <motion.span
                 layoutId={`seg-${options.map((o) => o.value).join("-")}`}
-                className="absolute inset-0 rounded-lg bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)]"
+                className="absolute inset-0 rounded-lg accent-fill"
                 transition={{ type: "spring", stiffness: 340, damping: 32 }}
               />
             )}
@@ -601,7 +601,7 @@ function Stepper({
             key={value}
             initial={{ opacity: 0.4, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
-            className="w-10 text-center font-display text-3xl font-light text-champagne tabular-nums"
+            className="w-10 text-center font-display text-3xl font-light text-iris tabular-nums"
           >
             {value}
           </motion.span>
@@ -639,7 +639,7 @@ function StepButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="grid h-9 w-9 cursor-pointer place-items-center rounded-full border border-hair text-lg leading-none text-ice/80 transition-all duration-300 hover:border-champagne/45 hover:text-champagne active:scale-90 disabled:cursor-not-allowed disabled:opacity-25"
+      className="grid h-9 w-9 cursor-pointer place-items-center rounded-full border border-hair text-lg leading-none text-ice/80 transition-all duration-300 hover:border-iris/45 hover:text-iris active:scale-90 disabled:cursor-not-allowed disabled:opacity-25"
     >
       {children}
     </button>
@@ -664,11 +664,11 @@ function Toggle({
         sfx.play("click");
         onChange(!checked);
       }}
-      className="flex w-full cursor-pointer items-center gap-3.5 tile rounded-xl px-4 py-3 text-left transition-colors duration-300 hover:border-champagne/35"
+      className="flex w-full cursor-pointer items-center gap-3.5 tile rounded-xl px-4 py-3 text-left transition-colors duration-300 hover:border-iris/35"
     >
       <span
         className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-300 ${
-          checked ? "bg-[linear-gradient(90deg,#bd9350,#f0d8ab)]" : "rule"
+          checked ? "accent-fill" : "rule"
         }`}
       >
         <motion.span

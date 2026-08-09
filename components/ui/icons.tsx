@@ -160,6 +160,49 @@ export const IconExternal = ({ className, strokeWidth }: IconProps) =>
     strokeWidth,
   );
 
+/* ---------- ปุ่มควบคุมการเล่น ---------- */
+
+export const IconPlay = ({ className }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <path d="M8 5.2v13.6a.8.8 0 0 0 1.22.68l10.9-6.8a.8.8 0 0 0 0-1.36L9.22 4.52A.8.8 0 0 0 8 5.2z" />
+  </svg>
+);
+
+export const IconPause = ({ className }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <rect x="6.5" y="5" width="3.8" height="14" rx="1.2" />
+    <rect x="13.7" y="5" width="3.8" height="14" rx="1.2" />
+  </svg>
+);
+
+export const IconSkip = ({ className }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <path d="M5 5.6v12.8a.8.8 0 0 0 1.24.66l9.3-6.4a.8.8 0 0 0 0-1.32l-9.3-6.4A.8.8 0 0 0 5 5.6z" />
+    <rect x="17" y="5" width="2.6" height="14" rx="1.2" />
+  </svg>
+);
+
+export const IconTrash = ({ className, strokeWidth }: IconProps) =>
+  base(
+    <>
+      <path d="M4.5 7h15M9.5 7V5.4A1.4 1.4 0 0 1 10.9 4h2.2a1.4 1.4 0 0 1 1.4 1.4V7" />
+      <path d="M6.5 7l.8 11.2A1.9 1.9 0 0 0 9.2 20h5.6a1.9 1.9 0 0 0 1.9-1.8L17.5 7" />
+      <path d="M10.5 11v5M13.5 11v5" />
+    </>,
+    className,
+    strokeWidth,
+  );
+
+export const IconSearch = ({ className, strokeWidth }: IconProps) =>
+  base(
+    <>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="M15.8 15.8L20 20" />
+    </>,
+    className,
+    strokeWidth,
+  );
+
 export const IconMore = ({ className, strokeWidth }: IconProps) =>
   base(
     <>

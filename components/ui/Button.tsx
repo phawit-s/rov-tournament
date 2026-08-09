@@ -21,12 +21,12 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const VARIANTS: Record<Variant, string> = {
   primary:
-    "text-[#1b1509] bg-[linear-gradient(180deg,#f2dcb0_0%,#d9b273_52%,#bd9350_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_12px_34px_-18px_rgba(207,167,101,0.9)] hover:-translate-y-px hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_18px_44px_-18px_rgba(207,167,101,0.95)] hover:brightness-105",
+    "text-onaccent accent-fill shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_12px_34px_-18px_rgba(169,155,255,0.9)] hover:-translate-y-px hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_18px_44px_-18px_rgba(207,167,101,0.95)] hover:brightness-105",
   outline:
-    "text-champagne border border-champagne/30 bg-champagne/5 hover:bg-champagne/15 hover:border-champagne/50",
+    "text-iris border border-iris/30 bg-iris/5 hover:bg-iris/15 hover:border-iris/50",
   ghost: "text-ice/85 border border-hair tile hover-tile hover:text-ice",
   danger:
-    "text-[#e79a9a] border border-[#e79a9a]/25 bg-[#e79a9a]/8 hover:bg-[#e79a9a]/14",
+    "text-danger border border-danger/25 bg-danger/8 hover:bg-danger/14",
 };
 
 const SIZES: Record<Size, string> = {
@@ -60,7 +60,7 @@ const Button = forwardRef<HTMLButtonElement, Props>(function Button(
         sfx.play("click");
         onClick?.(e);
       }}
-      className={`group relative isolate inline-flex cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl font-display font-medium tracking-wide transition-all duration-300 outline-none select-none focus-visible:ring-2 focus-visible:ring-champagne/50 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-none disabled:text-muted disabled:shadow-none disabled:ring-1 disabled:ring-[rgb(var(--hair)/var(--hair-a))] disabled:hover:translate-y-0 ${SIZES[size]} ${VARIANTS[variant]} ${className}`}
+      className={`group relative isolate inline-flex cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl font-display font-medium tracking-wide transition-all duration-300 outline-none select-none focus-visible:ring-2 focus-visible:ring-iris/50 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-none disabled:text-muted disabled:shadow-none disabled:ring-1 disabled:ring-[rgb(var(--hair)/var(--hair-a))] disabled:hover:translate-y-0 ${SIZES[size]} ${VARIANTS[variant]} ${className}`}
       {...rest}
     >
       <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">

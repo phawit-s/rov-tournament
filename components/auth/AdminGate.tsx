@@ -115,10 +115,10 @@ function AdminLocked() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") void submit();
                 }}
-                className={wrong ? "border-[#e79a9a]/60" : ""}
+                className={wrong ? "border-danger/60" : ""}
               />
               {wrong && (
-                <p className="mt-2 text-xs text-[#e79a9a]">รหัสไม่ถูกต้อง</p>
+                <p className="mt-2 text-xs text-danger">รหัสไม่ถูกต้อง</p>
               )}
               <Button
                 variant="outline"
@@ -133,7 +133,7 @@ function AdminLocked() {
             <button
               type="button"
               onClick={() => setShowPin(true)}
-              className="inline-flex cursor-pointer items-center gap-2 font-display text-xs text-muted transition-colors hover:text-champagne"
+              className="inline-flex cursor-pointer items-center gap-2 font-display text-xs text-muted transition-colors hover:text-iris"
             >
               <IconLock className="h-3.5 w-3.5" />
               ใช้รหัสผู้จัดสำหรับเครื่องนี้แทน
@@ -282,7 +282,7 @@ function AdminLocked() {
                           .catch(() => toast("คัดลอกไม่สำเร็จ", "error"));
                       }}
                       aria-label="คัดลอกรหัสผู้ใช้"
-                      className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-lg text-champagne transition-colors hover:bg-champagne/10"
+                      className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-lg text-iris transition-colors hover:bg-iris/10"
                     >
                       {copied ? (
                         <IconCheck className="h-4 w-4" strokeWidth={2} />
@@ -317,7 +317,7 @@ function AdminLocked() {
                 <button
                   type="button"
                   onClick={() => setShowPin(true)}
-                  className="flex cursor-pointer items-center gap-2 font-display text-xs text-muted transition-colors hover:text-champagne"
+                  className="flex cursor-pointer items-center gap-2 font-display text-xs text-muted transition-colors hover:text-iris"
                 >
                   <IconLock className="h-3.5 w-3.5" />
                   ใช้รหัสผู้จัดสำหรับเครื่องนี้แทน
@@ -349,10 +349,10 @@ function AdminLocked() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") void submit();
                 }}
-                className={wrong ? "border-[#e79a9a]/60" : ""}
+                className={wrong ? "border-danger/60" : ""}
               />
               {wrong && (
-                <p className="mt-2 text-xs text-[#e79a9a]">
+                <p className="mt-2 text-xs text-danger">
                   รหัสไม่ถูกต้อง ลองใหม่อีกครั้ง
                 </p>
               )}

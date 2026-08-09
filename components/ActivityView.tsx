@@ -53,7 +53,7 @@ const GROUPS: { key: string; label: string; types: ActivityType[] }[] = [
 ];
 
 /** สีเทากลางๆ ไว้ใช้ตอนเจอ kind ที่ยังไม่รู้จัก (ของเก่าหรือของใหม่กว่าโค้ดนี้) */
-const FALLBACK_RGB = "146 151 172";
+const FALLBACK_RGB = "126 130 153";
 
 type Source = "local" | "cloud";
 type CloudState = { status: "loading" | "ok" | "denied"; items: AuditEntry[] };
@@ -170,13 +170,13 @@ export default function ActivityView() {
               type="button"
               onClick={() => setSource(s.key)}
               className={`relative min-h-11 flex-1 cursor-pointer rounded-lg px-3 py-2.5 font-display text-xs transition-colors duration-300 sm:text-sm ${
-                source === s.key ? "text-[#1b1509]" : "text-muted hover:text-ice"
+                source === s.key ? "text-onaccent" : "text-muted hover:text-ice"
               }`}
             >
               {source === s.key && (
                 <motion.span
                   layoutId="activity-source"
-                  className="absolute inset-0 rounded-lg bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)]"
+                  className="absolute inset-0 rounded-lg accent-fill"
                   transition={{ type: "spring", stiffness: 340, damping: 32 }}
                 />
               )}
@@ -195,13 +195,13 @@ export default function ActivityView() {
               type="button"
               onClick={() => setGroup(g.key)}
               className={`relative min-h-11 flex-1 cursor-pointer rounded-lg px-3 py-2.5 font-display text-xs transition-colors duration-300 sm:text-sm ${
-                group === g.key ? "text-[#1b1509]" : "text-muted hover:text-ice"
+                group === g.key ? "text-onaccent" : "text-muted hover:text-ice"
               }`}
             >
               {group === g.key && (
                 <motion.span
                   layoutId="activity-tab"
-                  className="absolute inset-0 rounded-lg bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)]"
+                  className="absolute inset-0 rounded-lg accent-fill"
                   transition={{ type: "spring", stiffness: 340, damping: 32 }}
                 />
               )}
@@ -341,7 +341,7 @@ export default function ActivityView() {
                               {entry.tournamentId ? (
                                 <Link
                                   href={`/tournament/#t=${entry.tournamentId}`}
-                                  className="text-champagne underline-offset-2 hover:underline"
+                                  className="text-iris underline-offset-2 hover:underline"
                                 >
                                   {entry.tournamentName}
                                 </Link>

@@ -77,7 +77,7 @@ export default function ChampionWidget() {
               initial={reduced ? false : { letterSpacing: "0.4em", opacity: 0 }}
               animate={{ letterSpacing: "0.01em", opacity: 1 }}
               transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-              className="fig text-gold-grad relative px-4 text-[clamp(2.5rem,7vw,5rem)]"
+              className="fig text-accent-grad relative px-4 text-[clamp(2.5rem,7vw,5rem)]"
               style={{ backgroundImage: grad, backgroundSize: "220% 100%" }}
             >
               {team.name}

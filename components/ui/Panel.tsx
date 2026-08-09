@@ -37,7 +37,7 @@ const LIFT: Record<Variant, string> = {
 export default function Panel({
   children,
   className = "",
-  accent = "207 167 101",
+  accent = "169 155 255",
   style,
   interactive = true,
   tag,
@@ -72,23 +72,17 @@ export default function Panel({
         state ? "tally" : ""
       } ${state === "out" ? "state-out" : ""} relative rounded-2xl ${className}`}
     >
-      {/* ขอบทองไล่ระดับของการ์ดตัวเอก — วาดด้วย mask ไม่ใช้ backdrop-filter เพิ่ม */}
-      {variant === "feature" && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-[inherit] p-px"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgb(var(--tile)),rgb(var(--tile))), conic-gradient(from 210deg, rgb(var(--accent)/.7), transparent 40%, rgb(var(--accent)/.5))",
-            backgroundOrigin: "border-box",
-            WebkitMask:
-              "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
-            WebkitMaskComposite: "xor",
-            maskComposite: "exclude",
-          }}
-        />
-      )}
+      {/*
+        การ์ดตัวเอกไม่มีกรอบสีแล้ว
 
+        เดิมมีขอบไล่สีรอบใบ ซึ่งตอนเป็นทองยังพอกลืน แต่พอเป็นม่วงสว่างมันกลายเป็น
+        กรอบเรืองแสงรอบกล่องที่ดึงสายตาไปที่ "ขอบ" แทนที่จะเป็นของข้างใน
+        และตีกับผิวกระจกฝ้าโดยตรง — กระจกจริงสว่างที่ขอบเพราะแสงหักเห ไม่ใช่เพราะ
+        มีใครวาดเส้นสีล้อมไว้
+
+        ความเป็นตัวเอกตอนนี้มาจากเงาที่ลอยกว่า (shadow-lift-3) กับเส้นแสงบางๆ
+        ที่ขอบบน (.hairline-top) ซึ่งพอแล้วสำหรับการ์ดที่มีไม่เกินสองใบต่อหน้า
+      */}
       {ornament === "ring" && (
         <RingCluster
           size={200}
@@ -133,7 +127,7 @@ export function PanelHeader({
         </div>
         {action}
       </div>
-      <span className="rule mt-3 block h-px" />
+      <span className="rule-fade mt-3 block" />
     </div>
   );
 }

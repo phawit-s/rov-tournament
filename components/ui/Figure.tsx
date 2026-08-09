@@ -76,7 +76,7 @@ export default function Figure({
       {ratio != null && (
         <span className="rule mt-3 block h-[2px] w-full">
           <motion.span
-            className="block h-full origin-left bg-[linear-gradient(90deg,var(--color-gold-deep),var(--color-champagne))]"
+            className="block h-full origin-left bg-[linear-gradient(90deg,var(--color-iris-deep),var(--color-iris))]"
             initial={{ scaleX: 0 }}
             whileInView={{ scaleX: Math.max(0, Math.min(1, ratio)) }}
             viewport={{ once: true }}

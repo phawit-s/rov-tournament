@@ -5,7 +5,7 @@
  * ชี้เมาส์แล้วหมุนเร็วขึ้น กดแล้วเลื่อนลงไปเนื้อหาถัดไป
  */
 export default function RotatingBadge({
-  text = "TOURNEY HUB · จัดสาย · สุ่มทีม · โดเนท · วงล้อ · ",
+  text = "STEAMER HUB · จัดสาย · สุ่มทีม · โดเนท · วงล้อ · ",
   size = 132,
   className = "",
 }: {
@@ -47,7 +47,7 @@ export default function RotatingBadge({
         </defs>
         <text
           fill="currentColor"
-          className="font-display text-champagne/70 transition-colors duration-500 group-hover:text-champagne"
+          className="font-display text-iris/70 transition-colors duration-500 group-hover:text-iris"
           style={{ fontSize: 10, letterSpacing: "0.24em" }}
         >
           <textPath href="#badge-circle">{text}</textPath>
@@ -57,7 +57,7 @@ export default function RotatingBadge({
       {/* ลูกศรตรงกลาง */}
       <span
         aria-hidden
-        className="absolute grid h-11 w-11 place-items-center rounded-full border border-champagne/35 text-champagne transition duration-500 group-hover:border-champagne/70 group-hover:bg-champagne/10"
+        className="absolute grid h-11 w-11 place-items-center rounded-full border border-iris/35 text-iris transition duration-500 group-hover:border-iris/70 group-hover:bg-iris/10"
       >
         <svg
           viewBox="0 0 24 24"

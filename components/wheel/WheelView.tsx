@@ -18,6 +18,7 @@ import Crest from "../team/Crest";
 import Button from "../ui/Button";
 import Figure, { FigureRow } from "../ui/Figure";
 import Panel, { PanelHeader } from "../ui/Panel";
+import { SwitchRow } from "../ui/Switch";
 import SectionHead from "../ui/SectionHead";
 import { Meter, StatTile } from "../ui/hud";
 import GoldDust from "../fx/GoldDust";
@@ -264,7 +265,7 @@ export default function WheelView() {
               eyebrow="Entries"
               title="รายชื่อ"
               action={
-                <span className="num font-display text-2xl font-light text-champagne">
+                <span className="num font-display text-2xl font-light text-iris">
                   {state.entries.length}
                 </span>
               }
@@ -337,7 +338,7 @@ export default function WheelView() {
                         type="button"
                         onClick={() => wheelStore.remove(entry.id)}
                         aria-label={`ลบ ${entry.name}`}
-                        className="cursor-pointer px-1 text-xs text-muted transition-colors hover:text-[#e79a9a]"
+                        className="cursor-pointer px-1 text-xs text-muted transition-colors hover:text-danger"
                       >
                         ✕
                       </button>
@@ -357,13 +358,13 @@ export default function WheelView() {
             <PanelHeader eyebrow="Options" title="ลูกเล่น" />
 
             <div className="space-y-4">
-              <Switch
+              <SwitchRow
                 checked={state.removeWinner}
                 onChange={(v) => wheelStore.set({ removeWinner: v })}
                 label="คัดชื่อที่ออกแล้วทิ้ง"
                 hint="เหมาะกับจับฉลากไล่ทีละคน"
               />
-              <Switch
+              <SwitchRow
                 checked={state.useWeights}
                 onChange={(v) => wheelStore.set({ useWeights: v })}
                 label="ถ่วงน้ำหนักรายคน"
@@ -373,7 +374,7 @@ export default function WheelView() {
               <div>
                 <p className="mb-2 flex items-baseline justify-between text-sm font-medium text-ice/85">
                   <span>ความยาวการหมุน</span>
-                  <span className="num text-champagne">{state.duration} วิ</span>
+                  <span className="num text-iris">{state.duration} วิ</span>
                 </p>
                 <input
                   type="range"
@@ -471,7 +472,7 @@ export default function WheelView() {
                     <li
                       key={h.id}
                       className={`rounded-lg px-3 py-1.5 text-sm ${
-                        i === 0 ? "bg-champagne/15 text-champagne" : "tile text-ice/75"
+                        i === 0 ? "bg-iris/15 text-iris" : "tile text-ice/75"
                       }`}
                     >
                       <span className="num mr-1.5 font-display text-[11px] text-muted">
@@ -511,7 +512,7 @@ export default function WheelView() {
                           {row.expected != null && (
                             <span
                               aria-hidden
-                              className="absolute inset-y-0 border-l border-dashed border-champagne/55"
+                              className="absolute inset-y-0 border-l border-dashed border-iris/55"
                               style={{
                                 left: `${Math.min(100, (row.expected / row.scale) * 100)}%`,
                               }}
@@ -568,7 +569,7 @@ export default function WheelView() {
                           transition={{ duration: 1.2, ease: "easeOut" }}
                         >
                           <motion.span
-                            className="block h-40 w-40 rounded-full border border-champagne/60"
+                            className="block h-40 w-40 rounded-full border border-iris/60"
                             initial={{ scale: 0.25 }}
                             animate={{ scale: 3.4 }}
                             transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
@@ -587,7 +588,7 @@ export default function WheelView() {
 
                         <p className="slug mt-5">Winner</p>
                         <p className="mt-3 font-display text-4xl font-light wrap-break-word sm:text-5xl">
-                          <span className="text-gold-grad">{winner.name}</span>
+                          <span className="text-accent-grad">{winner.name}</span>
                         </p>
 
                         <span className="mx-auto mt-6 block h-px w-20 bg-[linear-gradient(90deg,transparent,rgb(var(--accent)/.55),transparent)]" />
@@ -680,8 +681,8 @@ function MiniButton({
       }}
       className={`cursor-pointer rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
         danger
-          ? "border-[#e79a9a]/25 text-[#e79a9a]/90 hover:bg-[#e79a9a]/10"
-          : "border-hair text-muted hover:text-champagne"
+          ? "border-danger/25 text-danger/90 hover:bg-danger/10"
+          : "border-hair text-muted hover:text-iris"
       }`}
     >
       {children}
@@ -689,44 +690,3 @@ function MiniButton({
   );
 }
 
-function Switch({
-  checked,
-  onChange,
-  label,
-  hint,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-  hint?: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => {
-        sfx.play("click");
-        onChange(!checked);
-      }}
-      className="flex w-full cursor-pointer items-center gap-3.5 rounded-xl tile px-4 py-3 text-left transition-colors hover:border-champagne/35"
-    >
-      <span
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-300 ${
-          checked ? "bg-[linear-gradient(90deg,#bd9350,#f0d8ab)]" : "rule"
-        }`}
-      >
-        <motion.span
-          layout
-          transition={{ type: "spring", stiffness: 500, damping: 34 }}
-          className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow"
-          style={{ left: checked ? 22 : 2 }}
-        />
-      </span>
-      <span className="min-w-0">
-        <span className="block text-sm text-ice">{label}</span>
-        {hint && <span className="block text-xs text-muted">{hint}</span>}
-      </span>
-    </button>
-  );
-}

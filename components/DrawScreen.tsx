@@ -74,7 +74,7 @@ export default function DrawScreen({ t }: { t: Tournament }) {
           <span className="min-w-0 flex-1">
             <PipRail total={total} revealed={state.revealed} colorOf={railColor} />
           </span>
-          <span className="num shrink-0 font-display text-sm text-champagne">
+          <span className="num shrink-0 font-display text-sm text-iris">
             {state.revealed}
             <span className="text-muted">/{total}</span>
           </span>
@@ -106,7 +106,7 @@ export default function DrawScreen({ t }: { t: Tournament }) {
         />
         <div className="sm:pl-6">
           {/* seed มีตัวอักษรปน จึงใช้ .num อย่างเดียว ไม่ใช้ .fig ที่ไว้สำหรับตัวเลขล้วน */}
-          <span className="num block truncate font-display text-[clamp(1.5rem,3.4vw,2.2rem)] leading-tight font-light text-champagne">
+          <span className="num block truncate font-display text-[clamp(1.5rem,3.4vw,2.2rem)] leading-tight font-light text-iris">
             {state.seed || "—"}
           </span>
           <p className="slug slug-2 mt-2">Seed</p>
@@ -139,7 +139,7 @@ export default function DrawScreen({ t }: { t: Tournament }) {
             onRevealAll={() => dispatch({ type: "revealAll" })}
           />
 
-          <Panel className="p-5" accent="155 160 179">
+          <Panel className="p-5" accent="138 142 168">
             <Panel.Header
               eyebrow="Pool"
               title="ยังไม่ถูกจับ"
@@ -245,7 +245,7 @@ function LiveFigure({
       {ratio != null && (
         <span className="rule mt-3 block h-0.5 w-full overflow-hidden">
           <motion.span
-            className="block h-full origin-left bg-[linear-gradient(90deg,var(--color-gold-deep),var(--color-champagne))]"
+            className="block h-full origin-left bg-[linear-gradient(90deg,var(--color-iris-deep),var(--color-iris))]"
             initial={false}
             animate={{ scaleX: pct }}
             transition={{ type: "spring", stiffness: 140, damping: 24 }}

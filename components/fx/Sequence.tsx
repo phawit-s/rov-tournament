@@ -110,14 +110,14 @@ export default function Sequence({
             {/* วงแหวนหดเข้าหาเลข — กลับทิศกับวงแหวนตอนออกผลของตู้จับสลาก */}
             <motion.span
               key={`ring-${count}`}
-              className="absolute h-28 w-28 rounded-full border border-champagne/45"
+              className="absolute h-28 w-28 rounded-full border border-iris/45"
               initial={{ scale: 3.4, opacity: 0 }}
               animate={{ scale: 0.35, opacity: 0.85 }}
               transition={{ duration: 0.22, ease: "easeIn" }}
             />
             <motion.span
               key={`n-${count}`}
-              className="fig num relative text-[clamp(3rem,12vw,7rem)] text-champagne"
+              className="fig num relative text-[clamp(3rem,12vw,7rem)] text-iris"
               initial={{ opacity: 0, scale: 1.35 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}

@@ -61,8 +61,8 @@ export function Meter({
           style={{
             transform: `scaleX(${width})`,
             background: over
-              ? "#e79a9a"
-              : "linear-gradient(90deg,var(--color-gold-deep),var(--color-champagne))",
+              ? "var(--color-danger)"
+              : "linear-gradient(90deg,var(--color-iris-deep),var(--color-iris))",
           }}
         />
       ) : (
@@ -70,8 +70,8 @@ export function Meter({
           className="block h-full origin-left"
           style={{
             background: over
-              ? "#e79a9a"
-              : "linear-gradient(90deg,var(--color-gold-deep),var(--color-champagne))",
+              ? "var(--color-danger)"
+              : "linear-gradient(90deg,var(--color-iris-deep),var(--color-iris))",
           }}
           initial={{ scaleX: 0 }}
           whileInView={{ scaleX: width }}
@@ -111,7 +111,7 @@ export function PipRail({
           return (
             <motion.span
               key={i}
-              className="inline-block h-2.5 w-1.5 rounded-full bg-champagne"
+              className="inline-block h-2.5 w-1.5 rounded-full bg-iris"
               animate={{ opacity: [1, 0.35, 1] }}
               transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
             />
@@ -179,7 +179,7 @@ export function CapacityRing({
           cy={size / 2}
           r={r}
           fill="none"
-          stroke="var(--color-champagne)"
+          stroke="var(--color-iris)"
           strokeWidth="3"
           strokeLinecap="round"
           strokeDasharray={`${c * pct} ${c}`}

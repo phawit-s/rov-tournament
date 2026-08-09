@@ -72,7 +72,7 @@ export default function BracketMini({ className = "" }: { className?: string }) 
 
       {/* หัวคอลัมน์ — ไม่ใช้ .slug เพราะ letter-spacing .32em ทำให้ตัวไทยกางจนล้นคอลัมน์ */}
       <g
-        className="fill-champagne/45 font-display"
+        className="fill-iris/45 font-display"
         style={{ fontSize: 6.5, letterSpacing: "0.14em" }}
       >
         <text x="6" y="10" className="bm-r1">
@@ -125,7 +125,7 @@ export default function BracketMini({ className = "" }: { className?: string }) 
           </text>
         ))}
         {R3_NAMES.map((n, i) => (
-          <text key={`r3-${i}`} x="198" y={R3_Y[i] - 3} className="fill-champagne/85">
+          <text key={`r3-${i}`} x="198" y={R3_Y[i] - 3} className="fill-iris/85">
             {n}
           </text>
         ))}
@@ -136,7 +136,7 @@ export default function BracketMini({ className = "" }: { className?: string }) 
         <path
           d={CHAMP_PATH}
           fill="none"
-          stroke="var(--color-champagne)"
+          stroke="var(--color-iris)"
           strokeWidth={1.4}
           strokeLinecap="round"
         />
@@ -144,7 +144,7 @@ export default function BracketMini({ className = "" }: { className?: string }) 
         <motion.path
           d={CHAMP_PATH}
           fill="none"
-          stroke="var(--color-champagne)"
+          stroke="var(--color-iris)"
           strokeWidth={1.4}
           strokeLinecap="round"
           initial={{ pathLength: 0, opacity: 0 }}
@@ -165,14 +165,14 @@ export default function BracketMini({ className = "" }: { className?: string }) 
           width={8}
           height={8}
           transform="rotate(45)"
-          fill="var(--color-champagne)"
+          fill="var(--color-iris)"
           opacity={0.9}
         />
         <text
           x="0"
           y="-11"
           textAnchor="middle"
-          className="fill-champagne/70 font-display"
+          className="fill-iris/70 font-display"
           style={{ fontSize: 6, letterSpacing: "0.14em" }}
         >
           แชมป์

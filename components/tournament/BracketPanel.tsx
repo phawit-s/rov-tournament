@@ -137,7 +137,7 @@ export default function BracketPanel({ tournament, isAdmin, onGoTeams }: Props) 
                 onChange={(e) =>
                   changeRoundBo(round, Number(e.target.value) as BestOf)
                 }
-                className="field num cursor-pointer rounded-lg px-2 py-1 font-display text-xs text-champagne outline-none"
+                className="field num cursor-pointer rounded-lg px-2 py-1 font-display text-xs text-iris outline-none"
               >
                 {BEST_OF_OPTIONS.map((bo) => (
                   <option key={bo} value={bo}>
@@ -146,7 +146,7 @@ export default function BracketPanel({ tournament, isAdmin, onGoTeams }: Props) 
                 ))}
               </select>
             ) : (
-              <span className="num font-display text-xs text-champagne">
+              <span className="num font-display text-xs text-iris">
                 BO{current[0]?.bestOf ?? 3}
               </span>
             )}

@@ -3,7 +3,7 @@ import AppShell from "@/components/AppShell";
 import SongRequestView from "@/components/song/SongRequestView";
 
 export const metadata: Metadata = {
-  title: "ขอเพลง — Tourney Hub",
+  title: "ขอเพลง — Steamer Hub",
   description: "วางลิงก์ YouTube แล้วส่งเข้าคิว เพลงจะขึ้นเล่นบนไลฟ์เอง",
 };
 

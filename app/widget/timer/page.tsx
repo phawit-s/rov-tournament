@@ -136,7 +136,7 @@ export default function TimerWidget() {
                   cy={dotY}
                   r="5"
                   fill={ringColor}
-                  style={{ filter: `drop-shadow(0 0 8px ${urgent ? "#e0566b" : accent})` }}
+                  style={{ filter: `drop-shadow(0 0 8px ${urgent ? "var(--color-live)" : accent})` }}
                 />
               )}
             </svg>

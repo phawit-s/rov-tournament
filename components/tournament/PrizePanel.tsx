@@ -15,12 +15,12 @@ type Props = { tournament: Tournament; isAdmin: boolean };
 /** ไล่เฉดตามอันดับ: ที่ 1 สว่างสุด อันดับท้ายๆ เข้มลงไปทางทองเก่า */
 function rampColor(index: number, count: number): string {
   const t = count <= 1 ? 0 : index / (count - 1);
-  const champagne = Math.round((1 - t) * 100);
-  return `color-mix(in srgb, var(--color-champagne) ${champagne}%, var(--color-gold-deep))`;
+  const iris = Math.round((1 - t) * 100);
+  return `color-mix(in srgb, var(--color-iris) ${iris}%, var(--color-iris-deep))`;
 }
 
 const PODIUM_INK: Record<number, string> = {
-  1: "var(--color-champagne)",
+  1: "var(--color-iris)",
   2: "var(--color-platinum)",
   3: "#c98c5a",
 };
@@ -191,7 +191,7 @@ export default function PrizePanel({ tournament, isAdmin }: Props) {
               {overrun && (
                 <>
                   <span
-                    className="absolute inset-y-0 right-0 bg-[#e79a9a]"
+                    className="absolute inset-y-0 right-0 bg-danger"
                     style={{ left: `${(prize.total / base) * 100}%` }}
                   />
                   <span
@@ -219,8 +219,8 @@ export default function PrizePanel({ tournament, isAdmin }: Props) {
                   remaining === 0
                     ? "text-muted"
                     : remaining > 0
-                      ? "text-champagne"
-                      : "text-[#e79a9a]"
+                      ? "text-iris"
+                      : "text-danger"
                 }`}
               >
                 {remaining === 0
@@ -263,7 +263,7 @@ export default function PrizePanel({ tournament, isAdmin }: Props) {
                       ) : (
                         <span className="grid h-5 w-5 place-items-center" aria-hidden />
                       )}
-                      <span className="num font-display text-lg text-champagne">
+                      <span className="num font-display text-lg text-iris">
                         {row.slot.place}
                       </span>
                     </span>
@@ -301,7 +301,7 @@ export default function PrizePanel({ tournament, isAdmin }: Props) {
                             type="button"
                             onClick={() => removeSlot(index)}
                             aria-label={`ลบ ${row.slot.label}`}
-                            className="cursor-pointer px-1.5 text-xs text-muted transition-colors hover:text-[#e79a9a]"
+                            className="cursor-pointer px-1.5 text-xs text-muted transition-colors hover:text-danger"
                           >
                             ✕
                           </button>
@@ -310,7 +310,7 @@ export default function PrizePanel({ tournament, isAdmin }: Props) {
                         <>
                           <p className="text-sm text-ice">{row.slot.label}</p>
                           {winners.length > 0 && (
-                            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-champagne">
+                            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-iris">
                               {winners.join(" · ")}
                             </p>
                           )}
@@ -320,7 +320,7 @@ export default function PrizePanel({ tournament, isAdmin }: Props) {
 
                     <span
                       className={`num text-right font-display text-lg ${
-                        row.slot.place === 1 ? "text-gold-grad" : "text-ice"
+                        row.slot.place === 1 ? "text-accent-grad" : "text-ice"
                       }`}
                     >
                       {money(row.amount)}
@@ -336,7 +336,7 @@ export default function PrizePanel({ tournament, isAdmin }: Props) {
               <button
                 type="button"
                 onClick={addSlot}
-                className="tile cursor-pointer rounded-lg px-3 py-1.5 text-xs text-muted transition-colors hover:text-champagne"
+                className="tile cursor-pointer rounded-lg px-3 py-1.5 text-xs text-muted transition-colors hover:text-iris"
               >
                 + เพิ่มอันดับ
               </button>
@@ -347,7 +347,7 @@ export default function PrizePanel({ tournament, isAdmin }: Props) {
                   onClick={() =>
                     setPrize({ slots: preset.slots.map((s) => ({ ...s })) })
                   }
-                  className="cursor-pointer rounded-lg px-2.5 py-1.5 text-xs text-muted transition-colors hover:text-champagne"
+                  className="cursor-pointer rounded-lg px-2.5 py-1.5 text-xs text-muted transition-colors hover:text-iris"
                 >
                   {preset.name}
                 </button>
@@ -439,7 +439,7 @@ function PodiumStep({
         {winners.length > 0 ? winners.join(" · ") : "—"}
       </p>
       <p
-        className={`num mt-1 font-display text-sm ${place === 1 ? "text-gold-grad" : ""}`}
+        className={`num mt-1 font-display text-sm ${place === 1 ? "text-accent-grad" : ""}`}
         style={place === 1 ? undefined : { color: ink }}
       >
         {formatMoney(amount, currency)}

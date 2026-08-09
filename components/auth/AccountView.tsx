@@ -55,7 +55,7 @@ export default function AccountView() {
         description="ชื่อในเกมกับช่องทางติดต่อที่ผู้จัดจะเห็นตอนคุณสมัครแข่ง แก้ได้ตลอดเวลา"
         meta={
           isAdmin ? (
-            <Badge rgb="221 175 100" hex="#ddaf64">
+            <Badge rgb="169 155 255" hex="var(--color-iris)">
               ผู้ดูแลระบบ
             </Badge>
           ) : undefined
@@ -94,7 +94,7 @@ export default function AccountView() {
             <PanelHeader eyebrow="Account" title="บัญชีนี้" />
 
             <div className="flex items-center gap-4">
-              <span className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full border border-champagne/40">
+              <span className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full border border-iris/40">
                 {user.photo ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -104,7 +104,7 @@ export default function AccountView() {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <span className="font-display text-lg text-champagne">
+                  <span className="font-display text-lg text-iris">
                     {(profile?.gameName || user.name).slice(0, 1)}
                   </span>
                 )}
@@ -115,7 +115,7 @@ export default function AccountView() {
                 </p>
                 {isAdmin && (
                   <span className="mt-1.5 inline-flex">
-                    <Badge rgb="221 175 100" hex="#ddaf64">
+                    <Badge rgb="169 155 255" hex="var(--color-iris)">
                       ผู้ดูแลระบบ
                     </Badge>
                   </span>

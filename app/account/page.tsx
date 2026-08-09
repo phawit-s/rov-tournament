@@ -4,7 +4,7 @@ import AuthGate from "@/components/auth/AuthGate";
 import AccountView from "@/components/auth/AccountView";
 
 export const metadata: Metadata = {
-  title: "โปรไฟล์ — Tourney Hub",
+  title: "โปรไฟล์ — Steamer Hub",
   description: "แก้ชื่อในเกมและช่องทางติดต่อของบัญชีคุณ",
 };
 

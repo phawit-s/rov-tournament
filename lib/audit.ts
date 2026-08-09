@@ -42,13 +42,13 @@ export type AuditEntry = {
 };
 
 export const AUDIT_META: Record<AuditKind, { label: string; rgb: string }> = {
-  "tournament.publish": { label: "เผยแพร่ทัวร์", rgb: "77 181 145" },
-  "tournament.unpublish": { label: "ถอดทัวร์ออก", rgb: "224 86 107" },
-  "channel.publish": { label: "อัปเดตช่อง", rgb: "109 146 219" },
-  "donation.approve": { label: "อนุมัติสลิป", rgb: "221 175 100" },
-  "donation.reject": { label: "ปฏิเสธสลิป", rgb: "224 86 107" },
-  "admin.add": { label: "เพิ่มผู้ดูแล", rgb: "160 121 216" },
-  "admin.remove": { label: "ถอดผู้ดูแล", rgb: "146 151 172" },
+  "tournament.publish": { label: "เผยแพร่ทัวร์", rgb: "52 227 176" },
+  "tournament.unpublish": { label: "ถอดทัวร์ออก", rgb: "255 91 122" },
+  "channel.publish": { label: "อัปเดตช่อง", rgb: "110 155 240" },
+  "donation.approve": { label: "อนุมัติสลิป", rgb: "169 155 255" },
+  "donation.reject": { label: "ปฏิเสธสลิป", rgb: "255 91 122" },
+  "admin.add": { label: "เพิ่มผู้ดูแล", rgb: "196 130 255" },
+  "admin.remove": { label: "ถอดผู้ดูแล", rgb: "126 130 153" },
 };
 
 /**

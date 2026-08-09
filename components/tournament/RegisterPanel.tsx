@@ -5,7 +5,6 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useNow } from "@/hooks/useClient";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { profileStore } from "@/lib/backend/users";
-import { compressImage } from "@/lib/image";
 import { LANES, identityFor, laneByLabel } from "@/lib/game";
 import { safeImageSrc } from "@/lib/safe";
 import {
@@ -28,6 +27,7 @@ import type { Tournament } from "@/lib/tournament/types";
 import AuthPanel from "../auth/AuthPanel";
 import Crest from "../team/Crest";
 import Button from "../ui/Button";
+import ImagePicker from "../ui/ImagePicker";
 import Panel from "../ui/Panel";
 import { IconCheck, LANE_ICON } from "../ui/icons";
 import { toast } from "../ui/Toast";
@@ -183,11 +183,11 @@ function MyApplication({
               </h3>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {approved ? (
-                  <Badge rgb="77 181 145" tone="done">
+                  <Badge rgb="52 227 176" tone="done">
                     ผ่านแล้ว · อยู่ในรายชื่อ
                   </Badge>
                 ) : (
-                  <Badge rgb="230 200 148">รอผู้จัดตรวจ</Badge>
+                  <Badge rgb="169 155 255">รอผู้จัดตรวจ</Badge>
                 )}
                 {at && (
                   <span className="num text-xs text-muted">
@@ -309,7 +309,7 @@ function GateCard({
               <p className="slug slug-2">เปิดรับใน</p>
               <Countdown
                 iso={gate.at}
-                className="num mt-1 block font-display text-2xl text-champagne"
+                className="num mt-1 block font-display text-2xl text-iris"
               />
               <p className="num mt-1 text-xs text-muted">{formatThaiDate(gate.at)}</p>
             </div>
@@ -392,7 +392,6 @@ function Wizard({
   const [lane, setLane] = useState<string>("");
   const [note, setNote] = useState("");
   const [image, setImage] = useState<string | null>(null);
-  const [imageError, setImageError] = useState<string | null>(null);
 
   const name = nameRaw ?? (solo ? myGameName : "");
   const ign = ignRaw ?? myGameName;
@@ -441,16 +440,6 @@ function Wizard({
 
   const blocked = blockedAt(step);
   const last = step === steps.length - 1;
-
-  const pickImage = async (file: File | undefined) => {
-    if (!file) return;
-    try {
-      setImage(await compressImage(file, { maxWidth: 400, maxBytes: 90_000 }));
-      setImageError(null);
-    } catch {
-      setImageError("อ่านรูปไม่ได้ ลองรูปอื่น");
-    }
-  };
 
   const send = async () => {
     setSending(true);
@@ -524,10 +513,11 @@ function Wizard({
                 </Field>
                 <ImagePicker
                   label="โลโก้ทีม"
-                  image={image}
-                  error={imageError}
-                  onPick={pickImage}
-                  onClear={() => setImage(null)}
+                  value={image}
+                  onChange={(v) => setImage(v ?? null)}
+                  placeholder={<Crest identity={identityFor(0)} size={34} />}
+                  maxWidth={400}
+                  maxBytes={90_000}
                 />
               </>
             )}
@@ -561,10 +551,11 @@ function Wizard({
                 </div>
                 <ImagePicker
                   label="รูปโปรไฟล์"
-                  image={image}
-                  error={imageError}
-                  onPick={pickImage}
-                  onClear={() => setImage(null)}
+                  value={image}
+                  onChange={(v) => setImage(v ?? null)}
+                  placeholder={<Crest identity={identityFor(0)} size={34} />}
+                  maxWidth={400}
+                  maxBytes={90_000}
                 />
               </>
             )}
@@ -577,7 +568,7 @@ function Wizard({
                   </Label>
                   <span
                     className={`num shrink-0 font-display text-sm ${
-                      filled >= teamSize ? "text-[#4db591]" : "text-champagne"
+                      filled >= teamSize ? "text-win" : "text-iris"
                     }`}
                   >
                     {filled}/{teamSize}
@@ -590,7 +581,7 @@ function Wizard({
                       <span
                         className={`num grid h-9 w-9 shrink-0 place-items-center rounded-lg font-display text-xs ${
                           i < teamSize
-                            ? "tile text-champagne"
+                            ? "tile text-iris"
                             : "tile-dashed text-muted"
                         }`}
                       >
@@ -609,7 +600,7 @@ function Wizard({
                         <button
                           type="button"
                           onClick={() => setSlotsRaw(slots.filter((_, j) => j !== i))}
-                          className="shrink-0 cursor-pointer px-1 text-xs text-muted transition-colors hover:text-[#e79a9a]"
+                          className="shrink-0 cursor-pointer px-1 text-xs text-muted transition-colors hover:text-danger"
                           aria-label="เอาช่องนี้ออก"
                         >
                           ✕
@@ -623,7 +614,7 @@ function Wizard({
                   <button
                     type="button"
                     onClick={() => setSlotsRaw([...slots, ""])}
-                    className="cursor-pointer text-xs text-champagne/85 transition-colors hover:text-champagne"
+                    className="cursor-pointer text-xs text-iris/85 transition-colors hover:text-iris"
                   >
                     + เพิ่มตัวสำรอง
                   </button>
@@ -674,7 +665,7 @@ function Wizard({
                   onEdit={() => setStep(0)}
                 />
 
-                {sendError && <p className="text-sm text-[#e79a9a]">{sendError}</p>}
+                {sendError && <p className="text-sm text-danger">{sendError}</p>}
               </>
             )}
           </motion.div>
@@ -734,15 +725,15 @@ function StepRail({
               onClick={() => onJump(i)}
               disabled={!done}
               className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors ${
-                done ? "cursor-pointer hover:bg-champagne/8" : "cursor-default"
+                done ? "cursor-pointer hover:bg-iris/8" : "cursor-default"
               }`}
             >
               <span
                 className={`num grid h-7 w-7 shrink-0 place-items-center rounded-full font-display text-xs transition-colors ${
                   active
-                    ? "bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)] text-[#1b1509]"
+                    ? "accent-fill"
                     : done
-                      ? "bg-[#4db591]/18 text-[#4db591]"
+                      ? "bg-win/18 text-win"
                       : "tile text-muted"
                 }`}
               >
@@ -761,7 +752,7 @@ function StepRail({
                 className="hidden h-px w-4 shrink-0 sm:block"
                 style={{
                   background: done
-                    ? "rgb(77 181 145 / 0.5)"
+                    ? "rgb(52 227 176 / 0.5)"
                     : "rgb(var(--hair) / var(--hair-a))",
                 }}
               />
@@ -788,7 +779,7 @@ function Field({
     <div>
       <Label hint={hint}>{label}</Label>
       {children}
-      {error && <p className="mt-1.5 text-xs text-[#e79a9a]">{error}</p>}
+      {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
     </div>
   );
 }
@@ -812,7 +803,7 @@ function LanePicker({
             onClick={() => onChange(on ? "" : l.label)}
             className={`flex cursor-pointer flex-col items-center gap-1.5 rounded-xl px-2 py-3 transition-all duration-200 ${
               on
-                ? "bg-champagne/14 text-champagne ring-1 ring-champagne/45"
+                ? "bg-iris/14 text-iris ring-1 ring-iris/45"
                 : "tile hover-tile text-muted hover:text-ice"
             }`}
           >
@@ -821,61 +812,6 @@ function LanePicker({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function ImagePicker({
-  label,
-  image,
-  error,
-  onPick,
-  onClear,
-}: {
-  label: string;
-  image: string | null;
-  error: string | null;
-  onPick: (file: File | undefined) => void | Promise<void>;
-  onClear: () => void;
-}) {
-  return (
-    <div>
-      <Label hint="ไม่ใส่ก็ได้ ระบบย่อรูปให้เอง">{label}</Label>
-      <div className="flex items-center gap-3">
-        {image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={safeImageSrc(image) ?? ""}
-            alt=""
-            className="h-16 w-16 rounded-xl object-cover"
-          />
-        ) : (
-          <div className="tile-dashed grid h-16 w-16 place-items-center rounded-xl">
-            <Crest identity={identityFor(0)} size={34} />
-          </div>
-        )}
-        <div className="space-y-1.5">
-          <label className="hover-tile tile inline-block cursor-pointer rounded-lg px-3 py-2 text-xs text-ice/80 transition-colors">
-            เลือกรูป
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => void onPick(e.target.files?.[0])}
-            />
-          </label>
-          {image && (
-            <button
-              type="button"
-              onClick={onClear}
-              className="block cursor-pointer text-xs text-muted transition-colors hover:text-[#e79a9a]"
-            >
-              เอาออก
-            </button>
-          )}
-        </div>
-      </div>
-      {error && <p className="mt-1.5 text-xs text-[#e79a9a]">{error}</p>}
     </div>
   );
 }
@@ -912,7 +848,7 @@ function Summary({
         <button
           type="button"
           onClick={onEdit}
-          className="cursor-pointer text-xs text-champagne/85 transition-colors hover:text-champagne"
+          className="cursor-pointer text-xs text-iris/85 transition-colors hover:text-iris"
         >
           กลับไปแก้
         </button>

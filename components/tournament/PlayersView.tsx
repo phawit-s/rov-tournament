@@ -12,7 +12,7 @@ import { CapacityRing, Meter } from "../ui/hud";
 import { ArtShield, EmptyState, Input, StatusBadge } from "./ui";
 
 const MEDAL_INK: Record<number, string> = {
-  1: "var(--color-champagne)",
+  1: "var(--color-iris)",
   2: "var(--color-platinum)",
   3: "#c98c5a",
 };
@@ -42,7 +42,7 @@ function Medal({ place, className = "h-4 w-4" }: { place: number; className?: st
 function Monogram({ name, size = 48 }: { name: string; size?: number }) {
   return (
     <span
-      className="sunken grid shrink-0 place-items-center rounded-full font-display text-champagne ring-1 ring-[rgb(var(--accent)/0.3)]"
+      className="sunken grid shrink-0 place-items-center rounded-full font-display text-iris ring-1 ring-[rgb(var(--accent)/0.3)]"
       style={{ width: size, height: size, fontSize: size * 0.4 }}
       aria-hidden
     >
@@ -99,7 +99,7 @@ export default function PlayersView() {
               สถิติจะขึ้นเองเมื่อมีรายชื่อผู้เล่นในทีมและมีการกรอกผลแมตช์ — เริ่มที่{" "}
               <Link
                 href="/tournaments/"
-                className="text-champagne underline-offset-2 hover:underline"
+                className="text-iris underline-offset-2 hover:underline"
               >
                 หน้าทัวร์นาเมนต์
               </Link>
@@ -146,7 +146,7 @@ export default function PlayersView() {
                         onClick={() => setSelected(rec.name)}
                         aria-pressed={selected === rec.name}
                         className={`grid w-full cursor-pointer grid-cols-[2.25rem_minmax(0,1fr)_6rem_2.75rem] items-center gap-3 px-4 py-3 text-left transition-colors sm:grid-cols-[2.25rem_minmax(0,1fr)_3rem_3rem_7rem_2.75rem] sm:px-5 ${
-                          selected === rec.name ? "bg-champagne/8" : "hover-tile"
+                          selected === rec.name ? "bg-iris/8" : "hover-tile"
                         }`}
                       >
                         <span className="flex items-center justify-center">
@@ -178,7 +178,7 @@ export default function PlayersView() {
                           </span>
                         </span>
 
-                        <span className="num text-right font-display text-sm text-champagne">
+                        <span className="num text-right font-display text-sm text-iris">
                           {rec.titles || "–"}
                         </span>
                       </button>
@@ -348,7 +348,7 @@ function ProfileCard({ rec, place }: { rec: PlayerRecord; place: number }) {
             <div className="flex items-center justify-between gap-3">
               <Link
                 href={`/tournament/#t=${row.tournamentId}`}
-                className="min-w-0 truncate text-sm text-ice transition-colors hover:text-champagne"
+                className="min-w-0 truncate text-sm text-ice transition-colors hover:text-iris"
               >
                 {row.tournamentName}
               </Link>
@@ -361,7 +361,7 @@ function ProfileCard({ rec, place }: { rec: PlayerRecord; place: number }) {
                   {row.placement <= 3 && (
                     <Medal place={row.placement} className="h-3.5 w-3.5" />
                   )}
-                  <span className="num text-champagne">อันดับ {row.placement}</span>
+                  <span className="num text-iris">อันดับ {row.placement}</span>
                 </>
               )}
             </p>

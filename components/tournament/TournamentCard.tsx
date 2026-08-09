@@ -108,7 +108,7 @@ export default function TournamentCard({
         </div>
 
         <Wrap href={href}>
-          <h3 className="font-display text-lg leading-snug font-medium text-balance text-ice transition-colors group-hover:text-champagne">
+          <h3 className="font-display text-lg leading-snug font-medium text-balance text-ice transition-colors group-hover:text-iris">
             {name}
           </h3>
         </Wrap>
@@ -175,7 +175,7 @@ export default function TournamentCard({
           </div>
           <div className="min-w-0">
             <dt className="slug slug-2">เงินรางวัล</dt>
-            <dd className="num mt-1 truncate font-display text-champagne">
+            <dd className="num mt-1 truncate font-display text-iris">
               {tournament.prize.total > 0
                 ? formatMoney(tournament.prize.total, tournament.prize.currency)
                 : "—"}
@@ -184,7 +184,7 @@ export default function TournamentCard({
           {top && tournament.prize.total > 0 && (
             <div className="col-span-2 min-w-0">
               <dt className="slug slug-2">{top.slot.label}</dt>
-              <dd className="num mt-1 font-display text-champagne">
+              <dd className="num mt-1 font-display text-iris">
                 {formatMoney(top.amount, tournament.prize.currency)}
               </dd>
             </div>

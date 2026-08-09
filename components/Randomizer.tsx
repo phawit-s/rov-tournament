@@ -79,17 +79,17 @@ function StepRail({ index }: { index: number }) {
             {i > 0 && (
               <span
                 className={`h-px w-5 transition-colors duration-500 sm:w-6 ${
-                  done || active ? "bg-champagne/45" : "rule"
+                  done || active ? "bg-iris/45" : "rule"
                 }`}
               />
             )}
             <span className="relative flex items-center gap-1.5">
               {done ? (
-                <IconCheck className="h-3 w-3 text-champagne/55" strokeWidth={2} />
+                <IconCheck className="h-3 w-3 text-iris/55" strokeWidth={2} />
               ) : (
                 <span
                   className={`num font-display text-[11px] ${
-                    active ? "text-champagne" : "text-muted/70"
+                    active ? "text-iris" : "text-muted/70"
                   }`}
                 >
                   {String(i + 1).padStart(2, "0")}
@@ -98,9 +98,9 @@ function StepRail({ index }: { index: number }) {
               <span
                 className={`font-display text-xs tracking-[0.14em] transition-colors duration-300 ${
                   active
-                    ? "text-champagne"
+                    ? "text-iris"
                     : done
-                      ? "text-champagne/55"
+                      ? "text-iris/55"
                       : "text-muted/70"
                 }`}
               >

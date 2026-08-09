@@ -402,7 +402,7 @@ export default function TeamsPanel({
                     <button
                       type="button"
                       onClick={() => setImage(null)}
-                      className="cursor-pointer text-xs text-muted transition-colors hover:text-[#e79a9a]"
+                      className="cursor-pointer text-xs text-muted transition-colors hover:text-danger"
                     >
                       เอาออก
                     </button>
@@ -410,7 +410,7 @@ export default function TeamsPanel({
                 </div>
               </div>
 
-              {error && <p className="text-xs text-[#e79a9a]">{error}</p>}
+              {error && <p className="text-xs text-danger">{error}</p>}
 
               <Button onClick={solo ? addSolo : addTeam}>
                 {solo ? "เพิ่มผู้เล่น" : "เพิ่มทีม"}
@@ -548,7 +548,7 @@ function MemberCount({ raw, size }: { raw: string; size: number }) {
   const enough = count >= size;
   return (
     <p className="num mt-2 text-xs text-muted">
-      <span className={enough ? "text-champagne" : "text-ice"}>{count}</span>/{size} คน
+      <span className={enough ? "text-iris" : "text-ice"}>{count}</span>/{size} คน
       {!enough && <span className="ml-1">— ยังขาด {size - count}</span>}
     </p>
   );
@@ -563,7 +563,7 @@ function AccountTally({ bound, total }: { bound: number; total: number }) {
     <div className="sunken mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-3.5 py-2.5">
       <span className="slug slug-2">บัญชี</span>
       <span className="num text-xs text-ice">
-        ผูกกับบัญชีแล้ว <span className="text-champagne">{bound}</span>
+        ผูกกับบัญชีแล้ว <span className="text-iris">{bound}</span>
         <span className="text-muted">/{total}</span>
       </span>
       {missing > 0 && (
@@ -603,11 +603,11 @@ function AccountLine({
     return (
       <div className={`flex flex-wrap items-center gap-2 ${className}`}>
         {accountId ? (
-          <Badge rgb="221 175 100" tone="done">
+          <Badge rgb="169 155 255" tone="done">
             ผูกกับบัญชีแล้ว
           </Badge>
         ) : (
-          <Badge rgb="146 151 172">ไม่มีบัญชี</Badge>
+          <Badge rgb="126 130 153">ไม่มีบัญชี</Badge>
         )}
         {isAdmin && contact && (
           <span className="min-w-0 flex-1 truncate text-xs text-muted">
@@ -631,7 +631,7 @@ function AccountLine({
             className="h-full w-full object-cover"
           />
         ) : (
-          <span className="font-display text-[11px] text-champagne">
+          <span className="font-display text-[11px] text-iris">
             {accountLabel(profile).slice(0, 1).toUpperCase()}
           </span>
         )}
@@ -686,7 +686,7 @@ function SoloRow({
           className="h-10 w-10 shrink-0 rounded-full object-cover"
         />
       ) : (
-        <span className="sunken grid h-10 w-10 shrink-0 place-items-center rounded-full font-display text-sm text-champagne ring-1 ring-[rgb(var(--accent)/0.28)]">
+        <span className="sunken grid h-10 w-10 shrink-0 place-items-center rounded-full font-display text-sm text-iris ring-1 ring-[rgb(var(--accent)/0.28)]">
           {player.name.slice(0, 1)}
         </span>
       )}
@@ -808,7 +808,7 @@ function TeamRow({
               key={`${team.id}-${i}`}
               className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs ${
                 i === 0
-                  ? "text-champagne ring-1 ring-[rgb(var(--accent)/0.4)]"
+                  ? "text-iris ring-1 ring-[rgb(var(--accent)/0.4)]"
                   : "tile text-ice/75"
               }`}
               style={i === 0 ? { background: "rgb(var(--accent) / 0.12)" } : undefined}
@@ -924,7 +924,7 @@ function RemoveButton({ label, onDone }: { label: string; onDone: () => void }) 
       onClick={onDone}
       aria-label={label}
       title={label}
-      className="tile grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-colors hover:text-[#e79a9a]"
+      className="tile grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-colors hover:text-danger"
     >
       <XMark className="h-3.5 w-3.5" />
     </button>
@@ -985,7 +985,7 @@ function HoldToRemove({ label, onDone }: { label: string; onDone: () => void }) 
       onKeyUp={cancel}
       aria-label={`${label} (กดค้าง)`}
       title={`${label} — กดค้างไว้เพื่อยืนยัน`}
-      className="tile relative grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-colors hover:text-[#e79a9a]"
+      className="tile relative grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-colors hover:text-danger"
     >
       <XMark className="h-3.5 w-3.5" />
       <svg
@@ -999,7 +999,7 @@ function HoldToRemove({ label, onDone }: { label: string; onDone: () => void }) 
             cy="18"
             r={r}
             fill="none"
-            stroke="#e79a9a"
+            stroke="var(--color-danger)"
             strokeWidth="2"
             strokeLinecap="round"
             strokeDasharray={c}

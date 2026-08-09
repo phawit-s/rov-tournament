@@ -104,7 +104,7 @@ export default function AccessPanel({ tournament, role }: Props) {
     <div className="space-y-5">
       {/* สิทธิ์ปัจจุบัน */}
       <Panel accent={ROLE_META[role].rgb} className="p-6">
-        <p className="font-display text-[10px] tracking-luxe text-champagne/70 uppercase">
+        <p className="font-display text-[10px] tracking-luxe text-iris/70 uppercase">
           สิทธิ์ของคุณ
         </p>
         <div className="mt-2.5 flex flex-wrap items-center gap-3">
@@ -158,7 +158,7 @@ export default function AccessPanel({ tournament, role }: Props) {
               เพิ่ม
             </Button>
           </div>
-          {error && <p className="mt-2 text-xs text-[#e79a9a]">{error}</p>}
+          {error && <p className="mt-2 text-xs text-danger">{error}</p>}
 
           {/* เลือกจากรายชื่อจริงแทนการพิมพ์อีเมลเอง — โผล่เฉพาะคนที่อ่านรายชื่อได้ */}
           {candidates.length > 0 && (
@@ -203,7 +203,7 @@ export default function AccessPanel({ tournament, role }: Props) {
                           }}
                           className={`tile flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
                             picked
-                              ? "border border-champagne/45 bg-champagne/10"
+                              ? "border border-iris/45 bg-iris/10"
                               : "hover-tile border border-transparent"
                           }`}
                         >
@@ -216,7 +216,7 @@ export default function AccessPanel({ tournament, role }: Props) {
                               {mail}
                             </span>
                           </span>
-                          <span className="shrink-0 font-display text-xs text-champagne">
+                          <span className="shrink-0 font-display text-xs text-iris">
                             {picked ? "อยู่ในช่องแล้ว" : "ใส่อีเมล"}
                           </span>
                         </button>
@@ -233,7 +233,7 @@ export default function AccessPanel({ tournament, role }: Props) {
               <span className="min-w-0 flex-1 truncate text-sm text-ice">
                 {tournament.ownerEmail ?? user?.email ?? "คุณ"}
               </span>
-              <span className="shrink-0 font-display text-xs text-champagne">
+              <span className="shrink-0 font-display text-xs text-iris">
                 เจ้าของ
               </span>
             </li>
@@ -273,7 +273,7 @@ export default function AccessPanel({ tournament, role }: Props) {
                           adminEmails: staff.filter((m) => m !== mail),
                         })
                       }
-                      className="shrink-0 cursor-pointer px-1 text-xs text-muted transition-colors hover:text-[#e79a9a]"
+                      className="shrink-0 cursor-pointer px-1 text-xs text-muted transition-colors hover:text-danger"
                     >
                       ✕
                     </button>
@@ -320,7 +320,7 @@ export default function AccessPanel({ tournament, role }: Props) {
                   {([row.owner, row.staff, row.member, row.guest] as boolean[]).map(
                     (ok, i) => (
                       <td key={i} className="px-3 py-3 text-center">
-                        <span className={ok ? "text-champagne" : "text-muted/30"}>
+                        <span className={ok ? "text-iris" : "text-muted/30"}>
                           {ok ? "✓" : "–"}
                         </span>
                       </td>
@@ -350,7 +350,7 @@ function AccountAvatar({ profile }: { profile: UserProfile }) {
           className="h-full w-full object-cover"
         />
       ) : (
-        <span className="font-display text-xs text-champagne">
+        <span className="font-display text-xs text-iris">
           {accountLabel(profile).slice(0, 1).toUpperCase()}
         </span>
       )}

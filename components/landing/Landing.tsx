@@ -116,14 +116,14 @@ function StepNo({ no }: { no: string }) {
       {reduced ? (
         <span
           aria-hidden
-          className={`fig absolute inset-0 block ${size} text-champagne/60`}
+          className={`fig absolute inset-0 block ${size} text-iris/60`}
         >
           {no}
         </span>
       ) : (
         <motion.span
           aria-hidden
-          className={`fig absolute inset-0 block ${size} text-champagne/60`}
+          className={`fig absolute inset-0 block ${size} text-iris/60`}
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true, amount: 0.7 }}
@@ -148,7 +148,7 @@ function FeatureHead({
 }) {
   return (
     <div className="flex items-center gap-2.5">
-      <Icon className="h-4 w-4 text-champagne/80" strokeWidth={1.5} />
+      <Icon className="h-4 w-4 text-iris/80" strokeWidth={1.5} />
       <span className="slug num">{no}</span>
       <span className="rule h-px flex-1" />
       <span className="slug slug-2">{tag}</span>
@@ -159,9 +159,9 @@ function FeatureHead({
 /** ลิงก์ปลายการ์ด */
 function OpenCue() {
   return (
-    <span className="mt-6 inline-flex items-center gap-2 font-display text-xs text-champagne transition-transform duration-500 group-hover:translate-x-1">
+    <span className="mt-6 inline-flex items-center gap-2 font-display text-xs text-iris transition-transform duration-500 group-hover:translate-x-1">
       เปิดดู
-      <span className="h-px w-8 bg-champagne/60" />
+      <span className="h-px w-8 bg-iris/60" />
     </span>
   );
 }
@@ -282,7 +282,7 @@ export default function Landing() {
                 }}
               >
                 {i === 1 ? (
-                  <span className="text-gold-grad">{line}</span>
+                  <span className="text-accent-grad">{line}</span>
                 ) : (
                   line
                 )}
@@ -485,7 +485,7 @@ export default function Landing() {
                   action={
                     <Link
                       href="/widgets/"
-                      className="font-display text-xs text-champagne hover:underline"
+                      className="font-display text-xs text-iris hover:underline"
                     >
                       ตั้งค่า →
                     </Link>
@@ -588,7 +588,7 @@ export default function Landing() {
           >
             <p className="slug">{admin ? "เริ่มจากศูนย์" : "พร้อมใช้ทันที"}</p>
             <h3 className="mx-auto mt-5 max-w-2xl font-display text-h2 font-light">
-              <span className="text-gold-grad">
+              <span className="text-accent-grad">
                 {admin
                   ? "ตั้งชื่อ ใส่จำนวนทีม แล้วกดจัดสาย"
                   : "ใส่รายชื่อ แล้วกดสุ่มได้เลย"}

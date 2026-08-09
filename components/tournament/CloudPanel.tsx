@@ -27,6 +27,8 @@ import { formatThaiDate } from "@/lib/tournament/share";
 import { tournamentStore } from "@/lib/tournament/store";
 import type { Tournament } from "@/lib/tournament/types";
 import Button from "../ui/Button";
+import { LinkLine } from "../ui/LinkRow";
+import MiniBtn from "../ui/MiniBtn";
 import Panel from "../ui/Panel";
 import { Badge, EmptyNote, RegStatusBadge } from "./ui";
 
@@ -117,7 +119,7 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
   return (
     <div className="space-y-5">
       {/* เผยแพร่ */}
-      <Panel accent="109 146 219" className="p-6">
+      <Panel accent="110 155 240" className="p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h3 className="font-display text-lg font-medium text-ice">เผยแพร่ทัวร์</h3>
@@ -166,17 +168,17 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
           )}
         </div>
 
-        {note && <p className="mt-3 text-xs text-champagne">{note}</p>}
+        {note && <p className="mt-3 text-xs text-iris">{note}</p>}
 
         {live && (
           <div className="mt-5 space-y-2 border-t border-hair pt-4 text-sm">
-            <LinkRow label="หน้าทัวร์ (คนดู)" url={`${origin}/tournament/#c=${tournament.id}`} />
+            <LinkLine label="หน้าทัวร์ (คนดู)" url={`${origin}/tournament/#c=${tournament.id}`} />
             {supportUrl ? (
-              <LinkRow label="สมทบทุนเงินรางวัล" url={supportUrl} />
+              <LinkLine label="สมทบทุนเงินรางวัล" url={supportUrl} />
             ) : (
               <p className="text-xs text-muted">
                 ตั้งชื่อช่องที่{" "}
-                <Link href="/channel/" className="text-champagne underline-offset-2 hover:underline">
+                <Link href="/channel/" className="text-iris underline-offset-2 hover:underline">
                   หน้าช่อง
                 </Link>{" "}
                 ก่อน แล้วจะได้ลิงก์สมทบทุน
@@ -202,7 +204,7 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
                     {meta ? (
                       <Badge rgb={meta.rgb}>{meta.label}</Badge>
                     ) : (
-                      <Badge rgb="146 151 172">{entry.kind}</Badge>
+                      <Badge rgb="126 130 153">{entry.kind}</Badge>
                     )}
                     <span className="min-w-0 truncate text-xs text-ice/75">
                       {entry.actorName}
@@ -220,13 +222,13 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
       </Panel>
 
       {/* สมทบทุน */}
-      <Panel accent="207 167 101" className="p-6">
+      <Panel accent="169 155 255" className="p-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="font-display text-eyebrow tracking-luxe text-champagne/70 uppercase">
+            <p className="font-display text-eyebrow tracking-luxe text-iris/70 uppercase">
               สมทบทุนเงินรางวัล
             </p>
-            <p className="mt-2 font-display text-3xl font-light text-champagne">
+            <p className="mt-2 font-display text-3xl font-light text-iris">
               {formatMoney(raised, tournament.prize.currency)}
             </p>
             <p className="mt-1.5 text-sm text-muted">
@@ -264,7 +266,7 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
                   className="flex items-center justify-between gap-3 text-sm"
                 >
                   <span className="min-w-0 truncate text-ice">{d.name}</span>
-                  <span className="shrink-0 font-display text-champagne">
+                  <span className="shrink-0 font-display text-iris">
                     {formatMoney(d.amount, tournament.prize.currency)}
                   </span>
                 </li>
@@ -321,7 +323,7 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
                     </p>
                     {/* ช่องติดต่อกับข้อความถึงผู้จัดต้องอ่านได้ก่อนกดรับ ไม่ใช่ต้องไปหาทีหลัง */}
                     {(reg.contact || reg.note) && (
-                      <p className="mt-1 truncate text-xs text-champagne/80">
+                      <p className="mt-1 truncate text-xs text-iris/80">
                         {[reg.contact, reg.note].filter(Boolean).join(" — ")}
                       </p>
                     )}
@@ -376,45 +378,3 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
   );
 }
 
-function LinkRow({ label, url }: { label: string; url: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="flex items-center gap-3">
-      <span className="w-40 shrink-0 text-xs text-muted">{label}</span>
-      <code className="min-w-0 flex-1 truncate text-xs text-ice/75">{url}</code>
-      <MiniBtn
-        onClick={() => {
-          void navigator.clipboard.writeText(url);
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1600);
-        }}
-      >
-        {copied ? "คัดลอกแล้ว" : "คัดลอก"}
-      </MiniBtn>
-    </div>
-  );
-}
-
-function MiniBtn({
-  children,
-  onClick,
-  danger,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`shrink-0 cursor-pointer rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
-        danger
-          ? "border-[#e79a9a]/25 text-[#e79a9a]/90 hover:bg-[#e79a9a]/10"
-          : "border-hair text-muted hover:text-champagne"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}

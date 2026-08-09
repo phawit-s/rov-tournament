@@ -4,7 +4,7 @@ import AdminGate from "@/components/auth/AdminGate";
 import Backoffice from "@/components/admin/Backoffice";
 
 export const metadata: Metadata = {
-  title: "หลังบ้าน — Tourney Hub",
+  title: "หลังบ้าน — Steamer Hub",
   description: "ดูผู้ใช้ ช่อง ทัวร์ และจัดการสิทธิ์ผู้ดูแล",
 };
 

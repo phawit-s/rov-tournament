@@ -280,7 +280,7 @@ function NextUpCard({
           <span className="font-display text-xs text-muted">
             {roundLabel(match.round, totalRounds)}
           </span>
-          <span className="num tile rounded-full px-2.5 py-1 font-display text-[11px] text-champagne">
+          <span className="num tile rounded-full px-2.5 py-1 font-display text-[11px] text-iris">
             BO{match.bestOf}
           </span>
         </div>
@@ -289,7 +289,7 @@ function NextUpCard({
       <div className="relative z-10 mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-5">
         <SideBig identity={ia} name={nameOf(match.a.teamId)} align="right" />
 
-        <span className="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[linear-gradient(180deg,#f2dcb0_0%,#d9b273_52%,#bd9350_100%)] font-display text-sm font-medium text-[#1b1509] shadow-[0_10px_28px_-14px_rgba(207,167,101,0.9)] sm:h-14 sm:w-14 sm:text-base">
+        <span className="relative grid h-12 w-12 shrink-0 place-items-center rounded-full accent-fill font-display text-sm font-medium text-onaccent shadow-[0_10px_28px_-14px_rgba(169,155,255,0.9)] sm:h-14 sm:w-14 sm:text-base">
           VS
         </span>
 
@@ -303,7 +303,7 @@ function NextUpCard({
             iso={match.scheduledAt}
             withSeconds
             passed="ถึงเวลาแล้ว"
-            className="mt-1 block font-display text-2xl text-champagne"
+            className="mt-1 block font-display text-2xl text-iris"
           />
           {match.scheduledAt && (
             <p className="num mt-1 text-xs text-muted">
@@ -317,10 +317,10 @@ function NextUpCard({
             href={live}
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-[#e0566b]/30 bg-[#e0566b]/12 px-5 font-display text-sm text-[#e0566b] transition-colors hover:bg-[#e0566b]/20"
+            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-live/30 bg-live/12 px-5 font-display text-sm text-live transition-colors hover:bg-live/20"
           >
             <motion.span
-              className="h-1.5 w-1.5 rounded-full bg-[#e0566b]"
+              className="h-1.5 w-1.5 rounded-full bg-live"
               animate={{ opacity: [1, 0.25, 1] }}
               transition={{ duration: 1.6, repeat: Infinity }}
             />
@@ -397,7 +397,7 @@ function TimelineRow({
       >
         {isNext && !reduced ? (
           <motion.span
-            className="block h-3 w-3 rotate-45 border border-champagne"
+            className="block h-3 w-3 rotate-45 border border-iris"
             animate={{ opacity: [1, 0.35, 1] }}
             transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
           />
@@ -408,7 +408,7 @@ function TimelineRow({
               done
                 ? { background: "rgb(var(--accent))" }
                 : isNext
-                  ? { border: "1px solid var(--color-champagne)" }
+                  ? { border: "1px solid var(--color-iris)" }
                   : {
                       background: "rgb(var(--hair) / var(--hair-a))",
                       opacity: 0.8,
@@ -420,7 +420,7 @@ function TimelineRow({
 
       <div
         className={`tile hover-tile rounded-xl px-4 py-3.5 transition-colors ${
-          isNext ? "ring-1 ring-champagne/25" : ""
+          isNext ? "ring-1 ring-iris/25" : ""
         }`}
       >
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -476,7 +476,7 @@ function TimelineRow({
               href={live}
               target="_blank"
               rel="noreferrer noopener"
-              className="mt-2 inline-flex items-center gap-1.5 font-display text-xs text-champagne underline-offset-2 hover:underline"
+              className="mt-2 inline-flex items-center gap-1.5 font-display text-xs text-iris underline-offset-2 hover:underline"
             >
               ดูไลฟ์แมตช์นี้
             </a>
@@ -533,7 +533,7 @@ function RowSide({
       <SeriesPips need={need} score={self.score} align="right" />
       <span
         className={`num w-4 shrink-0 text-right font-display text-sm ${
-          isWinner ? "text-champagne" : "text-muted"
+          isWinner ? "text-iris" : "text-muted"
         }`}
       >
         {self.score}

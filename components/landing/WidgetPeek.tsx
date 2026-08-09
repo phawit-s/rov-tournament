@@ -25,7 +25,7 @@ function ScoreBox({ value, lead }: { value: number; lead?: boolean }) {
       style={
         lead
           ? {
-              color: "var(--color-champagne)",
+              color: "var(--color-iris)",
               boxShadow: "inset 0 0 0 1px rgb(var(--accent) / .55)",
             }
           : { color: "var(--color-ice)" }
@@ -101,9 +101,9 @@ function MockChampion() {
   return (
     <Frame className="py-8 text-center">
       <p className="slug">Champion</p>
-      <p className="mt-3 font-display text-5xl font-light text-gold-grad">ราชสีห์</p>
+      <p className="mt-3 font-display text-5xl font-light text-accent-grad">ราชสีห์</p>
       <p className="mt-3 text-sm text-muted">บอส · เอิร์ธ · นิว · ป๊อป · แบงค์</p>
-      <p className="num mt-4 font-display text-xl text-champagne">฿ 12,000</p>
+      <p className="num mt-4 font-display text-xl text-iris">฿ 12,000</p>
     </Frame>
   );
 }
@@ -191,7 +191,7 @@ export default function WidgetPeek({ className = "" }: { className?: string }) {
             <span
               key={p.key}
               className={`inline-block h-1.5 w-1.5 rotate-45 transition-colors duration-500 ${
-                idx === i ? "bg-champagne" : "rule"
+                idx === i ? "bg-iris" : "rule"
               }`}
             />
           ))}

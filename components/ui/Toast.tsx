@@ -41,8 +41,8 @@ export function toast(text: string, tone: Tone = "info", ttl = 2600) {
 
 const GLYPH: Record<Tone, { mark: string; color: string }> = {
   success: { mark: "✓", color: "rgb(var(--st-win))" },
-  error: { mark: "✕", color: "#e79a9a" },
-  info: { mark: "◆", color: "var(--color-champagne)" },
+  error: { mark: "✕", color: "var(--color-danger)" },
+  info: { mark: "◆", color: "var(--color-iris)" },
 };
 
 /** วางครั้งเดียวใน AppShell */

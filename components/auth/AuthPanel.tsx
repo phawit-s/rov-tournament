@@ -108,13 +108,13 @@ export default function AuthPanel({
               type="button"
               onClick={() => setMode(m.key)}
               className={`relative min-h-11 flex-1 cursor-pointer rounded-lg px-3 py-2.5 font-display text-xs transition-colors ${
-                mode === m.key ? "text-[#1b1509]" : "text-muted hover:text-ice"
+                mode === m.key ? "text-onaccent" : "text-muted hover:text-ice"
               }`}
             >
               {mode === m.key && (
                 <motion.span
                   layoutId="auth-tab"
-                  className="absolute inset-0 rounded-lg bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)]"
+                  className="absolute inset-0 rounded-lg accent-fill"
                   transition={{ type: "spring", stiffness: 340, damping: 32 }}
                 />
               )}
@@ -198,7 +198,7 @@ export default function AuthPanel({
                   toast("ส่งลิงก์ตั้งรหัสผ่านใหม่ไปที่อีเมลแล้ว", "success");
                 });
               }}
-              className="min-h-11 w-full cursor-pointer text-center text-xs text-muted transition-colors hover:text-champagne"
+              className="min-h-11 w-full cursor-pointer text-center text-xs text-muted transition-colors hover:text-iris"
             >
               ลืมรหัสผ่าน?
             </button>

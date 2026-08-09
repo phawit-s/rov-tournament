@@ -93,7 +93,7 @@ export default function Backoffice() {
         title="ต้องเป็นผู้ดูแลที่ยืนยันแล้ว"
         description="รายชื่อผู้ใช้ ช่อง และทัวร์ อ่านได้เฉพาะบัญชีที่อยู่ในรายชื่อผู้ดูแลบนคลาวด์ — รหัสผู้จัดในเครื่องเปิดได้แค่เครื่องมือที่ทำงานในเบราว์เซอร์"
         action={
-          <Link href="/channel/" className="font-display text-sm text-champagne hover:underline">
+          <Link href="/channel/" className="font-display text-sm text-iris hover:underline">
             ไปหน้าช่อง →
           </Link>
         }
@@ -125,13 +125,13 @@ export default function Backoffice() {
             type="button"
             onClick={() => setTab(t.key)}
             className={`relative shrink-0 grow cursor-pointer rounded-lg px-3 py-2.5 font-display text-xs whitespace-nowrap transition-colors sm:text-sm ${
-              tab === t.key ? "text-[#1b1509]" : "text-muted hover:text-ice"
+              tab === t.key ? "text-onaccent" : "text-muted hover:text-ice"
             }`}
           >
             {tab === t.key && (
               <motion.span
                 layoutId="backoffice-tab"
-                className="absolute inset-0 rounded-lg bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)]"
+                className="absolute inset-0 rounded-lg accent-fill"
                 transition={{ type: "spring", stiffness: 340, damping: 32 }}
               />
             )}
@@ -140,7 +140,7 @@ export default function Backoffice() {
               {t.count > 0 && (
                 <span
                   className={`num text-eyebrow ${
-                    tab === t.key ? "text-[#1b1509]/60" : "text-muted/70"
+                    tab === t.key ? "text-onaccent/60" : "text-muted/70"
                   }`}
                 >
                   {t.count}
@@ -371,7 +371,7 @@ function Users({ users, loading }: { users: UserProfile[]; loading: boolean }) {
                   className="h-10 w-10 shrink-0 rounded-full object-cover"
                 />
               ) : (
-                <span className="sunken grid h-10 w-10 shrink-0 place-items-center rounded-full font-display text-sm text-champagne">
+                <span className="sunken grid h-10 w-10 shrink-0 place-items-center rounded-full font-display text-sm text-iris">
                   {(u.gameName || u.name || u.email || "?").slice(0, 1).toUpperCase()}
                 </span>
               )}
@@ -382,7 +382,7 @@ function Users({ users, loading }: { users: UserProfile[]; loading: boolean }) {
                     {u.gameName?.trim() || u.name?.trim() || "ยังไม่ได้ตั้งชื่อ"}
                   </p>
                   {!u.gameName?.trim() && (
-                    <Badge rgb="230 200 148">ยังไม่กรอกชื่อในเกม</Badge>
+                    <Badge rgb="169 155 255">ยังไม่กรอกชื่อในเกม</Badge>
                   )}
                 </div>
                 <p className="mt-0.5 truncate text-xs text-muted">
@@ -448,7 +448,7 @@ function Channels({ channels }: { channels: Channel[] }) {
                 className="h-10 w-10 shrink-0 rounded-xl object-cover"
               />
             ) : (
-              <span className="sunken grid h-10 w-10 shrink-0 place-items-center rounded-xl font-display text-sm text-champagne">
+              <span className="sunken grid h-10 w-10 shrink-0 place-items-center rounded-xl font-display text-sm text-iris">
                 {(c.name || c.handle || "?").slice(0, 1).toUpperCase()}
               </span>
             )}
@@ -461,14 +461,14 @@ function Channels({ channels }: { channels: Channel[] }) {
             </div>
 
             <div className="flex shrink-0 flex-wrap gap-1.5">
-              {c.donate?.enabled && <Badge rgb="221 175 100">รับโดเนท</Badge>}
-              {c.member?.enabled && <Badge rgb="160 121 216">สมาชิก</Badge>}
-              {c.songs?.enabled && <Badge rgb="77 181 145">ขอเพลง</Badge>}
+              {c.donate?.enabled && <Badge rgb="169 155 255">รับโดเนท</Badge>}
+              {c.member?.enabled && <Badge rgb="196 130 255">สมาชิก</Badge>}
+              {c.songs?.enabled && <Badge rgb="52 227 176">ขอเพลง</Badge>}
             </div>
 
             <Link
               href={`/c/#h=${c.handle || c.id}`}
-              className="shrink-0 font-display text-xs text-champagne hover:underline"
+              className="shrink-0 font-display text-xs text-iris hover:underline"
             >
               เปิดดู →
             </Link>

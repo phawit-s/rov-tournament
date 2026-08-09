@@ -317,15 +317,15 @@ export default function ChannelSupport() {
         <GoldDust count={22} />
         <Panel
           variant="feature"
-          accent="207 167 101"
+          accent="169 155 255"
           className="relative mx-auto max-w-lg p-9 text-center"
         >
           <Corners len={20} o={0.45} />
           <p className="slug">Thank you</p>
           <h2 className="mt-3 font-display text-3xl font-light">
-            <span className="text-gold-grad">ส่งสลิปเรียบร้อย</span>
+            <span className="text-accent-grad">ส่งสลิปเรียบร้อย</span>
           </h2>
-          <p className="num mt-4 font-display text-2xl text-champagne">
+          <p className="num mt-4 font-display text-2xl text-iris">
             {formatMoney(finalAmount)}
           </p>
           {autoApproved ? (
@@ -386,7 +386,7 @@ export default function ChannelSupport() {
               className="h-16 w-16 shrink-0 rounded-full object-cover"
             />
           ) : (
-            <span className="grid h-16 w-16 shrink-0 place-items-center rounded-full border border-champagne/35 font-display text-xl text-champagne">
+            <span className="grid h-16 w-16 shrink-0 place-items-center rounded-full border border-iris/35 font-display text-xl text-iris">
               {channel.name.slice(0, 1) || "R"}
             </span>
           )}
@@ -404,10 +404,10 @@ export default function ChannelSupport() {
               href={safeUrl(channel.live.url) ?? undefined}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#e0566b]/15 px-4 py-2 font-display text-xs text-[#e0566b]"
+              className="inline-flex shrink-0 items-center gap-2 rounded-full bg-live/15 px-4 py-2 font-display text-xs text-live"
             >
               <motion.span
-                className="h-1.5 w-1.5 rounded-full bg-[#e0566b]"
+                className="h-1.5 w-1.5 rounded-full bg-live"
                 animate={{ opacity: [1, 0.25, 1] }}
                 transition={{ duration: 1.6, repeat: Infinity }}
               />
@@ -431,13 +431,13 @@ export default function ChannelSupport() {
               type="button"
               onClick={() => setMode(m.key)}
               className={`relative min-h-11 flex-1 cursor-pointer rounded-lg px-3 py-2.5 font-display text-xs transition-colors sm:text-sm ${
-                mode === m.key ? "text-[#1b1509]" : "text-muted hover:text-ice"
+                mode === m.key ? "text-onaccent" : "text-muted hover:text-ice"
               }`}
             >
               {mode === m.key && (
                 <motion.span
                   layoutId="support-tab"
-                  className="absolute inset-0 rounded-lg bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)]"
+                  className="absolute inset-0 rounded-lg accent-fill"
                   transition={{ type: "spring", stiffness: 340, damping: 32 }}
                 />
               )}
@@ -488,7 +488,7 @@ export default function ChannelSupport() {
                             onClick={() => setMonths(m)}
                             className={`num min-h-11 cursor-pointer rounded-lg px-4 py-2 font-display text-sm transition-colors ${
                               months === m
-                                ? "bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)] text-[#1b1509]"
+                                ? "accent-fill"
                                 : "tile text-muted hover:text-ice"
                             }`}
                           >
@@ -517,7 +517,7 @@ export default function ChannelSupport() {
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -10 }}
                                 transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                                className="num font-display text-2xl text-champagne"
+                                className="num font-display text-2xl text-iris"
                               >
                                 {formatMoney(finalAmount)}
                               </motion.span>
@@ -539,7 +539,7 @@ export default function ChannelSupport() {
                         onClick={() => setAmount(q)}
                         className={`num min-h-11 cursor-pointer rounded-lg px-4 py-2 font-display text-sm transition-colors ${
                           amount === q
-                            ? "bg-[linear-gradient(180deg,#f0d8ab_0%,#d6ae6c_100%)] text-[#1b1509]"
+                            ? "accent-fill"
                             : "tile text-muted hover:text-ice"
                         }`}
                       >
@@ -557,7 +557,7 @@ export default function ChannelSupport() {
                     />
                   </div>
                   {tournamentId && (
-                    <p className="mt-3 rounded-xl tile px-4 py-3 text-xs text-champagne">
+                    <p className="mt-3 rounded-xl tile px-4 py-3 text-xs text-iris">
                       ยอดนี้จะนับเป็นการสมทบทุนเงินรางวัลของทัวร์ที่คุณเปิดมา
                     </p>
                   )}
@@ -661,12 +661,12 @@ export default function ChannelSupport() {
                       </span>
                     )}
                     {slipScan.state === "no-qr" && (
-                      <Badge rgb="155 160 179">
+                      <Badge rgb="138 142 168">
                         อ่าน QR ไม่เจอ — ผู้จัดจะตรวจด้วยตา
                       </Badge>
                     )}
                     {slipScan.state === "ok" && (
-                      <Badge rgb="77 181 145" tone="done">
+                      <Badge rgb="52 227 176" tone="done">
                         อ่าน QR สลิปได้แล้ว
                       </Badge>
                     )}
@@ -675,7 +675,7 @@ export default function ChannelSupport() {
               </div>
             </div>
 
-            {error && <p className="text-xs text-[#e79a9a]">{error}</p>}
+            {error && <p className="text-xs text-danger">{error}</p>}
 
             <Button
               size="lg"
@@ -696,7 +696,7 @@ export default function ChannelSupport() {
         </div>
 
         <div className="space-y-5">
-          <Panel accent="207 167 101" className="relative p-6 text-center">
+          <Panel accent="169 155 255" className="relative p-6 text-center">
             <p className="slug">PromptPay</p>
 
             {!promptPayId ? (
@@ -731,7 +731,7 @@ export default function ChannelSupport() {
                     className="mx-auto w-52 rounded-lg bg-white p-2"
                   />
                 </span>
-                <p className="num mt-4 font-display text-2xl text-champagne">
+                <p className="num mt-4 font-display text-2xl text-iris">
                   {finalAmount > 0 ? formatMoney(finalAmount) : "ระบุยอดเอง"}
                 </p>
                 <p className="mt-1.5 text-sm text-ice/85">
@@ -795,7 +795,7 @@ export default function ChannelSupport() {
               </div>
               <Link
                 href={`/song/#h=${channel.handle || channel.id}`}
-                className="hover-tile tile shrink-0 rounded-xl px-4 py-2.5 font-display text-xs text-ice/85 transition-colors hover:text-champagne"
+                className="hover-tile tile shrink-0 rounded-xl px-4 py-2.5 font-display text-xs text-ice/85 transition-colors hover:text-iris"
               >
                 ไปหน้าขอเพลง →
               </Link>
@@ -863,7 +863,7 @@ function TierCard({
             className="pointer-events-none absolute top-0 right-0 h-24 w-24 overflow-hidden"
             style={{ clipPath: "polygon(100% 0, 100% 100%, 0 0)" }}
           >
-            <span className="absolute top-4 -right-6 w-32 rotate-45 bg-[linear-gradient(90deg,#bd9350,#f0d8ab)] py-1 text-center font-display text-eyebrow font-semibold tracking-luxe text-[#1b1509]">
+            <span className="absolute top-4 -right-6 w-32 rotate-45 accent-fill py-1 text-center font-display text-eyebrow font-semibold tracking-luxe text-onaccent">
               คุ้มที่สุด
             </span>
           </span>

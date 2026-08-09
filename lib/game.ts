@@ -4,24 +4,24 @@ import type { TeamIdentity } from "./types";
 /** โทนอัญมณี ไม่ฉูดฉาด อ่านง่ายบนพื้นดำ */
 export const TEAM_IDENTITIES: TeamIdentity[] = [
   { name: "RUBY", short: "RBY", rgb: "224 96 112", hex: "#e06070", glyph: "◆" },
-  { name: "SAPPHIRE", short: "SPH", rgb: "109 146 219", hex: "#6d92db", glyph: "◇" },
-  { name: "AMETHYST", short: "AMT", rgb: "160 121 216", hex: "#a079d8", glyph: "✦" },
-  { name: "EMERALD", short: "EMR", rgb: "77 181 145", hex: "#4db591", glyph: "❖" },
-  { name: "TOPAZ", short: "TPZ", rgb: "221 175 100", hex: "#ddaf64", glyph: "◈" },
+  { name: "SAPPHIRE", short: "SPH", rgb: "110 155 240", hex: "var(--color-info)", glyph: "◇" },
+  { name: "AMETHYST", short: "AMT", rgb: "196 130 255", hex: "#c482ff", glyph: "✦" },
+  { name: "EMERALD", short: "EMR", rgb: "52 227 176", hex: "var(--color-win)", glyph: "❖" },
+  { name: "TOPAZ", short: "TPZ", rgb: "169 155 255", hex: "var(--color-iris)", glyph: "◈" },
   { name: "ROSE", short: "ROS", rgb: "219 133 163", hex: "#db85a3", glyph: "✧" },
   { name: "JADE", short: "JAD", rgb: "129 191 127", hex: "#81bf7f", glyph: "▲" },
   { name: "COBALT", short: "CBT", rgb: "122 133 214", hex: "#7a85d6", glyph: "●" },
   { name: "AMBER", short: "AMB", rgb: "220 148 89", hex: "#dc9459", glyph: "■" },
   { name: "AQUA", short: "AQA", rgb: "104 184 197", hex: "#68b8c5", glyph: "★" },
   { name: "PEARL", short: "PRL", rgb: "193 198 214", hex: "#c1c6d6", glyph: "◐" },
-  { name: "ONYX", short: "ONX", rgb: "146 151 172", hex: "#9297ac", glyph: "◼" },
+  { name: "ONYX", short: "ONX", rgb: "126 130 153", hex: "var(--color-out)", glyph: "◼" },
 ];
 
 export const BENCH_IDENTITY: TeamIdentity = {
   name: "ตัวสำรอง",
   short: "SUB",
-  rgb: "155 160 179",
-  hex: "#9ba0b3",
+  rgb: "138 142 168",
+  hex: "#8a8ea8",
   glyph: "○",
 };
 

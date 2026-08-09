@@ -3,7 +3,7 @@ import AppShell from "@/components/AppShell";
 import TournamentDetail from "@/components/tournament/TournamentDetail";
 
 export const metadata: Metadata = {
-  title: "รายละเอียดทัวร์นาเมนต์ — Tourney Hub",
+  title: "รายละเอียดทัวร์นาเมนต์ — Steamer Hub",
 };
 
 export default function TournamentPage() {

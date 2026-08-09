@@ -4,7 +4,7 @@ import AdminGate from "@/components/auth/AdminGate";
 import PlayersView from "@/components/tournament/PlayersView";
 
 export const metadata: Metadata = {
-  title: "ผู้เล่น — Tourney Hub",
+  title: "ผู้เล่น — Steamer Hub",
   description: "ประวัติการแข่งขันของผู้เล่นแต่ละคน",
 };
 

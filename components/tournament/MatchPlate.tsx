@@ -105,7 +105,7 @@ export default function MatchPlate({
       <Panel
         variant={isFinal ? "feature" : "plain"}
         interactive={false}
-        accent={done ? "207 167 101" : "155 160 179"}
+        accent={done ? "169 155 255" : "138 142 168"}
         className={`relative overflow-hidden p-3 transition-[box-shadow,opacity] duration-300 ${
           match.bye ? "opacity-60" : ""
         } ${lit ? "shadow-lift-3" : ""}`}
@@ -131,7 +131,7 @@ export default function MatchPlate({
 
         {isFinal && done && (
           <Laurel
-            className={`pointer-events-none absolute inset-x-0 h-9 w-24 text-champagne/25 ${
+            className={`pointer-events-none absolute inset-x-0 h-9 w-24 text-iris/25 ${
               match.winnerId === match.a.teamId ? "top-7" : "bottom-6"
             } mx-auto`}
           />
@@ -159,7 +159,7 @@ export default function MatchPlate({
         >
           <span className="slug">Champion</span>
           <p className="fig mt-1 truncate text-3xl">
-            <span className="text-gold-grad">{championName}</span>
+            <span className="text-accent-grad">{championName}</span>
           </p>
         </motion.div>
       )}
@@ -237,7 +237,7 @@ function Side({
             type="button"
             aria-label="เพิ่มคะแนน"
             onClick={() => bump(1)}
-            className="grid h-5 w-5 cursor-pointer place-items-center rounded text-xs text-muted transition-colors hover:text-champagne"
+            className="grid h-5 w-5 cursor-pointer place-items-center rounded text-xs text-muted transition-colors hover:text-iris"
           >
             +
           </button>
@@ -254,7 +254,7 @@ function Side({
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.22 }}
         className={`num w-4 shrink-0 text-right font-display text-base ${
-          isWinner ? "text-champagne" : "text-muted"
+          isWinner ? "text-iris" : "text-muted"
         }`}
       >
         {match.bye && !self.teamId ? "" : self.score}

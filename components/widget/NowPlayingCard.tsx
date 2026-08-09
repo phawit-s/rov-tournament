@@ -19,8 +19,13 @@ export const CARD_WIDTH: Record<CardShape, number> = { tall: 340, wide: 470 };
 /** ด้านของรูปปกในทรงนอน — พอดีกับความสูงของข้อความสามบรรทัด */
 const ART_WIDE = 104;
 
-/** เงานิ่ง วาดครั้งเดียวตอนแรก ไม่ได้ขยับตามเฟรม จึงไม่มีต้นทุนต่อเนื่อง */
-const DROP = "drop-shadow(0 26px 44px rgb(0 0 0 / 0.6))";
+/*
+  ไม่มีเงาทอดออกนอกการ์ดโดยตั้งใจ
+
+  เงาที่ดูดีตอนพรีวิวบนพื้นเข้ม กลายเป็นคราบดำฟุ้งเป็นสี่เหลี่ยมรอบการ์ดทันที
+  ที่วางทับภาพเกมสว่าง — พื้นหลัง widget โปร่งใส เงาจึงไม่มีอะไรให้ตกกระทบ
+  ขอบการ์ดอ่านออกอยู่แล้วจากสีพื้นที่ย้อมตามปกและเส้นขอบด้านใน
+*/
 
 /**
  * การ์ด "กำลังเล่น" — ย้อมสีตามรูปปกของเพลงที่เล่นอยู่
@@ -107,7 +112,6 @@ export default function NowPlayingCard({
           width,
           background: palette.base,
           transition: "background 600ms ease",
-          filter: DROP,
         }}
       >
         <div className="shrink-0" style={{ width: ART_WIDE }}>
@@ -121,7 +125,7 @@ export default function NowPlayingCard({
   return (
     /* ทรงสูง — ห้ามใส่ overflow-hidden ที่ชั้นนี้ มันจะเฉือนแสงฟุ้งรอบปกทิ้งหมด
        ลูกแต่ละใบมีมุมโค้งของตัวเองอยู่แล้ว จึงไม่ต้องมีอะไรมาครอบ */
-    <div key={key} className="rise-in" style={{ width, filter: DROP }}>
+    <div key={key} className="rise-in" style={{ width }}>
       {art}
 
       {/*

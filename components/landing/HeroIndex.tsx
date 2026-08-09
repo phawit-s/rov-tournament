@@ -68,7 +68,7 @@ function IndexNo({ no }: { no: string }) {
       </span>
       <span
         aria-hidden
-        className="fig absolute inset-0 block text-xl text-champagne opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+        className="fig absolute inset-0 block text-xl text-iris opacity-0 transition-opacity duration-500 group-hover:opacity-100"
       >
         {no}
       </span>
@@ -104,7 +104,7 @@ export default function HeroIndex({ className = "" }: { className?: string }) {
 
               <span className="flex min-w-0 items-baseline gap-2">
                 <e.Icon
-                  className="h-3.5 w-3.5 translate-y-[0.15em] shrink-0 text-champagne/70 transition-colors duration-500 group-hover:text-champagne"
+                  className="h-3.5 w-3.5 translate-y-[0.15em] shrink-0 text-iris/70 transition-colors duration-500 group-hover:text-iris"
                   strokeWidth={1.4}
                 />
                 <span className="min-w-0">
