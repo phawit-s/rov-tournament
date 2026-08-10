@@ -69,6 +69,11 @@ const TWO_PI = Math.PI * 2;
 /** ปุ่มบวก/ลบด่วน (วินาที) — ค่าที่ใช้จริงตอนไลฟ์ ไม่ต้องพิมพ์เอง */
 const QUICK = [-300, -60, 60, 300, 600];
 
+/** ข้อความสาเหตุจริงจาก Firestore — "ไม่สำเร็จ" ลอยๆ แก้อะไรไม่ได้เลย */
+function errText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /**
  * คอนโซลจับเวลาสดของสตรีมเมอร์
  *
@@ -295,7 +300,14 @@ function TimerBody({ channelId, channel }: { channelId: string; channel: Channel
 
       {/* ---------- หน้าตาของ widget ---------- */}
       <Reveal index={3}>
-        <StylePanel channelId={channelId} timer={timer} left={left} />
+        {/* key ผูกกับค่าที่บันทึกแล้ว — ร่างรีเซ็ตตัวเองเมื่อมีคนแก้จากอีกเครื่อง
+            โดยไม่ต้อง setState ใน useEffect */}
+        <StylePanel
+          key={`${timer.accent ?? ""}|${timer.fontScale}|${timer.wheelScale}|${timer.skin}|${timer.digits}`}
+          channelId={channelId}
+          timer={timer}
+          left={left}
+        />
       </Reveal>
 
       {/* ---------- ลิงก์สำหรับ OBS ---------- */}
@@ -381,209 +393,6 @@ function ChannelPicker({
 }
 
 /* =========================================================================
-   หน้าตาของ widget — สี + ขนาด
-   ========================================================================= */
-
-/**
- * ตั้งสีกับขนาดของ widget จากตรงนี้ ไม่ใช่จากพารามิเตอร์ท้ายลิงก์
- *
- * ค่าถูกเก็บไว้ที่ช่อง จึงมีผลกับทุก source ที่วางไว้ใน OBS พร้อมกัน
- * และช่องแต่ละช่องตั้งคนละสีได้ — ต่างจากการใส่ ?accent= ท้ายลิงก์ที่ต้อง
- * ไล่แก้ทีละ source แล้วรีเฟรชทีละอัน
- */
-function StylePanel({
-  channelId,
-  timer,
-  left,
-}: {
-  channelId: string;
-  timer: StreamTimer;
-  left: number;
-}) {
-  const tone = timerAccent(timer, "#a99bff");
-  const fontScale = clampScale(timer.fontScale, 0.6, 2.5);
-  const wheelScale = clampScale(timer.wheelScale, 0.6, 2);
-
-  const save = (style: Parameters<typeof setTimerStyle>[1]) =>
-    void setTimerStyle(channelId, style).catch(() =>
-      toast("บันทึกไม่สำเร็จ", "error"),
-    );
-
-  return (
-    <Panel className="p-6">
-      <Panel.Header eyebrow="Style" title="หน้าตาบนสตรีม" />
-
-      {/* ตัวอย่างจริง — ใช้ค่าชุดเดียวกับที่ widget ใช้ จะได้ไม่ต้องสลับไปดูใน OBS */}
-      <div className="sunken mb-5 grid place-items-center rounded-xl px-4 py-6">
-        {(timer.digits ?? "sans") === "seven" ? (
-          <SevenSegment
-            text={clockText(left)}
-            color={tone}
-            height={2.2 * fontScale}
-            ghost={timer.ghost ?? 0.08}
-          />
-        ) : (
-          <span
-            className="fig num leading-none"
-            style={{
-              fontSize: `${2.2 * fontScale}rem`,
-              color: tone,
-              textShadow: `0 0 24px ${tone}66`,
-            }}
-          >
-            {clockText(left)}
-          </span>
-        )}
-      </div>
-
-      <div className="space-y-5">
-        <div>
-          <p className="mb-2 text-sm font-medium text-ice/85">ทรงนาฬิกา</p>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {TIMER_SKINS.map((s) => {
-              const on = (timer.skin ?? "card") === s.key;
-              return (
-                <button
-                  key={s.key}
-                  type="button"
-                  onClick={() => save({ skin: s.key })}
-                  className={`min-h-11 cursor-pointer rounded-xl px-3 py-2.5 text-left transition-all ${
-                    on
-                      ? "bg-iris/14 text-iris ring-1 ring-iris/45"
-                      : "tile hover-tile text-muted hover:text-ice"
-                  }`}
-                >
-                  <span className="block font-display text-sm">{s.label}</span>
-                  <span className="mt-0.5 block text-xs text-muted">{s.hint}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div>
-          <p className="mb-2 text-sm font-medium text-ice/85">แบบตัวเลข</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {TIMER_DIGITS.map((d) => {
-              const on = (timer.digits ?? "sans") === d.key;
-              return (
-                <button
-                  key={d.key}
-                  type="button"
-                  onClick={() => save({ digits: d.key })}
-                  className={`min-h-11 cursor-pointer rounded-xl px-3 py-2.5 text-left transition-all ${
-                    on
-                      ? "bg-iris/14 text-iris ring-1 ring-iris/45"
-                      : "tile hover-tile text-muted hover:text-ice"
-                  }`}
-                >
-                  <span className="block font-display text-sm">{d.label}</span>
-                  <span className="mt-0.5 block text-xs text-muted">{d.hint}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div>
-          <p className="mb-2 text-sm font-medium text-ice/85">สีเน้น</p>
-          <div className="flex flex-wrap items-center gap-2">
-            {TIMER_ACCENTS.map((hex) => (
-              <button
-                key={hex}
-                type="button"
-                aria-label={`สี #${hex}`}
-                onClick={() => save({ accent: hex })}
-                className={`h-9 w-9 cursor-pointer rounded-full transition-transform hover:scale-110 ${
-                  tone.toLowerCase() === `#${hex}`
-                    ? "ring-2 ring-ice ring-offset-2 ring-offset-transparent"
-                    : ""
-                }`}
-                style={{ background: `#${hex}` }}
-              />
-            ))}
-            <Input
-              defaultValue={tone.replace("#", "")}
-              onBlur={(e) => {
-                const hex = e.target.value.replace("#", "").trim();
-                if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
-                  toast("ใส่เลขสี 6 หลัก เช่น a99bff", "error");
-                  return;
-                }
-                save({ accent: hex });
-              }}
-              className="w-32"
-              placeholder="a99bff"
-              aria-label="เลขสีเอง"
-            />
-          </div>
-        </div>
-
-        <ScaleRow
-          label="ขนาดตัวเลขนาฬิกา"
-          value={fontScale}
-          min={0.6}
-          max={2.5}
-          onChange={(v) => save({ fontScale: v })}
-        />
-        <ScaleRow
-          label="ขนาดวงล้อ"
-          value={wheelScale}
-          min={0.6}
-          max={2}
-          onChange={(v) => save({ wheelScale: v })}
-        />
-      </div>
-
-      <p className="mt-4 text-xs leading-relaxed text-muted">
-        เปลี่ยนแล้วมีผลกับทุก source ที่วางไว้ใน OBS ทันที ไม่ต้องแก้ลิงก์หรือรีเฟรช
-        — ถ้าอยากได้คนละสีต่อ source ยังใส่ <code>?accent=xxxxxx</code> ท้ายลิงก์ทับได้
-      </p>
-    </Panel>
-  );
-}
-
-/** แถบเลื่อนขนาด — ปล่อยนิ้วแล้วค่อยบันทึก ไม่ใช่เขียนทุกขีดที่ลากผ่าน */
-function ScaleRow({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (v: number) => void;
-}) {
-  const [local, setLocal] = useState(value);
-  const fill = (local - min) / (max - min);
-
-  return (
-    <div>
-      <div className="mb-2 flex items-baseline justify-between gap-3">
-        <p className="text-sm font-medium text-ice/85">{label}</p>
-        <span className="num text-xs text-muted">{local.toFixed(2)}×</span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={0.05}
-        value={local}
-        onChange={(e) => setLocal(Number(e.target.value))}
-        onPointerUp={() => onChange(local)}
-        onKeyUp={() => onChange(local)}
-        className="w-full"
-        style={{ ["--fill" as string]: fill }}
-        aria-label={label}
-      />
-    </div>
-  );
-}
-
-/* =========================================================================
    วงล้อ + ปุ่มหมุน
    ========================================================================= */
 
@@ -647,8 +456,8 @@ function SpinPanel({
         คอนโซลอยู่หนึ่งรอบเต็ม — ตั้งใจ เพราะคนดูควรเห็นวงล้อหมุนพร้อมกับที่
         สตรีมเมอร์ประกาศ ไม่ใช่รู้ผลไปแล้วก่อนวงล้อจะหยุด
       */
-      void recordSpin(channelId, timer, slices[index]).catch(() =>
-        toast("บันทึกผลหมุนไม่สำเร็จ", "error"),
+      void recordSpin(channelId, timer, slices[index]).catch((err) =>
+        toast(`บันทึกผลหมุนไม่สำเร็จ — ${errText(err)}`, "error", 7000),
       );
     };
     raf.current = requestAnimationFrame(step);
@@ -716,7 +525,7 @@ function SpinPanel({
 }
 
 /* =========================================================================
-   แก้ช่องบนวงล้อ
+   ช่องบนวงล้อ
    ========================================================================= */
 
 function SliceEditor({
@@ -731,7 +540,9 @@ function SliceEditor({
   const [editing, setEditing] = useState<string | null>(null);
 
   const save = (next: WheelSlice[]) =>
-    saveSlices(channelId, next).catch(() => toast("บันทึกไม่สำเร็จ", "error"));
+    saveSlices(channelId, next).catch((err) =>
+      toast(`บันทึกไม่สำเร็จ — ${errText(err)}`, "error", 7000),
+    );
 
   const update = (id: string, patch: Partial<WheelSlice>) =>
     void save(slices.map((s) => (s.id === id ? { ...s, ...patch } : s)));
@@ -750,6 +561,7 @@ function SliceEditor({
       <div className="space-y-2.5">
         {slices.map((s) => {
           const custom = !!s.label?.trim();
+          const unit = s.unit ?? "min";
           return (
             <div
               key={s.id}
@@ -757,30 +569,27 @@ function SliceEditor({
             >
               <div className="flex items-center gap-1.5">
                 <Stepper
-                  value={s.seconds / UNIT_SECONDS[s.unit ?? "min"]}
-                  min={-UNIT_MAX[s.unit ?? "min"]}
-                  max={UNIT_MAX[s.unit ?? "min"]}
+                  value={s.seconds / UNIT_SECONDS[unit]}
+                  min={-UNIT_MAX[unit]}
+                  max={UNIT_MAX[unit]}
                   step={1}
                   onChange={(v) =>
-                    update(s.id, {
-                      seconds: Math.round(v * UNIT_SECONDS[s.unit ?? "min"]),
-                    })
+                    update(s.id, { seconds: Math.round(v * UNIT_SECONDS[unit]) })
                   }
-                  ariaLabel={`เวลาเป็น${UNIT_LABEL[s.unit ?? "min"]} ติดลบได้`}
+                  ariaLabel={`เวลาเป็น${UNIT_LABEL[unit]} ติดลบได้`}
                 />
                 {/*
                   สลับหน่วยแล้ว "ตัวเลขคงเดิม ความหมายเปลี่ยน" — 5 นาที กด ชม.
                   แล้วได้ 5 ชั่วโมง ไม่ใช่ 0.08 ชั่วโมง เพราะคนที่กดปุ่มนี้กำลังคิดว่า
                   "เอาเป็นชั่วโมงแทน" ไม่ได้กำลังแปลงหน่วยของค่าเดิม
-                  และผลเห็นทันทีที่ข้อความข้างๆ จึงไม่มีอะไรเปลี่ยนแบบเงียบๆ
                 */}
                 <UnitToggle
-                  value={s.unit ?? "min"}
+                  value={unit}
                   onChange={(u) =>
                     update(s.id, {
                       unit: u,
                       seconds: Math.round(
-                        (s.seconds / UNIT_SECONDS[s.unit ?? "min"]) * UNIT_SECONDS[u],
+                        (s.seconds / UNIT_SECONDS[unit]) * UNIT_SECONDS[u],
                       ),
                     })
                   }
@@ -797,17 +606,14 @@ function SliceEditor({
               />
 
               {/*
-                ข้อความไม่ใช่ช่องกรอกอีกต่อไป มันคือ "ผลลัพธ์" ของเวลาที่ตั้งไว้
-
-                ของเดิมมีช่องข้อความกับช่องเวลาแยกกัน ซึ่งพูดเรื่องเดียวกันสองที่
-                แล้วขัดกันเองได้ (เขียน "+1 นาที" แต่ค่าจริงเป็น 4) — ตอนนี้
-                ข้อความวิ่งตามเวลาเสมอ กดที่ข้อความเมื่อไหร่ถึงจะพิมพ์ทับเองได้
+                ข้อความไม่ใช่ช่องกรอก มันคือ "ผลลัพธ์" ของเวลาที่ตั้งไว้
+                ของเดิมแยกกันสองช่อง ซึ่งขัดกันเองได้ (เขียน "+1 นาที" แต่ค่าจริง 4)
               */}
               {editing === s.id ? (
                 <Input
                   autoFocus
                   defaultValue={s.label ?? ""}
-                  placeholder={deltaText(s.seconds, s.unit)}
+                  placeholder={deltaText(s.seconds, unit)}
                   onBlur={(e) => {
                     update(s.id, { label: e.target.value.slice(0, 24) });
                     setEditing(null);
@@ -856,10 +662,324 @@ function SliceEditor({
         </MiniBtn>
         <p className="text-xs leading-relaxed text-muted">
           ข้อความสร้างจากเวลาให้เอง กดที่ข้อความถ้าอยากพิมพ์เอง (ลบให้ว่างเพื่อกลับไปอัตโนมัติ)
-          · เวลาใส่ติดลบได้ · โอกาสออกยิ่งมากยิ่งกินพื้นที่วงล้อ · สูงสุด {SLICE_LIMIT} ช่อง
+          · เวลาใส่ติดลบได้ · สูงสุด {SLICE_LIMIT} ช่อง
         </p>
       </div>
     </Panel>
+  );
+}
+
+/* =========================================================================
+   หน้าตาของ widget — สี + ขนาด
+   ========================================================================= */
+
+/**
+ * ตั้งสีกับขนาดของ widget จากตรงนี้ ไม่ใช่จากพารามิเตอร์ท้ายลิงก์
+ *
+ * ค่าถูกเก็บไว้ที่ช่อง จึงมีผลกับทุก source ที่วางไว้ใน OBS พร้อมกัน
+ * และช่องแต่ละช่องตั้งคนละสีได้ — ต่างจากการใส่ ?accent= ท้ายลิงก์ที่ต้อง
+ * ไล่แก้ทีละ source แล้วรีเฟรชทีละอัน
+ */
+function StylePanel({
+  channelId,
+  timer,
+  left,
+}: {
+  channelId: string;
+  timer: StreamTimer;
+  left: number;
+}) {
+  /*
+    หน้านี้ใช้ "ร่าง + ปุ่มบันทึก" ไม่ใช่บันทึกทันทีทุกครั้งที่ขยับ
+
+    สองเหตุผล: ลากแถบเลื่อนทีเดียวยิงค่าเป็นร้อยครั้ง ถ้าเขียนทุกครั้งคือเขียน
+    ฐานข้อมูลร้อยรอบ — และที่สำคัญกว่าคือถ้าเขียนไม่ผ่าน (สิทธิ์/เน็ต) การบันทึก
+    เงียบๆ ทำให้คนตั้งค่าไม่มีทางรู้เลยจนกว่าจะเปลี่ยนเครื่องแล้วพบว่าค่าหายหมด
+    มีปุ่มแล้วความสำเร็จ/ล้มเหลวมีที่รายงานชัดเจน
+  */
+  const saved = {
+    accent: timerAccent(timer, "#a99bff"),
+    fontScale: clampScale(timer.fontScale, 0.6, 2.5),
+    wheelScale: clampScale(timer.wheelScale, 0.6, 2),
+    skin: timer.skin ?? "card",
+    digits: timer.digits ?? "sans",
+  };
+
+  const [draft, setDraft] = useState(saved);
+  const [busy, setBusy] = useState(false);
+  const set = (patch: Partial<typeof saved>) =>
+    setDraft((prev) => ({ ...prev, ...patch }));
+
+  const dirty =
+    draft.accent !== saved.accent ||
+    draft.fontScale !== saved.fontScale ||
+    draft.wheelScale !== saved.wheelScale ||
+    draft.skin !== saved.skin ||
+    draft.digits !== saved.digits;
+
+  const commit = async () => {
+    setBusy(true);
+    try {
+      await setTimerStyle(channelId, {
+        accent: draft.accent,
+        fontScale: draft.fontScale,
+        wheelScale: draft.wheelScale,
+        skin: draft.skin,
+        digits: draft.digits,
+      });
+      toast("บันทึกแล้ว — เปิดที่เครื่องไหนก็ได้ค่าเดิม", "success", 2200);
+    } catch (err) {
+      /* บอกสาเหตุจริงจาก Firestore ไม่ใช่ "ไม่สำเร็จ" ลอยๆ — เขียนไม่ผ่านได้หลายทาง
+         (ไม่ใช่เจ้าของช่อง / เน็ตหลุด / กติกาเปลี่ยน) ซึ่งแก้คนละแบบกันหมด */
+      toast(
+        `บันทึกไม่สำเร็จ — ${errText(err)}`,
+        "error",
+        7000,
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Panel className="p-6">
+      <Panel.Header
+        eyebrow="Style"
+        title="หน้าตาบนสตรีม"
+        action={
+          <div className="flex items-center gap-3">
+            {dirty && (
+              <span className="slug" style={{ color: "rgb(var(--st-next))" }}>
+                ยังไม่ได้บันทึก
+              </span>
+            )}
+            <Button
+              size="sm"
+              loading={busy}
+              disabled={!dirty}
+              variant={dirty ? "primary" : "outline"}
+              onClick={() => void commit()}
+            >
+              {dirty ? "บันทึก" : "บันทึกแล้ว"}
+            </Button>
+          </div>
+        }
+      />
+
+      {/* ตัวอย่างจริง — ใช้ค่าร่าง จึงเห็นผลก่อนกดบันทึก */}
+      <div className="sunken mb-5 grid place-items-center rounded-xl px-4 py-6">
+        {draft.digits === "seven" ? (
+          <SevenSegment
+            text={clockText(left)}
+            color={draft.accent}
+            height={2.2 * draft.fontScale}
+            ghost={timer.ghost ?? 0.08}
+          />
+        ) : (
+          <span
+            className="fig num leading-none"
+            style={{
+              fontSize: `${2.2 * draft.fontScale}rem`,
+              color: draft.accent,
+              textShadow: `0 0 24px ${draft.accent}66`,
+            }}
+          >
+            {clockText(left)}
+          </span>
+        )}
+      </div>
+
+      <div className="space-y-5">
+        <div>
+          <p className="mb-2 text-sm font-medium text-ice/85">ทรงนาฬิกา</p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {TIMER_SKINS.map((s) => (
+              <PickCard
+                key={s.key}
+                on={draft.skin === s.key}
+                label={s.label}
+                hint={s.hint}
+                onClick={() => set({ skin: s.key })}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-sm font-medium text-ice/85">แบบตัวเลข</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {TIMER_DIGITS.map((d) => (
+              <PickCard
+                key={d.key}
+                on={draft.digits === d.key}
+                label={d.label}
+                hint={d.hint}
+                onClick={() => set({ digits: d.key })}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-sm font-medium text-ice/85">สีเน้น</p>
+          <AccentPicker value={draft.accent} onChange={(hex) => set({ accent: `#${hex}` })} />
+        </div>
+
+        <ScaleRow
+          label="ขนาดตัวเลขนาฬิกา"
+          value={draft.fontScale}
+          min={0.6}
+          max={2.5}
+          onChange={(v) => set({ fontScale: v })}
+        />
+        <ScaleRow
+          label="ขนาดวงล้อ"
+          value={draft.wheelScale}
+          min={0.6}
+          max={2}
+          onChange={(v) => set({ wheelScale: v })}
+        />
+      </div>
+
+      <p className="mt-4 text-xs leading-relaxed text-muted">
+        ค่าเก็บไว้ที่ช่องบนคลาวด์ — เปลี่ยนเครื่องหรือล้างเบราว์เซอร์แล้วยังได้ค่าเดิม
+        และทุก source ใน OBS เปลี่ยนตามพร้อมกันโดยไม่ต้องแก้ลิงก์
+      </p>
+    </Panel>
+  );
+}
+
+/** การ์ดตัวเลือกแบบกดเลือกได้ทีละอัน — ใช้ทั้งทรงนาฬิกาและแบบตัวเลข */
+function PickCard({
+  on,
+  label,
+  hint,
+  onClick,
+}: {
+  on: boolean;
+  label: string;
+  hint: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={`min-h-11 cursor-pointer rounded-xl px-3 py-2.5 text-left transition-all ${
+        on
+          ? "bg-iris/14 text-iris ring-1 ring-iris/45"
+          : "tile hover-tile text-muted hover:text-ice"
+      }`}
+    >
+      <span className="block font-display text-sm">{label}</span>
+      <span className="mt-0.5 block text-xs text-muted">{hint}</span>
+    </button>
+  );
+}
+
+/** แถบเลื่อนขนาด — ค่ามาจากร่างของแม่ ไม่มี state ซ้อนอีกชั้นให้หลุดกัน */
+function ScaleRow({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <p className="text-sm font-medium text-ice/85">{label}</p>
+        <span className="num text-xs text-muted">{value.toFixed(2)}×</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={0.05}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full"
+        style={{ ["--fill" as string]: (value - min) / (max - min) }}
+        aria-label={label}
+      />
+    </div>
+  );
+}
+
+/**
+ * เลือกสี — มีสามทางเพราะใช้คนละงาน
+ *
+ *   ชุดสำเร็จรูป : กดทีเดียวได้สีที่เข้ากับงานแน่ๆ (ใช้บ่อยที่สุด)
+ *   จานสี        : ไล่หาสีเอง และดูดสีจากโลโก้บนจอได้ด้วย eyedropper ของ OS
+ *   ช่องเลขสี    : ใส่สีแบรนด์ที่มีอยู่แล้ว ซึ่งเล็งจากจานสีให้ตรงเป๊ะไม่ได้
+ *
+ * ทุกทางแก้แค่ "ร่าง" ของหน้า ยังไม่เขียนคลาวด์จนกว่าจะกดบันทึก
+ */
+function AccentPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (hex: string) => void;
+}) {
+  const clean = value.replace("#", "").toLowerCase();
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {TIMER_ACCENTS.map((hex) => (
+          <button
+            key={hex}
+            type="button"
+            aria-label={`สี #${hex}`}
+            aria-pressed={clean === hex}
+            onClick={() => onChange(hex)}
+            className={`h-9 w-9 cursor-pointer rounded-full transition-transform hover:scale-110 ${
+              clean === hex ? "ring-2 ring-ice ring-offset-2 ring-offset-transparent" : ""
+            }`}
+            style={{ background: `#${hex}` }}
+          />
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value.replace("#", ""))}
+          className="h-11 w-16 shrink-0"
+          aria-label="เลือกสีเอง"
+        />
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="slug slug-2 shrink-0">#</span>
+          <Input
+            key={clean}
+            defaultValue={clean}
+            onBlur={(e) => {
+              const next = e.target.value.replace("#", "").trim().toLowerCase();
+              if (!/^[0-9a-f]{6}$/.test(next)) {
+                toast("ใส่เลขสี 6 หลัก เช่น a99bff", "error");
+                return;
+              }
+              onChange(next);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+            className="num w-28"
+            placeholder="a99bff"
+            aria-label="เลขสีเน้น"
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 

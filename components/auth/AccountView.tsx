@@ -44,6 +44,7 @@ export default function AccountView() {
   const user = authStore.user();
   const state = profileStore.state();
   const profile = profileStore.profile();
+  const profileError = profileStore.error();
   const [signOutOpen, setSignOutOpen] = useState(false);
 
   return (
@@ -72,12 +73,45 @@ export default function AccountView() {
       ) : state === "loading" || authSnapshot === "loading" ? (
         <AccountSkeleton />
       ) : !user || user.anonymous || state === "none" ? (
-        <EmptyState
-          art={<ArtShield />}
-          no="08"
-          title="ยังอ่านโปรไฟล์ไม่ได้"
-          description="ลองออกจากระบบแล้วล็อกอินใหม่อีกครั้ง ถ้ายังไม่ได้ให้ทักคนที่ดูแลเว็บ"
-        />
+        /*
+          ทางออกต้องอยู่นอกส่วนที่พัง
+
+          ของเดิมปุ่มออกจากระบบอยู่ในการ์ด "บัญชีนี้" ซึ่งจะไม่ถูกเรนเดอร์เลย
+          ถ้าอ่านโปรไฟล์ไม่ผ่าน — คนที่เจอปัญหานี้จึงติดอยู่กับหน้าที่บอกให้
+          "ลองออกจากระบบ" แต่ไม่มีปุ่มให้กด
+        */
+        <Panel className="p-6 sm:p-7">
+          <EmptyState
+            art={<ArtShield />}
+            no="08"
+            title="ยังอ่านโปรไฟล์ไม่ได้"
+            description="บัญชีล็อกอินอยู่ แต่ดึงข้อมูลโปรไฟล์จากคลาวด์ไม่สำเร็จ"
+          />
+
+          {profileError && (
+            <p className="num mt-4 rounded-xl tile px-4 py-3 text-xs break-all text-muted">
+              สาเหตุจากระบบ: {profileError}
+            </p>
+          )}
+
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <Button variant="ghost" onClick={() => window.location.reload()}>
+              ลองใหม่
+            </Button>
+            {user && (
+              <Button variant="danger" onClick={() => setSignOutOpen(true)}>
+                ออกจากระบบ
+              </Button>
+            )}
+          </div>
+
+          <p className="mt-4 text-xs leading-relaxed text-muted">
+            ถ้าขึ้นว่า <code>permission-denied</code> แปลว่ากติกาความปลอดภัยของ
+            Firestore ยังไม่ถูกส่งขึ้นไป (ต้อง deploy <code>firestore.rules</code> แยก
+            จากการ deploy เว็บ) · ถ้าเป็น <code>unavailable</code> ให้ลองปิดส่วนขยาย
+            กันโฆษณาเฉพาะเว็บนี้ หรือเปลี่ยนเครือข่าย
+          </p>
+        </Panel>
       ) : (
         <div className="grid items-start gap-5 lg:grid-cols-2">
           {/*

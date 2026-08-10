@@ -45,6 +45,15 @@ export function isComplete(p: UserProfile | null): boolean {
 
 let mine: UserProfile | null = null;
 let mineState: "loading" | "none" | "ready" = hasBackend ? "loading" : "none";
+/**
+ * สาเหตุที่อ่านโปรไฟล์ไม่ได้ — ต้องเก็บไว้ ไม่ใช่กลืนทิ้ง
+ *
+ * "อ่านไม่ได้" เกิดได้หลายทางที่แก้คนละเรื่องกันสิ้นเชิง: กติกาปฏิเสธ
+ * (permission-denied) / ต่อเน็ตไม่ติด (unavailable) / ส่วนขยายบล็อก —
+ * ถ้าหน้าจอบอกได้แค่ "ยังอ่านโปรไฟล์ไม่ได้" คนใช้ก็ได้แต่เดา และคนที่ดูแลเว็บ
+ * ก็ช่วยไม่ได้เพราะไม่มีอะไรให้ดูเลย
+ */
+let mineError: string | null = null;
 let snapshot = "loading";
 const listeners = new Set<() => void>();
 let unsubDoc: Unsubscribe | null = null;
@@ -119,9 +128,10 @@ function syncWithAuth() {
         void ensureProfile();
       }
     },
-    () => {
+    (err) => {
       mine = null;
       mineState = "none";
+      mineError = err?.message ?? String(err);
       emit();
     },
   );
@@ -156,6 +166,7 @@ export const profileStore = {
 
   profile: () => mine,
   state: () => mineState,
+  error: () => mineError,
 
   /** กรอกโปรไฟล์ให้ครบ — เรียกจากฟอร์ม */
   async save(patch: { gameName?: string; contact?: string }) {

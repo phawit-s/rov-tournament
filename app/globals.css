@@ -1041,6 +1041,34 @@ input[type="file"] {
   cursor: pointer;
 }
 
+/*
+  ช่องเลือกสีของเบราว์เซอร์ — ปรับได้เท่าที่สเปกเปิดให้
+
+  ตัวช่องเองแต่งได้แค่กรอบนอก ส่วนจานสีที่เด้งขึ้นมาเป็นของระบบปฏิบัติการ
+  แต่งไม่ได้และไม่ควรพยายามเลียนแบบ — จานสีของ OS คนใช้คุ้นมืออยู่แล้ว
+  และมีเครื่องมือดูดสีจากจอ (eyedropper) ที่เขียนเองไม่ได้
+*/
+input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid rgb(var(--hair) / calc(var(--hair-a) + 0.1));
+  border-radius: 99px;
+  padding: 3px;
+}
+input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 99px;
+}
+input[type="color"]::-moz-color-swatch {
+  border: none;
+  border-radius: 99px;
+}
+
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
