@@ -7,6 +7,7 @@ import {
   SLICE_LIMIT,
   clampScale,
   remainingAt,
+  sliceLabel,
   type StreamTimer,
   type WheelSlice,
 } from "./types";
@@ -38,6 +39,8 @@ export function readTimer(raw: StreamTimer | undefined | null): StreamTimer {
     ...DEFAULT_TIMER,
     ...raw,
     slices: raw.slices?.length ? raw.slices : DEFAULT_TIMER.slices,
+    // ช่องเก่าไม่มี total — ถือว่าเวลาที่เหลืออยู่ตอนนี้คือเต็มรอบ
+    total: raw.total ?? raw.remaining,
   };
 }
 
@@ -59,7 +62,12 @@ export function saveSlices(channelId: string, slices: WheelSlice[]) {
  */
 export function setTimerStyle(
   channelId: string,
-  style: { accent?: string; fontScale?: number; wheelScale?: number },
+  style: {
+    accent?: string;
+    fontScale?: number;
+    wheelScale?: number;
+    skin?: StreamTimer["skin"];
+  },
 ) {
   const value: Record<string, unknown> = {};
   if (style.accent !== undefined) {
@@ -71,6 +79,7 @@ export function setTimerStyle(
   if (style.wheelScale !== undefined) {
     value["timer.wheelScale"] = clampScale(style.wheelScale, 0.6, 2);
   }
+  if (style.skin !== undefined) value["timer.skin"] = style.skin;
   return patch(channelId, value);
 }
 
@@ -92,8 +101,11 @@ export function pauseTimer(channelId: string, timer: StreamTimer) {
 
 /** ตั้งเวลาใหม่ทั้งก้อน (หยุดนาฬิกาด้วย) */
 export function setTimerSeconds(channelId: string, seconds: number) {
+  const next = Math.max(0, Math.round(seconds));
   return patch(channelId, {
-    "timer.remaining": Math.max(0, Math.round(seconds)),
+    "timer.remaining": next,
+    // ตั้งเวลาใหม่ = เริ่มรอบใหม่ วงแหวนจึงกลับไปเต็มวง
+    "timer.total": next,
     "timer.startedAt": null,
   });
 }
@@ -112,6 +124,9 @@ export function bumpTimer(channelId: string, timer: StreamTimer, delta: number) 
   const next = Math.max(0, Math.round(remainingAt(timer, now) + delta));
   return patch(channelId, {
     "timer.remaining": next,
+    /* บวกจนเกินเวลาเต็มเดิม = ขยายวงแหวนตาม ไม่ใช่ปล่อยให้ล้นออกนอกวง
+       ส่วนตอนลบเวลา total คงเดิม วงแหวนจะได้หดลงให้เห็นว่าเสียไปเท่าไหร่ */
+    "timer.total": Math.max(timer.total ?? next, next),
     "timer.startedAt": timer.startedAt ? new Date(now).toISOString() : null,
   });
 }
@@ -132,9 +147,10 @@ export function recordSpin(
   const next = Math.max(0, Math.round(remainingAt(timer, now) + slice.seconds));
   return patch(channelId, {
     "timer.remaining": next,
+    "timer.total": Math.max(timer.total ?? next, next),
     "timer.startedAt": timer.startedAt ? new Date(now).toISOString() : null,
     "timer.lastSpin": {
-      label: slice.label,
+      label: sliceLabel(slice),
       seconds: slice.seconds,
       sliceId: slice.id,
       at: new Date(now).toISOString(),

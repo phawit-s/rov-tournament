@@ -14,13 +14,29 @@
 /** ช่องหนึ่งช่องบนวงล้อสุ่มเวลา */
 export type WheelSlice = {
   id: string;
-  /** ป้ายที่เห็นบนวงล้อและบนสตรีม เช่น "+5 นาที" */
-  label: string;
+  /**
+   * ป้ายบนวงล้อ — เว้นว่างได้ ถ้าว่างจะสร้างจากเวลาให้เอง ("+5 นาที")
+   *
+   * ของเดิมบังคับให้กรอกเอง ซึ่งแปลว่าป้ายกับเวลาจริงเป็นคนละค่าที่ไม่ผูกกันเลย
+   * แก้เวลาแล้วลืมแก้ป้าย = วงล้อบนสตรีมหยุดที่ "+3 นาที" แต่นาฬิกาบวกให้ 1 นาที
+   * ซึ่งคนดูจับได้ทันทีและแก้ตัวไม่ได้ — ตอนนี้ค่าเริ่มต้นคือผูกกันเสมอ
+   * ใครอยากได้ข้อความของตัวเอง ("ไม่ได้ไม่เสีย") ก็ยังพิมพ์ทับได้เหมือนเดิม
+   */
+  label?: string;
   /** วินาทีที่จะบวกเข้านาฬิกา — ติดลบได้ */
   seconds: number;
   /** น้ำหนัก 1–20 ยิ่งมากยิ่งกินพื้นที่วงล้อมากและออกบ่อยขึ้น */
   weight: number;
 };
+
+/** ทรงของนาฬิกาบนสตรีม — คนละงาน คนละที่วางบนจอ */
+export type TimerSkin = "card" | "plain" | "ring";
+
+export const TIMER_SKINS: { key: TimerSkin; label: string; hint: string }[] = [
+  { key: "card", label: "การ์ด", hint: "มีแผ่นรอง อ่านง่ายบนฉากสว่าง" },
+  { key: "plain", label: "ตัวเลขล้วน", hint: "ไม่มีกล่อง ตัวเลขลอยบนภาพเกม" },
+  { key: "ring", label: "วงแหวน", hint: "เห็นสัดส่วนเวลาที่เหลือด้วยตา" },
+];
 
 export type StreamTimer = {
   /** ปิดอยู่ = widget ไม่ขึ้นอะไรเลย */
@@ -46,6 +62,16 @@ export type StreamTimer = {
   fontScale?: number;
   /** ขนาดวงล้อ 0.6–2 เท่า */
   wheelScale?: number;
+  /** ทรงของนาฬิกาบนสตรีม */
+  skin?: TimerSkin;
+
+  /**
+   * เวลาเต็มของรอบนี้ — ใช้คิดสัดส่วนวงแหวนเท่านั้น
+   *
+   * ต้องเก็บแยกจาก remaining เพราะ "เหลือ 5 นาที" อย่างเดียวบอกไม่ได้ว่า
+   * เหลือน้อยหรือเหลือเยอะ — ต้องรู้ว่าตั้งต้นมาจากเท่าไหร่ถึงจะวาดวงแหวนได้
+   */
+  total?: number;
   slices: WheelSlice[];
   /**
    * ผลหมุนล่าสุด — widget วงล้อบนสตรีมใช้ค่านี้เล่นแอนิเมชันหมุนตาม
@@ -69,12 +95,12 @@ export const SPIN_SECONDS = 5;
 
 /** ชุดเริ่มต้นของวงล้อ — บวกเยอะกว่าลบ เพราะเวลาที่ยาวขึ้นสนุกกว่าสำหรับคนดู */
 export const DEFAULT_SLICES: WheelSlice[] = [
-  { id: "s1", label: "+1 นาที", seconds: 60, weight: 4 },
-  { id: "s2", label: "+3 นาที", seconds: 180, weight: 3 },
-  { id: "s3", label: "+5 นาที", seconds: 300, weight: 2 },
-  { id: "s4", label: "+10 นาที", seconds: 600, weight: 1 },
-  { id: "s5", label: "−1 นาที", seconds: -60, weight: 3 },
-  { id: "s6", label: "−3 นาที", seconds: -180, weight: 2 },
+  { id: "s1", seconds: 60, weight: 4 },
+  { id: "s2", seconds: 180, weight: 3 },
+  { id: "s3", seconds: 300, weight: 2 },
+  { id: "s4", seconds: 600, weight: 1 },
+  { id: "s5", seconds: -60, weight: 3 },
+  { id: "s6", seconds: -180, weight: 2 },
   { id: "s7", label: "ไม่ได้ไม่เสีย", seconds: 0, weight: 2 },
 ];
 
@@ -87,6 +113,8 @@ export const DEFAULT_TIMER: StreamTimer = {
   lastSpin: null,
   fontScale: 1,
   wheelScale: 1,
+  skin: "card",
+  total: 30 * 60,
 };
 
 /** สีสำเร็จรูป — ชุดเดียวกับที่หน้าแจกลิงก์ widget ใช้ จะได้ไม่มีสองมาตรฐาน */
@@ -158,6 +186,12 @@ export function clockText(seconds: number): string {
   const h = Math.floor(total / 3600);
   const pad = (n: number) => String(n).padStart(2, "0");
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+/** ชื่อช่องที่เอาไปโชว์จริง — ป้ายที่พิมพ์เองมาก่อน ไม่มีก็สร้างจากเวลา */
+export function sliceLabel(s: WheelSlice): string {
+  const custom = s.label?.trim();
+  return custom || deltaText(s.seconds);
 }
 
 /** 300 -> "+5 นาที" · -90 -> "−1:30" · 0 -> "ไม่ได้ไม่เสีย" */

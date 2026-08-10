@@ -7,7 +7,12 @@ import { useWidgetOptions } from "@/hooks/useLiveTournament";
 import { watchChannel } from "@/lib/channel/store";
 import type { Channel } from "@/lib/channel/types";
 import { readTimer } from "@/lib/timer/store";
-import { SPIN_SECONDS, clampScale, timerAccent } from "@/lib/timer/types";
+import {
+  SPIN_SECONDS,
+  clampScale,
+  sliceLabel,
+  timerAccent,
+} from "@/lib/timer/types";
 import { segments, type WheelEntry } from "@/lib/wheel";
 import Wheel from "@/components/wheel/Wheel";
 import WidgetShell, { WidgetCard, WidgetHint } from "@/components/widget/WidgetShell";
@@ -80,7 +85,7 @@ export default function WheelWidget() {
 
     const entries: WheelEntry[] = slices.map((s) => ({
       id: s.id,
-      name: s.label,
+      name: sliceLabel(s),
       weight: s.weight,
     }));
     const seg = segments(entries, true)[index];
@@ -150,7 +155,7 @@ export default function WheelWidget() {
 
   const entries: WheelEntry[] = slices.map((s) => ({
     id: s.id,
-    name: s.label,
+    name: sliceLabel(s),
     weight: s.weight,
   }));
   const tone = timerAccent(timer, accent);

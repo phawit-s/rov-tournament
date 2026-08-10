@@ -16,6 +16,9 @@ import {
 } from "@/lib/timer/types";
 import WidgetShell, { WidgetCard, WidgetHint } from "@/components/widget/WidgetShell";
 
+const RING_R = 78;
+const RING_C = 2 * Math.PI * RING_R;
+
 /**
  * นาฬิกาถอยหลังบนสตรีม — คุมจากหน้า /timer/
  *
@@ -24,6 +27,9 @@ import WidgetShell, { WidgetCard, WidgetHint } from "@/components/widget/WidgetS
  *
  * ไม่มีการอ่านฐานข้อมูลซ้ำทุกวินาที — อ่านค่า "เหลือกี่วิ + เริ่มเมื่อไหร่"
  * มาครั้งเดียวแล้วนับเองในเครื่อง ตัวเลขจึงตรงกับคอนโซลเป๊ะโดยไม่กินโควตา
+ *
+ * มีสามทรงให้เลือกจากคอนโซล เพราะที่ที่คนวางนาฬิกาบนจอต่างกันมาก —
+ * มุมจอเปล่าๆ ต้องการตัวเลขล้วน ส่วนบนภาพเกมสว่างต้องมีแผ่นรองถึงจะอ่านออก
  */
 export default function CountdownWidget() {
   const { accent } = useWidgetOptions();
@@ -84,17 +90,121 @@ export default function CountdownWidget() {
   const urgent = !done && left <= 60;
   /* สีของช่องมาก่อนค่าในลิงก์ — เปลี่ยนที่คอนโซลแล้วทุก source เปลี่ยนตามเลย */
   const tone = timerAccent(timer, accent);
-  const color = urgent || done ? "rgb(var(--st-live))" : tone;
+  const color = urgent || done ? "#ff5b7a" : tone;
   const scale = clampScale(timer.fontScale, 0.6, 2.5);
+  const caption = done ? "หมดเวลา" : (timer.label ?? "เหลืออีก");
+  const skin = timer.skin ?? "card";
 
+  const flash = (
+    <AnimatePresence>
+      {timer.lastSpin && (
+        <SpinFlash
+          key={timer.lastSpin.at}
+          label={timer.lastSpin.label}
+          seconds={timer.lastSpin.seconds}
+          at={timer.lastSpin.at}
+          now={now}
+          reduced={!!reduced}
+        />
+      )}
+    </AnimatePresence>
+  );
+
+  /* ---------- ตัวเลขล้วน ----------
+     ไม่มีแผ่นรองเลย ใช้เงาเรืองแสงกับเส้นขอบตัวอักษรทำให้อ่านออกบนพื้นสว่างแทน
+     เหมาะกับมุมจอที่ไม่มีอะไรอยู่ หรือคนที่ทำกราฟิกพื้นหลังของตัวเองไว้แล้ว */
+  if (skin === "plain") {
+    return (
+      <WidgetShell>
+        <div className="px-2 py-1">
+          {caption && (
+            <p
+              className="slug"
+              style={{ color: urgent || done ? "#ff5b7a" : tone }}
+            >
+              {caption}
+            </p>
+          )}
+          <p
+            className="fig num leading-none"
+            style={{
+              fontSize: `${4.2 * scale}rem`,
+              color,
+              textShadow: `0 2px 10px rgb(0 0 0 / 0.55), 0 0 30px ${color}80`,
+            }}
+          >
+            {clockText(left)}
+          </p>
+          {flash}
+        </div>
+      </WidgetShell>
+    );
+  }
+
+  /* ---------- วงแหวน ----------
+     บอก "เหลือเท่าไหร่จากทั้งหมด" ด้วยรูป ซึ่งตัวเลขล้วนบอกไม่ได้ */
+  if (skin === "ring") {
+    const total = Math.max(1, timer.total ?? timer.remaining);
+    const pct = Math.max(0, Math.min(1, left / total));
+    const size = 200 * Math.min(1.6, scale);
+
+    return (
+      <WidgetShell>
+        <div className="relative grid place-items-center" style={{ width: size, height: size }}>
+          <svg
+            viewBox="0 0 200 200"
+            width={size}
+            height={size}
+            className="absolute -rotate-90"
+            aria-hidden
+          >
+            <circle
+              cx="100"
+              cy="100"
+              r={RING_R}
+              fill="none"
+              stroke="rgb(255 255 255 / 0.12)"
+              strokeWidth="7"
+            />
+            <circle
+              cx="100"
+              cy="100"
+              r={RING_R}
+              fill="none"
+              stroke={color}
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeDasharray={`${RING_C * pct} ${RING_C}`}
+              style={{
+                transition: "stroke-dasharray 0.25s linear",
+                filter: `drop-shadow(0 0 8px ${color}99)`,
+              }}
+            />
+          </svg>
+
+          <div className="relative flex flex-col items-center">
+            <span
+              className="fig num leading-none"
+              style={{ fontSize: `${1.9 * Math.min(1.6, scale)}rem`, color }}
+            >
+              {clockText(left)}
+            </span>
+            {caption && <p className="slug slug-2 mt-1.5">{caption}</p>}
+          </div>
+        </div>
+      </WidgetShell>
+    );
+  }
+
+  /* ---------- การ์ด (ค่าเริ่มต้น) ---------- */
   return (
     <WidgetShell>
       <WidgetCard accent={tone} frame="bar" className="px-7 py-5">
         <p
           className="slug"
-          style={urgent || done ? { color: "rgb(var(--st-live))" } : undefined}
+          style={urgent || done ? { color: "#ff5b7a" } : undefined}
         >
-          {done ? "หมดเวลา" : (timer.label ?? "เหลืออีก")}
+          {caption}
         </p>
 
         <div className="mt-1.5 flex items-baseline gap-3">
@@ -116,18 +226,7 @@ export default function CountdownWidget() {
         </div>
 
         {/* ผลหมุนล่าสุดลอยขึ้นข้างนาฬิกา — คนดูจะได้เห็นว่าเวลาที่เพิ่งขยับมาจากไหน */}
-        <AnimatePresence>
-          {timer.lastSpin && (
-            <SpinFlash
-              key={timer.lastSpin.at}
-              label={timer.lastSpin.label}
-              seconds={timer.lastSpin.seconds}
-              at={timer.lastSpin.at}
-              now={now}
-              reduced={!!reduced}
-            />
-          )}
-        </AnimatePresence>
+        {flash}
       </WidgetCard>
     </WidgetShell>
   );
@@ -150,8 +249,7 @@ function SpinFlash({
   const age = now - Date.parse(at);
   if (!Number.isFinite(age) || age < 0 || age > 6000) return null;
 
-  const color =
-    seconds > 0 ? "rgb(var(--st-win))" : seconds < 0 ? "rgb(var(--st-live))" : "#fff";
+  const color = seconds > 0 ? "#34e3b0" : seconds < 0 ? "#ff5b7a" : "#ffffff";
 
   return (
     <motion.p
@@ -160,7 +258,7 @@ function SpinFlash({
       exit={reduced ? undefined : { opacity: 0, y: -8 }}
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
       className="mt-2 font-display text-lg"
-      style={{ color }}
+      style={{ color, textShadow: "0 2px 8px rgb(0 0 0 / 0.5)" }}
     >
       {label}
     </motion.p>

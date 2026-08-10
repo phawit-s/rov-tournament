@@ -7,6 +7,7 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 import { useHashParam, useNow } from "@/hooks/useClient";
 import { authStore } from "@/lib/backend/firebase";
@@ -31,11 +32,13 @@ import {
   SLICE_LIMIT,
   SPIN_SECONDS,
   TIMER_ACCENTS,
+  TIMER_SKINS,
   clampScale,
   clockText,
   deltaText,
   isRunning,
   remainingAt,
+  sliceLabel,
   timerAccent,
   type StreamTimer,
   type WheelSlice,
@@ -420,6 +423,30 @@ function StylePanel({
 
       <div className="space-y-5">
         <div>
+          <p className="mb-2 text-sm font-medium text-ice/85">ทรงนาฬิกา</p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {TIMER_SKINS.map((s) => {
+              const on = (timer.skin ?? "card") === s.key;
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => save({ skin: s.key })}
+                  className={`min-h-11 cursor-pointer rounded-xl px-3 py-2.5 text-left transition-all ${
+                    on
+                      ? "bg-iris/14 text-iris ring-1 ring-iris/45"
+                      : "tile hover-tile text-muted hover:text-ice"
+                  }`}
+                >
+                  <span className="block font-display text-sm">{s.label}</span>
+                  <span className="mt-0.5 block text-xs text-muted">{s.hint}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
           <p className="mb-2 text-sm font-medium text-ice/85">สีเน้น</p>
           <div className="flex flex-wrap items-center gap-2">
             {TIMER_ACCENTS.map((hex) => (
@@ -540,7 +567,7 @@ function SpinPanel({
   const slices = timer.slices;
   const entries: WheelEntry[] = slices.map((s) => ({
     id: s.id,
-    name: s.label,
+    name: sliceLabel(s),
     weight: s.weight,
   }));
 
@@ -672,40 +699,52 @@ function SliceEditor({
     <Panel className="p-6">
       <Panel.Header eyebrow="Slices" title="ช่องบนวงล้อ" count={slices.length} />
 
+      {/* หัวคอลัมน์ — ของเดิมมีช่องตัวเลขสองช่องติดกันโดยไม่มีอะไรบอกว่าอันไหนคืออะไร
+          ซึ่งเดาไม่ออกเลยว่าเป็นนาทีหรือน้ำหนัก */}
+      <div className="mb-2 hidden gap-3 px-1 sm:grid sm:grid-cols-[1fr_11rem_11rem_3rem]">
+        <span className="slug slug-2">ข้อความบนวงล้อ</span>
+        <span className="slug slug-2 text-center">เวลา (นาที)</span>
+        <span className="slug slug-2 text-center">โอกาสออก</span>
+        <span />
+      </div>
+
       <div className="space-y-2.5">
         {slices.map((s) => (
           <div
             key={s.id}
-            className="grid gap-2 rounded-xl tile p-3 sm:grid-cols-[1fr_7rem_7rem_auto]"
+            className="grid items-center gap-3 rounded-xl tile p-3 sm:grid-cols-[1fr_11rem_11rem_3rem]"
           >
             <Input
-              value={s.label}
-              onChange={(e) => update(s.id, { label: e.target.value.slice(0, 24) })}
-              placeholder="ป้ายบนวงล้อ"
+              key={`${s.id}-label`}
+              defaultValue={s.label ?? ""}
+              onBlur={(e) => update(s.id, { label: e.target.value.slice(0, 24) })}
+              /* เว้นว่าง = ใช้ข้อความที่สร้างจากเวลา ซึ่งเปลี่ยนตามเวลาเสมอ
+                 จึงไม่มีทางที่วงล้อจะเขียนอย่างแล้วบวกเวลาอีกอย่าง */
+              placeholder={deltaText(s.seconds)}
+              aria-label="ข้อความบนวงล้อ (เว้นว่างได้)"
             />
-            <Input
-              defaultValue={String(s.seconds / 60)}
-              onBlur={(e) => {
-                const mins = Number(e.target.value.replace(/[^\d.-]/g, ""));
-                if (!Number.isFinite(mins)) return;
-                update(s.id, { seconds: Math.round(mins * 60) });
-              }}
-              placeholder="นาที"
-              inputMode="text"
-              aria-label="นาทีที่บวก/ลบ (ติดลบได้)"
+
+            <Stepper
+              value={s.seconds / 60}
+              min={-60}
+              max={60}
+              step={1}
+              onChange={(v) => update(s.id, { seconds: Math.round(v * 60) })}
+              ariaLabel="เวลาเป็นนาที ติดลบได้"
             />
-            <Input
-              defaultValue={String(s.weight)}
-              onBlur={(e) => {
-                const w = Number(e.target.value.replace(/[^\d]/g, ""));
-                update(s.id, { weight: Math.max(1, Math.min(20, w || 1)) });
-              }}
-              placeholder="น้ำหนัก"
-              inputMode="numeric"
-              aria-label="น้ำหนัก 1-20"
+
+            <Stepper
+              value={s.weight}
+              min={1}
+              max={20}
+              step={1}
+              onChange={(v) => update(s.id, { weight: v })}
+              ariaLabel="โอกาสออก 1-20"
             />
+
             <MiniBtn
               danger
+              className="justify-self-start sm:justify-self-center"
               onClick={() => void save(slices.filter((x) => x.id !== s.id))}
             >
               ลบ
@@ -718,19 +757,98 @@ function SliceEditor({
         <MiniBtn
           disabled={slices.length >= SLICE_LIMIT}
           onClick={() =>
-            void save([
-              ...slices,
-              { id: uid(), label: "+1 นาที", seconds: 60, weight: 1 },
-            ])
+            void save([...slices, { id: uid(), seconds: 60, weight: 1 }])
           }
         >
           + เพิ่มช่อง
         </MiniBtn>
         <p className="text-xs text-muted">
-          ช่องเวลา = นาที ใส่ติดลบได้ (เช่น <code>-2</code>) · น้ำหนัก 1–20
-          ยิ่งมากยิ่งกินพื้นที่วงล้อและออกบ่อยขึ้น · สูงสุด {SLICE_LIMIT} ช่อง
+          เวลาใส่ติดลบได้ · โอกาสออกยิ่งมากยิ่งกินพื้นที่วงล้อมากขึ้น ·
+          สูงสุด {SLICE_LIMIT} ช่อง
         </p>
       </div>
     </Panel>
+  );
+}
+
+/**
+ * ช่องตัวเลขที่มีปุ่มลบ/บวกขนาบข้าง
+ *
+ * ตอนไลฟ์ไม่มีใครอยากคลิกเข้าช่อง ลบเลขเก่า พิมพ์เลขใหม่ แล้วคลิกออก
+ * แค่จะขยับจาก 3 เป็น 5 — ปุ่มขนาบข้างจบใน 2 คลิก และพิมพ์เองก็ยังได้
+ *
+ * ค่าที่เห็นมาจาก props เสมอ (ไม่ใช่ state ของตัวเอง) จึงเป็นค่าที่บันทึกแล้วจริงๆ
+ * ไม่มีทางที่จอโชว์เลขหนึ่งแต่ของที่เซฟไว้เป็นอีกเลข
+ */
+function Stepper({
+  value,
+  min,
+  max,
+  step,
+  onChange,
+  ariaLabel,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+  ariaLabel: string;
+}) {
+  const clamp = (v: number) => Math.min(max, Math.max(min, v));
+
+  return (
+    <div className="flex items-center gap-1">
+      <StepBtn
+        label="ลด"
+        disabled={value <= min}
+        onClick={() => onChange(clamp(value - step))}
+      >
+        −
+      </StepBtn>
+      <Input
+        key={value}
+        defaultValue={String(value)}
+        onBlur={(e) => {
+          const n = Number(e.target.value.replace(/[^\d.-]/g, ""));
+          if (!Number.isFinite(n)) return;
+          onChange(clamp(n));
+        }}
+        className="num w-full min-w-0 text-center"
+        inputMode="text"
+        aria-label={ariaLabel}
+      />
+      <StepBtn
+        label="เพิ่ม"
+        disabled={value >= max}
+        onClick={() => onChange(clamp(value + step))}
+      >
+        +
+      </StepBtn>
+    </div>
+  );
+}
+
+function StepBtn({
+  children,
+  onClick,
+  disabled,
+  label,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  disabled: boolean;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className="hover-tile tile grid h-11 w-9 shrink-0 cursor-pointer place-items-center rounded-lg font-display text-base text-ice/80 transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+    >
+      {children}
+    </button>
   );
 }
