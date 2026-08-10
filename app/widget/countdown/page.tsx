@@ -14,6 +14,7 @@ import {
   remainingAt,
   timerAccent,
 } from "@/lib/timer/types";
+import SevenSegment from "@/components/timer/SevenSegment";
 import WidgetShell, { WidgetCard, WidgetHint } from "@/components/widget/WidgetShell";
 
 const RING_R = 78;
@@ -94,6 +95,26 @@ export default function CountdownWidget() {
   const scale = clampScale(timer.fontScale, 0.6, 2.5);
   const caption = done ? "หมดเวลา" : (timer.label ?? "เหลืออีก");
   const skin = timer.skin ?? "card";
+  const seven = (timer.digits ?? "sans") === "seven";
+  const ghost = Math.min(0.3, Math.max(0, timer.ghost ?? 0.08));
+
+  /* ตัวเลขนาฬิกา — แบบไหนก็ได้ ขนาดคุมด้วยตัวคูณเดียวกันทั้งคู่
+     ห่อไว้ที่เดียวเพราะทั้งสามทรงใช้ตัวเลขชุดเดียวกัน ต่างกันแค่ของที่อยู่รอบๆ */
+  const digitsOf = (rem: number) =>
+    seven ? (
+      <SevenSegment text={clockText(left)} color={color} height={rem} ghost={ghost} />
+    ) : (
+      <span
+        className="fig num leading-none"
+        style={{
+          fontSize: `${rem}rem`,
+          color,
+          textShadow: `0 0 24px ${color}66`,
+        }}
+      >
+        {clockText(left)}
+      </span>
+    );
 
   const flash = (
     <AnimatePresence>
@@ -125,16 +146,7 @@ export default function CountdownWidget() {
               {caption}
             </p>
           )}
-          <p
-            className="fig num leading-none"
-            style={{
-              fontSize: `${4.2 * scale}rem`,
-              color,
-              textShadow: `0 2px 10px rgb(0 0 0 / 0.55), 0 0 30px ${color}80`,
-            }}
-          >
-            {clockText(left)}
-          </p>
+          {digitsOf(4.2 * scale)}
           {flash}
         </div>
       </WidgetShell>
@@ -183,12 +195,7 @@ export default function CountdownWidget() {
           </svg>
 
           <div className="relative flex flex-col items-center">
-            <span
-              className="fig num leading-none"
-              style={{ fontSize: `${1.9 * Math.min(1.6, scale)}rem`, color }}
-            >
-              {clockText(left)}
-            </span>
+            {digitsOf(1.9 * Math.min(1.6, scale))}
             {caption && <p className="slug slug-2 mt-1.5">{caption}</p>}
           </div>
         </div>
@@ -208,18 +215,8 @@ export default function CountdownWidget() {
         </p>
 
         <div className="mt-1.5 flex items-baseline gap-3">
-          <span
-            className="fig num leading-none"
-            style={{
-              /* ขนาดคูณจากฐาน 3.4rem — ตั้งจากคอนโซล ไม่ต้องแก้ลิงก์ */
-              fontSize: `${3.4 * scale}rem`,
-              color,
-              /* เรืองแสงอ่อนๆ ให้ตัวเลขลอยเหนือภาพเกม โดยไม่ต้องมีกล่องทึบรอง */
-              textShadow: `0 0 24px ${color}66`,
-            }}
-          >
-            {clockText(left)}
-          </span>
+          {/* ขนาดคูณจากฐาน 3.4rem — ตั้งจากคอนโซล ไม่ต้องแก้ลิงก์ */}
+          {digitsOf(3.4 * scale)}
           {!isRunning(timer) && !done && (
             <span className="slug slug-2">หยุดอยู่</span>
           )}

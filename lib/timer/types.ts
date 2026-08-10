@@ -23,11 +23,35 @@ export type WheelSlice = {
    * ใครอยากได้ข้อความของตัวเอง ("ไม่ได้ไม่เสีย") ก็ยังพิมพ์ทับได้เหมือนเดิม
    */
   label?: string;
-  /** วินาทีที่จะบวกเข้านาฬิกา — ติดลบได้ */
+  /** วินาทีที่จะบวกเข้านาฬิกา — ติดลบได้ (เก็บเป็นวินาทีเสมอ ไม่ว่ากรอกมาเป็นหน่วยไหน) */
   seconds: number;
+  /**
+   * หน่วยที่ใช้ "ตอนกรอก" — นาที (ค่าเริ่มต้น) หรือ ชั่วโมง
+   *
+   * เก็บไว้เพราะ 7200 วินาทีเขียนได้ทั้ง "120 นาที" และ "2 ชั่วโมง" ซึ่งคนละความหมาย
+   * ในหัวคนตั้ง — ถ้าไม่จำไว้ ช่องที่ตั้งเป็นชั่วโมงจะเด้งกลับไปโชว์เป็นนาทีทุกครั้ง
+   * ที่เปิดหน้า และป้ายบนวงล้อก็จะเขียนว่า "+120 นาที" แทนที่จะเป็น "+2 ชั่วโมง"
+   */
+  unit?: TimeUnit;
   /** น้ำหนัก 1–20 ยิ่งมากยิ่งกินพื้นที่วงล้อมากและออกบ่อยขึ้น */
   weight: number;
 };
+
+/** หน่วยเวลาที่ใช้กรอกในวงล้อ */
+export type TimeUnit = "min" | "hr";
+
+export const UNIT_SECONDS: Record<TimeUnit, number> = { min: 60, hr: 3600 };
+export const UNIT_LABEL: Record<TimeUnit, string> = { min: "นาที", hr: "ชั่วโมง" };
+/** ช่วงที่กรอกได้ต่อหน่วย — กันคนเผลอใส่ 500 ชั่วโมง */
+export const UNIT_MAX: Record<TimeUnit, number> = { min: 180, hr: 24 };
+
+/** แบบตัวเลข — คนละบุคลิกกันคนละแบบ */
+export type TimerDigits = "sans" | "seven";
+
+export const TIMER_DIGITS: { key: TimerDigits; label: string; hint: string }[] = [
+  { key: "sans", label: "ตัวหนังสือ", hint: "ฟอนต์ของเว็บ เรียบ อ่านง่าย" },
+  { key: "seven", label: "ดิจิทัล", hint: "เจ็ดขีดแบบนาฬิกา LED" },
+];
 
 /** ทรงของนาฬิกาบนสตรีม — คนละงาน คนละที่วางบนจอ */
 export type TimerSkin = "card" | "plain" | "ring";
@@ -64,6 +88,10 @@ export type StreamTimer = {
   wheelScale?: number;
   /** ทรงของนาฬิกาบนสตรีม */
   skin?: TimerSkin;
+  /** แบบตัวเลข */
+  digits?: TimerDigits;
+  /** ความจางของขีดที่ดับบนตัวเลขดิจิทัล 0–0.3 (0 = ไม่โชว์โครงเลข 8) */
+  ghost?: number;
 
   /**
    * เวลาเต็มของรอบนี้ — ใช้คิดสัดส่วนวงแหวนเท่านั้น
@@ -114,6 +142,8 @@ export const DEFAULT_TIMER: StreamTimer = {
   fontScale: 1,
   wheelScale: 1,
   skin: "card",
+  digits: "sans",
+  ghost: 0.08,
   total: 30 * 60,
 };
 
@@ -191,14 +221,22 @@ export function clockText(seconds: number): string {
 /** ชื่อช่องที่เอาไปโชว์จริง — ป้ายที่พิมพ์เองมาก่อน ไม่มีก็สร้างจากเวลา */
 export function sliceLabel(s: WheelSlice): string {
   const custom = s.label?.trim();
-  return custom || deltaText(s.seconds);
+  return custom || deltaText(s.seconds, s.unit);
 }
 
-/** 300 -> "+5 นาที" · -90 -> "−1:30" · 0 -> "ไม่ได้ไม่เสีย" */
-export function deltaText(seconds: number): string {
+/**
+ * 300 -> "+5 นาที" · 7200 (hr) -> "+2 ชั่วโมง" · -90 -> "−1:30" · 0 -> "ไม่ได้ไม่เสีย"
+ *
+ * เขียนด้วยหน่วยที่คนตั้งใช้กรอกเสมอ — คนที่ตั้ง "2 ชั่วโมง" ไม่ได้อยากเห็น
+ * "+120 นาที" บนวงล้อ ถึงมันจะเป็นเวลาเท่ากันก็ตาม
+ */
+export function deltaText(seconds: number, unit: TimeUnit = "min"): string {
   if (seconds === 0) return "ไม่ได้ไม่เสีย";
   const sign = seconds > 0 ? "+" : "−";
   const abs = Math.abs(seconds);
+  const per = UNIT_SECONDS[unit];
+  if (abs % per === 0) return `${sign}${abs / per} ${UNIT_LABEL[unit]}`;
+  // ลงตัวเป็นนาทีแต่ไม่ลงตัวเป็นชั่วโมง ก็ยังเขียนเป็นนาทีได้
   if (abs % 60 === 0) return `${sign}${abs / 60} นาที`;
   return `${sign}${clockText(abs)}`;
 }

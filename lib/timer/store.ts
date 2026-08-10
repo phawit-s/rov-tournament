@@ -67,6 +67,8 @@ export function setTimerStyle(
     fontScale?: number;
     wheelScale?: number;
     skin?: StreamTimer["skin"];
+    digits?: StreamTimer["digits"];
+    ghost?: number;
   },
 ) {
   const value: Record<string, unknown> = {};
@@ -80,6 +82,10 @@ export function setTimerStyle(
     value["timer.wheelScale"] = clampScale(style.wheelScale, 0.6, 2);
   }
   if (style.skin !== undefined) value["timer.skin"] = style.skin;
+  if (style.digits !== undefined) value["timer.digits"] = style.digits;
+  if (style.ghost !== undefined) {
+    value["timer.ghost"] = Math.min(0.3, Math.max(0, style.ghost));
+  }
   return patch(channelId, value);
 }
 

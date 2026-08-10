@@ -32,7 +32,11 @@ import {
   SLICE_LIMIT,
   SPIN_SECONDS,
   TIMER_ACCENTS,
+  TIMER_DIGITS,
   TIMER_SKINS,
+  UNIT_LABEL,
+  UNIT_MAX,
+  UNIT_SECONDS,
   clampScale,
   clockText,
   deltaText,
@@ -41,8 +45,10 @@ import {
   sliceLabel,
   timerAccent,
   type StreamTimer,
+  type TimeUnit,
   type WheelSlice,
 } from "@/lib/timer/types";
+import SevenSegment from "@/components/timer/SevenSegment";
 import Wheel from "@/components/wheel/Wheel";
 import Button from "@/components/ui/Button";
 import LinkRow from "@/components/ui/LinkRow";
@@ -409,16 +415,25 @@ function StylePanel({
 
       {/* ตัวอย่างจริง — ใช้ค่าชุดเดียวกับที่ widget ใช้ จะได้ไม่ต้องสลับไปดูใน OBS */}
       <div className="sunken mb-5 grid place-items-center rounded-xl px-4 py-6">
-        <span
-          className="fig num leading-none"
-          style={{
-            fontSize: `${2.2 * fontScale}rem`,
-            color: tone,
-            textShadow: `0 0 24px ${tone}66`,
-          }}
-        >
-          {clockText(left)}
-        </span>
+        {(timer.digits ?? "sans") === "seven" ? (
+          <SevenSegment
+            text={clockText(left)}
+            color={tone}
+            height={2.2 * fontScale}
+            ghost={timer.ghost ?? 0.08}
+          />
+        ) : (
+          <span
+            className="fig num leading-none"
+            style={{
+              fontSize: `${2.2 * fontScale}rem`,
+              color: tone,
+              textShadow: `0 0 24px ${tone}66`,
+            }}
+          >
+            {clockText(left)}
+          </span>
+        )}
       </div>
 
       <div className="space-y-5">
@@ -440,6 +455,30 @@ function StylePanel({
                 >
                   <span className="block font-display text-sm">{s.label}</span>
                   <span className="mt-0.5 block text-xs text-muted">{s.hint}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-sm font-medium text-ice/85">แบบตัวเลข</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {TIMER_DIGITS.map((d) => {
+              const on = (timer.digits ?? "sans") === d.key;
+              return (
+                <button
+                  key={d.key}
+                  type="button"
+                  onClick={() => save({ digits: d.key })}
+                  className={`min-h-11 cursor-pointer rounded-xl px-3 py-2.5 text-left transition-all ${
+                    on
+                      ? "bg-iris/14 text-iris ring-1 ring-iris/45"
+                      : "tile hover-tile text-muted hover:text-ice"
+                  }`}
+                >
+                  <span className="block font-display text-sm">{d.label}</span>
+                  <span className="mt-0.5 block text-xs text-muted">{d.hint}</span>
                 </button>
               );
             })}
@@ -688,6 +727,8 @@ function SliceEditor({
   timer: StreamTimer;
 }) {
   const slices = timer.slices;
+  /** ช่องที่กำลังพิมพ์ข้อความเอง — ปกติข้อความมาจากเวลา ไม่ต้องมีช่องให้กรอก */
+  const [editing, setEditing] = useState<string | null>(null);
 
   const save = (next: WheelSlice[]) =>
     saveSlices(channelId, next).catch(() => toast("บันทึกไม่สำเร็จ", "error"));
@@ -699,58 +740,109 @@ function SliceEditor({
     <Panel className="p-6">
       <Panel.Header eyebrow="Slices" title="ช่องบนวงล้อ" count={slices.length} />
 
-      {/* หัวคอลัมน์ — ของเดิมมีช่องตัวเลขสองช่องติดกันโดยไม่มีอะไรบอกว่าอันไหนคืออะไร
-          ซึ่งเดาไม่ออกเลยว่าเป็นนาทีหรือน้ำหนัก */}
-      <div className="mb-2 hidden gap-3 px-1 sm:grid sm:grid-cols-[1fr_11rem_11rem_3rem]">
-        <span className="slug slug-2">ข้อความบนวงล้อ</span>
-        <span className="slug slug-2 text-center">เวลา (นาที)</span>
+      <div className="mb-2 hidden gap-3 px-1 sm:grid sm:grid-cols-[14.5rem_11rem_1fr_3rem]">
+        <span className="slug slug-2 text-center">เวลา</span>
         <span className="slug slug-2 text-center">โอกาสออก</span>
+        <span className="slug slug-2">ข้อความที่จะขึ้นบนวงล้อ</span>
         <span />
       </div>
 
       <div className="space-y-2.5">
-        {slices.map((s) => (
-          <div
-            key={s.id}
-            className="grid items-center gap-3 rounded-xl tile p-3 sm:grid-cols-[1fr_11rem_11rem_3rem]"
-          >
-            <Input
-              key={`${s.id}-label`}
-              defaultValue={s.label ?? ""}
-              onBlur={(e) => update(s.id, { label: e.target.value.slice(0, 24) })}
-              /* เว้นว่าง = ใช้ข้อความที่สร้างจากเวลา ซึ่งเปลี่ยนตามเวลาเสมอ
-                 จึงไม่มีทางที่วงล้อจะเขียนอย่างแล้วบวกเวลาอีกอย่าง */
-              placeholder={deltaText(s.seconds)}
-              aria-label="ข้อความบนวงล้อ (เว้นว่างได้)"
-            />
-
-            <Stepper
-              value={s.seconds / 60}
-              min={-60}
-              max={60}
-              step={1}
-              onChange={(v) => update(s.id, { seconds: Math.round(v * 60) })}
-              ariaLabel="เวลาเป็นนาที ติดลบได้"
-            />
-
-            <Stepper
-              value={s.weight}
-              min={1}
-              max={20}
-              step={1}
-              onChange={(v) => update(s.id, { weight: v })}
-              ariaLabel="โอกาสออก 1-20"
-            />
-
-            <MiniBtn
-              danger
-              className="justify-self-start sm:justify-self-center"
-              onClick={() => void save(slices.filter((x) => x.id !== s.id))}
+        {slices.map((s) => {
+          const custom = !!s.label?.trim();
+          return (
+            <div
+              key={s.id}
+              className="grid items-center gap-3 rounded-xl tile p-3 sm:grid-cols-[14.5rem_11rem_1fr_3rem]"
             >
-              ลบ
-            </MiniBtn>
-          </div>
-        ))}
+              <div className="flex items-center gap-1.5">
+                <Stepper
+                  value={s.seconds / UNIT_SECONDS[s.unit ?? "min"]}
+                  min={-UNIT_MAX[s.unit ?? "min"]}
+                  max={UNIT_MAX[s.unit ?? "min"]}
+                  step={1}
+                  onChange={(v) =>
+                    update(s.id, {
+                      seconds: Math.round(v * UNIT_SECONDS[s.unit ?? "min"]),
+                    })
+                  }
+                  ariaLabel={`เวลาเป็น${UNIT_LABEL[s.unit ?? "min"]} ติดลบได้`}
+                />
+                {/*
+                  สลับหน่วยแล้ว "ตัวเลขคงเดิม ความหมายเปลี่ยน" — 5 นาที กด ชม.
+                  แล้วได้ 5 ชั่วโมง ไม่ใช่ 0.08 ชั่วโมง เพราะคนที่กดปุ่มนี้กำลังคิดว่า
+                  "เอาเป็นชั่วโมงแทน" ไม่ได้กำลังแปลงหน่วยของค่าเดิม
+                  และผลเห็นทันทีที่ข้อความข้างๆ จึงไม่มีอะไรเปลี่ยนแบบเงียบๆ
+                */}
+                <UnitToggle
+                  value={s.unit ?? "min"}
+                  onChange={(u) =>
+                    update(s.id, {
+                      unit: u,
+                      seconds: Math.round(
+                        (s.seconds / UNIT_SECONDS[s.unit ?? "min"]) * UNIT_SECONDS[u],
+                      ),
+                    })
+                  }
+                />
+              </div>
+
+              <Stepper
+                value={s.weight}
+                min={1}
+                max={20}
+                step={1}
+                onChange={(v) => update(s.id, { weight: v })}
+                ariaLabel="โอกาสออก 1-20"
+              />
+
+              {/*
+                ข้อความไม่ใช่ช่องกรอกอีกต่อไป มันคือ "ผลลัพธ์" ของเวลาที่ตั้งไว้
+
+                ของเดิมมีช่องข้อความกับช่องเวลาแยกกัน ซึ่งพูดเรื่องเดียวกันสองที่
+                แล้วขัดกันเองได้ (เขียน "+1 นาที" แต่ค่าจริงเป็น 4) — ตอนนี้
+                ข้อความวิ่งตามเวลาเสมอ กดที่ข้อความเมื่อไหร่ถึงจะพิมพ์ทับเองได้
+              */}
+              {editing === s.id ? (
+                <Input
+                  autoFocus
+                  defaultValue={s.label ?? ""}
+                  placeholder={deltaText(s.seconds, s.unit)}
+                  onBlur={(e) => {
+                    update(s.id, { label: e.target.value.slice(0, 24) });
+                    setEditing(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === "Escape") {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  aria-label="ข้อความบนวงล้อ (เว้นว่าง = ใช้เวลาเป็นข้อความ)"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setEditing(s.id)}
+                  title="กดเพื่อพิมพ์ข้อความเอง"
+                  className="hover-tile flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-xl border border-hair px-3.5 text-left"
+                >
+                  <span className="min-w-0 flex-1 truncate text-sm text-ice">
+                    {sliceLabel(s)}
+                  </span>
+                  {!custom && <span className="slug slug-2 shrink-0">อัตโนมัติ</span>}
+                </button>
+              )}
+
+              <MiniBtn
+                danger
+                className="justify-self-start sm:justify-self-center"
+                onClick={() => void save(slices.filter((x) => x.id !== s.id))}
+              >
+                ลบ
+              </MiniBtn>
+            </div>
+          );
+        })}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -762,12 +854,39 @@ function SliceEditor({
         >
           + เพิ่มช่อง
         </MiniBtn>
-        <p className="text-xs text-muted">
-          เวลาใส่ติดลบได้ · โอกาสออกยิ่งมากยิ่งกินพื้นที่วงล้อมากขึ้น ·
-          สูงสุด {SLICE_LIMIT} ช่อง
+        <p className="text-xs leading-relaxed text-muted">
+          ข้อความสร้างจากเวลาให้เอง กดที่ข้อความถ้าอยากพิมพ์เอง (ลบให้ว่างเพื่อกลับไปอัตโนมัติ)
+          · เวลาใส่ติดลบได้ · โอกาสออกยิ่งมากยิ่งกินพื้นที่วงล้อ · สูงสุด {SLICE_LIMIT} ช่อง
         </p>
       </div>
     </Panel>
+  );
+}
+
+/** ปุ่มสลับหน่วยเวลาของช่องนั้น — นาที / ชั่วโมง */
+function UnitToggle({
+  value,
+  onChange,
+}: {
+  value: TimeUnit;
+  onChange: (u: TimeUnit) => void;
+}) {
+  return (
+    <div className="tile flex shrink-0 rounded-lg p-0.5">
+      {(["min", "hr"] as TimeUnit[]).map((u) => (
+        <button
+          key={u}
+          type="button"
+          onClick={() => onChange(u)}
+          aria-pressed={value === u}
+          className={`min-h-10 cursor-pointer rounded-md px-2 font-display text-eyebrow transition-colors ${
+            value === u ? "accent-fill" : "text-muted hover:text-ice"
+          }`}
+        >
+          {u === "min" ? "นาที" : "ชม."}
+        </button>
+      ))}
+    </div>
   );
 }
 
