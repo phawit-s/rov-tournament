@@ -5,6 +5,7 @@ import { getDb } from "@/lib/backend/firebase";
 import {
   DEFAULT_TIMER,
   SLICE_LIMIT,
+  clampScale,
   remainingAt,
   type StreamTimer,
   type WheelSlice,
@@ -50,6 +51,27 @@ export function setTimerLabel(channelId: string, label: string) {
 
 export function saveSlices(channelId: string, slices: WheelSlice[]) {
   return patch(channelId, { "timer.slices": slices.slice(0, SLICE_LIMIT) });
+}
+
+/**
+ * หน้าตาของ widget (สี/ขนาด) — เก็บที่ช่อง จึงตั้งคนละแบบได้ทุกช่อง
+ * และ source ที่วางไว้ใน OBS ทุกอันเปลี่ยนตามทันทีโดยไม่ต้องแก้ลิงก์
+ */
+export function setTimerStyle(
+  channelId: string,
+  style: { accent?: string; fontScale?: number; wheelScale?: number },
+) {
+  const value: Record<string, unknown> = {};
+  if (style.accent !== undefined) {
+    value["timer.accent"] = style.accent.replace("#", "").slice(0, 6);
+  }
+  if (style.fontScale !== undefined) {
+    value["timer.fontScale"] = clampScale(style.fontScale, 0.6, 2.5);
+  }
+  if (style.wheelScale !== undefined) {
+    value["timer.wheelScale"] = clampScale(style.wheelScale, 0.6, 2);
+  }
+  return patch(channelId, value);
 }
 
 /** กดเดิน — จับเวลาปัจจุบันไว้เป็นจุดตั้งต้น แล้วปล่อยให้ทุกจอนับเอง */

@@ -31,6 +31,21 @@ export type StreamTimer = {
   startedAt?: string | null;
   /** ป้ายเหนือนาฬิกาบนสตรีม เช่น "พักเบรก" */
   label?: string;
+
+  /*
+    หน้าตาของ widget — เก็บไว้ที่ช่อง ไม่ใช่ในลิงก์
+
+    ใส่ ?accent= ท้ายลิงก์ก็ยังได้เหมือนเดิม แต่การเก็บไว้ที่ช่องแปลว่าเปลี่ยนสี
+    ทีเดียวแล้วทุก source ที่วางไว้ใน OBS เปลี่ยนตามพร้อมกัน ไม่ต้องไล่แก้ลิงก์
+    ทีละอันแล้วรีเฟรชทีละ source — และช่องแต่ละช่องตั้งคนละสีได้
+  */
+
+  /** สีเน้น เลขฐานสิบหก 6 หลักไม่มี # — ไม่ใส่ = ใช้ค่าจากลิงก์/ธีม */
+  accent?: string;
+  /** ขนาดตัวเลขนาฬิกา 0.6–2.5 เท่าของมาตรฐาน */
+  fontScale?: number;
+  /** ขนาดวงล้อ 0.6–2 เท่า */
+  wheelScale?: number;
   slices: WheelSlice[];
   /**
    * ผลหมุนล่าสุด — widget วงล้อบนสตรีมใช้ค่านี้เล่นแอนิเมชันหมุนตาม
@@ -70,7 +85,41 @@ export const DEFAULT_TIMER: StreamTimer = {
   label: "เหลืออีก",
   slices: DEFAULT_SLICES,
   lastSpin: null,
+  fontScale: 1,
+  wheelScale: 1,
 };
+
+/** สีสำเร็จรูป — ชุดเดียวกับที่หน้าแจกลิงก์ widget ใช้ จะได้ไม่มีสองมาตรฐาน */
+export const TIMER_ACCENTS = [
+  "a99bff",
+  "7c6cf5",
+  "35d6e8",
+  "34e3b0",
+  "ff5b7a",
+  "ffb454",
+  "ffffff",
+];
+
+/** บีบค่าให้อยู่ในช่วงที่ยังอ่านออกบนสตรีม */
+export function clampScale(v: number | undefined, min: number, max: number): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(max, Math.max(min, n));
+}
+
+/**
+ * สีเน้นที่ widget ควรใช้ — ของช่องมาก่อน แล้วค่อยตกไปที่ ?accent= ในลิงก์
+ *
+ * เรียงแบบนี้เพราะค่าที่ช่องคือ "ตั้งใจตั้งไว้ตอนนี้" ส่วนในลิงก์คือค่าที่อาจ
+ * ติดมากับลิงก์ที่คัดลอกไว้นานแล้ว — ของใหม่ควรชนะของเก่าเสมอ
+ */
+export function timerAccent(
+  t: StreamTimer | null | undefined,
+  fallback: string,
+): string {
+  const raw = t?.accent?.replace("#", "").trim();
+  return raw && /^[0-9a-fA-F]{6}$/.test(raw) ? `#${raw}` : fallback;
+}
 
 /** จำนวนช่องสูงสุดบนวงล้อ — มากกว่านี้ป้ายบนวงล้อเล็กจนอ่านไม่ออกบนสตรีม */
 export const SLICE_LIMIT = 12;

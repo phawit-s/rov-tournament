@@ -7,7 +7,7 @@ import { useWidgetOptions } from "@/hooks/useLiveTournament";
 import { watchChannel } from "@/lib/channel/store";
 import type { Channel } from "@/lib/channel/types";
 import { readTimer } from "@/lib/timer/store";
-import { SPIN_SECONDS } from "@/lib/timer/types";
+import { SPIN_SECONDS, clampScale, timerAccent } from "@/lib/timer/types";
 import { segments, type WheelEntry } from "@/lib/wheel";
 import Wheel from "@/components/wheel/Wheel";
 import WidgetShell, { WidgetCard, WidgetHint } from "@/components/widget/WidgetShell";
@@ -153,11 +153,15 @@ export default function WheelWidget() {
     name: s.label,
     weight: s.weight,
   }));
+  const tone = timerAccent(timer, accent);
+  /* วงล้อวาดด้วย canvas ที่อ่านความกว้างจาก CSS จึงย่อ/ขยายด้วยความกว้างได้ตรงๆ
+     ไม่ต้องใช้ transform (ซึ่งจะทำให้เส้นเบลอตอนขยาย) */
+  const size = 22.5 * clampScale(timer.wheelScale, 0.6, 2);
 
   return (
     <WidgetShell align="center">
-      <WidgetCard accent={accent} frame="plate" className="px-6 py-6">
-        <div className="w-90">
+      <WidgetCard accent={tone} frame="plate" className="px-6 py-6">
+        <div style={{ width: `${size}rem` }}>
           <Wheel
             entries={entries}
             useWeights

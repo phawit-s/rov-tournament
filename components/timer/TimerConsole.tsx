@@ -8,9 +8,9 @@ import {
   useSyncExternalStore,
   type CSSProperties,
 } from "react";
-import { useNow } from "@/hooks/useClient";
+import { useHashParam, useNow } from "@/hooks/useClient";
 import { authStore } from "@/lib/backend/firebase";
-import { watchChannel } from "@/lib/channel/store";
+import { watchAllChannels, watchChannel } from "@/lib/channel/store";
 import type { Channel } from "@/lib/channel/types";
 import { uid } from "@/lib/random";
 import { sfx } from "@/lib/sound";
@@ -22,6 +22,7 @@ import {
   recordSpin,
   saveSlices,
   setTimerEnabled,
+  setTimerStyle,
   setTimerLabel,
   setTimerSeconds,
   startTimer,
@@ -29,10 +30,13 @@ import {
 import {
   SLICE_LIMIT,
   SPIN_SECONDS,
+  TIMER_ACCENTS,
+  clampScale,
   clockText,
   deltaText,
   isRunning,
   remainingAt,
+  timerAccent,
   type StreamTimer,
   type WheelSlice,
 } from "@/lib/timer/types";
@@ -46,6 +50,9 @@ import Switch from "@/components/ui/Switch";
 import { toast } from "@/components/ui/Toast";
 import { IconPause, IconPlay } from "@/components/ui/icons";
 import { EmptyNote, Input } from "@/components/tournament/ui";
+
+/** อ้างอิงคงที่ ไม่งั้น setMine([]) ตอน error จะทำให้รีเรนเดอร์ไม่จบ */
+const NO_CHANNELS: Channel[] = [];
 
 const POINTER_ANGLE = -Math.PI / 2;
 const TWO_PI = Math.PI * 2;
@@ -69,7 +76,14 @@ export default function TimerConsole() {
     authStore.getServerSnapshot,
   );
   const user = authStore.user();
-  const channelId = user && !user.anonymous ? user.uid : null;
+
+  /*
+    ช่องไหนอยู่ใน #ch= — คนหนึ่งมีได้หลายช่อง และแต่ละช่องมีนาฬิกากับวงล้อของตัวเอง
+    ไม่ใส่มา = ช่องแรกของบัญชี (ซึ่งใช้ uid เป็นรหัสช่อง)
+  */
+  const chParam = useHashParam("ch");
+  const own = user && !user.anonymous ? user.uid : null;
+  const channelId = chParam ?? own;
 
   const [channel, setChannel] = useState<Channel | null>(null);
   useEffect(() => {
@@ -80,6 +94,16 @@ export default function TimerConsole() {
       () => setChannel(null),
     );
   }, [channelId]);
+
+  // ช่องทั้งหมดของบัญชีนี้ ใช้ทำแถบสลับช่อง
+  const [mine, setMine] = useState<Channel[]>(NO_CHANNELS);
+  useEffect(() => {
+    if (!own) return;
+    return watchAllChannels(
+      (all) => setMine(all.filter((c) => c.ownerUid === own)),
+      () => setMine(NO_CHANNELS),
+    );
+  }, [own]);
 
   if (!channelId) {
     return <EmptyNote>ต้องล็อกอินด้วยบัญชีเจ้าของช่องก่อน</EmptyNote>;
@@ -93,6 +117,10 @@ export default function TimerConsole() {
         title="จับเวลาสด"
         description="นาฬิกาถอยหลังบนสตรีม หมุนวงล้อแล้วเวลาบวก/ลบให้อัตโนมัติ"
       />
+      {mine.length > 1 && (
+        <ChannelPicker channels={mine} activeId={channelId} />
+      )}
+
       {channel ? (
         <TimerBody channelId={channelId} channel={channel} />
       ) : (
@@ -256,8 +284,13 @@ function TimerBody({ channelId, channel }: { channelId: string; channel: Channel
         <SliceEditor channelId={channelId} timer={timer} />
       </Reveal>
 
-      {/* ---------- ลิงก์สำหรับ OBS ---------- */}
+      {/* ---------- หน้าตาของ widget ---------- */}
       <Reveal index={3}>
+        <StylePanel channelId={channelId} timer={timer} left={left} />
+      </Reveal>
+
+      {/* ---------- ลิงก์สำหรับ OBS ---------- */}
+      <Reveal index={4}>
         <Panel className="p-6">
           <Panel.Header
             eyebrow="Browser source"
@@ -285,6 +318,202 @@ function TimerBody({ channelId, channel }: { channelId: string; channel: Channel
         </Panel>
       </Reveal>
     </>
+  );
+}
+
+/* =========================================================================
+   แถบสลับช่อง
+   ========================================================================= */
+
+/**
+ * คนหนึ่งมีได้หลายช่อง และนาฬิกา/วงล้อ/สี เป็นของใครของมัน
+ * แถบนี้จึงต้องมี ไม่งั้นช่องที่สองเป็นต้นไปจะคุมไม่ได้เลยทั้งที่เปิดใช้อยู่
+ */
+function ChannelPicker({
+  channels,
+  activeId,
+}: {
+  channels: Channel[];
+  activeId: string;
+}) {
+  return (
+    <Panel variant="quiet" className="p-4">
+      <span className="slug slug-2">ช่องที่กำลังคุม</span>
+      <div className="no-scrollbar mt-2.5 flex gap-2 overflow-x-auto pb-1">
+        {channels.map((c) => {
+          const on = c.id === activeId;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              disabled={on}
+              aria-pressed={on}
+              onClick={() => {
+                window.location.hash = `ch=${c.id}`;
+              }}
+              className={`min-h-11 shrink-0 rounded-xl border px-4 py-2 text-left transition-colors ${
+                on
+                  ? "cursor-default border-iris/45 bg-iris/12 text-iris"
+                  : "hover-tile cursor-pointer border-hair text-ice/85"
+              }`}
+            >
+              <span className="block max-w-44 truncate text-sm">
+                {c.name || c.handle || c.id.slice(0, 8)}
+              </span>
+              <span className="num block text-eyebrow text-muted">
+                {c.handle ? `@${c.handle}` : "ยังไม่ตั้ง handle"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
+/* =========================================================================
+   หน้าตาของ widget — สี + ขนาด
+   ========================================================================= */
+
+/**
+ * ตั้งสีกับขนาดของ widget จากตรงนี้ ไม่ใช่จากพารามิเตอร์ท้ายลิงก์
+ *
+ * ค่าถูกเก็บไว้ที่ช่อง จึงมีผลกับทุก source ที่วางไว้ใน OBS พร้อมกัน
+ * และช่องแต่ละช่องตั้งคนละสีได้ — ต่างจากการใส่ ?accent= ท้ายลิงก์ที่ต้อง
+ * ไล่แก้ทีละ source แล้วรีเฟรชทีละอัน
+ */
+function StylePanel({
+  channelId,
+  timer,
+  left,
+}: {
+  channelId: string;
+  timer: StreamTimer;
+  left: number;
+}) {
+  const tone = timerAccent(timer, "#a99bff");
+  const fontScale = clampScale(timer.fontScale, 0.6, 2.5);
+  const wheelScale = clampScale(timer.wheelScale, 0.6, 2);
+
+  const save = (style: Parameters<typeof setTimerStyle>[1]) =>
+    void setTimerStyle(channelId, style).catch(() =>
+      toast("บันทึกไม่สำเร็จ", "error"),
+    );
+
+  return (
+    <Panel className="p-6">
+      <Panel.Header eyebrow="Style" title="หน้าตาบนสตรีม" />
+
+      {/* ตัวอย่างจริง — ใช้ค่าชุดเดียวกับที่ widget ใช้ จะได้ไม่ต้องสลับไปดูใน OBS */}
+      <div className="sunken mb-5 grid place-items-center rounded-xl px-4 py-6">
+        <span
+          className="fig num leading-none"
+          style={{
+            fontSize: `${2.2 * fontScale}rem`,
+            color: tone,
+            textShadow: `0 0 24px ${tone}66`,
+          }}
+        >
+          {clockText(left)}
+        </span>
+      </div>
+
+      <div className="space-y-5">
+        <div>
+          <p className="mb-2 text-sm font-medium text-ice/85">สีเน้น</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {TIMER_ACCENTS.map((hex) => (
+              <button
+                key={hex}
+                type="button"
+                aria-label={`สี #${hex}`}
+                onClick={() => save({ accent: hex })}
+                className={`h-9 w-9 cursor-pointer rounded-full transition-transform hover:scale-110 ${
+                  tone.toLowerCase() === `#${hex}`
+                    ? "ring-2 ring-ice ring-offset-2 ring-offset-transparent"
+                    : ""
+                }`}
+                style={{ background: `#${hex}` }}
+              />
+            ))}
+            <Input
+              defaultValue={tone.replace("#", "")}
+              onBlur={(e) => {
+                const hex = e.target.value.replace("#", "").trim();
+                if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
+                  toast("ใส่เลขสี 6 หลัก เช่น a99bff", "error");
+                  return;
+                }
+                save({ accent: hex });
+              }}
+              className="w-32"
+              placeholder="a99bff"
+              aria-label="เลขสีเอง"
+            />
+          </div>
+        </div>
+
+        <ScaleRow
+          label="ขนาดตัวเลขนาฬิกา"
+          value={fontScale}
+          min={0.6}
+          max={2.5}
+          onChange={(v) => save({ fontScale: v })}
+        />
+        <ScaleRow
+          label="ขนาดวงล้อ"
+          value={wheelScale}
+          min={0.6}
+          max={2}
+          onChange={(v) => save({ wheelScale: v })}
+        />
+      </div>
+
+      <p className="mt-4 text-xs leading-relaxed text-muted">
+        เปลี่ยนแล้วมีผลกับทุก source ที่วางไว้ใน OBS ทันที ไม่ต้องแก้ลิงก์หรือรีเฟรช
+        — ถ้าอยากได้คนละสีต่อ source ยังใส่ <code>?accent=xxxxxx</code> ท้ายลิงก์ทับได้
+      </p>
+    </Panel>
+  );
+}
+
+/** แถบเลื่อนขนาด — ปล่อยนิ้วแล้วค่อยบันทึก ไม่ใช่เขียนทุกขีดที่ลากผ่าน */
+function ScaleRow({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (v: number) => void;
+}) {
+  const [local, setLocal] = useState(value);
+  const fill = (local - min) / (max - min);
+
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <p className="text-sm font-medium text-ice/85">{label}</p>
+        <span className="num text-xs text-muted">{local.toFixed(2)}×</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={0.05}
+        value={local}
+        onChange={(e) => setLocal(Number(e.target.value))}
+        onPointerUp={() => onChange(local)}
+        onKeyUp={() => onChange(local)}
+        className="w-full"
+        style={{ ["--fill" as string]: fill }}
+        aria-label={label}
+      />
+    </div>
   );
 }
 

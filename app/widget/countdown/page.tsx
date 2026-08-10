@@ -7,7 +7,13 @@ import { useWidgetOptions } from "@/hooks/useLiveTournament";
 import { watchChannel } from "@/lib/channel/store";
 import type { Channel } from "@/lib/channel/types";
 import { readTimer } from "@/lib/timer/store";
-import { clockText, isRunning, remainingAt } from "@/lib/timer/types";
+import {
+  clampScale,
+  clockText,
+  isRunning,
+  remainingAt,
+  timerAccent,
+} from "@/lib/timer/types";
 import WidgetShell, { WidgetCard, WidgetHint } from "@/components/widget/WidgetShell";
 
 /**
@@ -76,11 +82,14 @@ export default function CountdownWidget() {
   const left = remainingAt(timer, now);
   const done = left <= 0;
   const urgent = !done && left <= 60;
-  const color = urgent || done ? "rgb(var(--st-live))" : accent;
+  /* สีของช่องมาก่อนค่าในลิงก์ — เปลี่ยนที่คอนโซลแล้วทุก source เปลี่ยนตามเลย */
+  const tone = timerAccent(timer, accent);
+  const color = urgent || done ? "rgb(var(--st-live))" : tone;
+  const scale = clampScale(timer.fontScale, 0.6, 2.5);
 
   return (
     <WidgetShell>
-      <WidgetCard accent={accent} frame="bar" className="px-7 py-5">
+      <WidgetCard accent={tone} frame="bar" className="px-7 py-5">
         <p
           className="slug"
           style={urgent || done ? { color: "rgb(var(--st-live))" } : undefined}
@@ -90,8 +99,10 @@ export default function CountdownWidget() {
 
         <div className="mt-1.5 flex items-baseline gap-3">
           <span
-            className="fig num text-[3.4rem] leading-none"
+            className="fig num leading-none"
             style={{
+              /* ขนาดคูณจากฐาน 3.4rem — ตั้งจากคอนโซล ไม่ต้องแก้ลิงก์ */
+              fontSize: `${3.4 * scale}rem`,
               color,
               /* เรืองแสงอ่อนๆ ให้ตัวเลขลอยเหนือภาพเกม โดยไม่ต้องมีกล่องทึบรอง */
               textShadow: `0 0 24px ${color}66`,
