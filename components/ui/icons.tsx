@@ -193,6 +193,16 @@ export const IconTrash = ({ className, strokeWidth }: IconProps) =>
     strokeWidth,
   );
 
+export const IconTimer = ({ className, strokeWidth }: IconProps) =>
+  base(
+    <>
+      <circle cx="12" cy="13.5" r="7.5" />
+      <path d="M12 9.6v4M9.5 2.6h5M18.6 6.4l1.3-1.3" />
+    </>,
+    className,
+    strokeWidth,
+  );
+
 export const IconSearch = ({ className, strokeWidth }: IconProps) =>
   base(
     <>

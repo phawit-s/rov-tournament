@@ -79,6 +79,26 @@ const WIDGETS: WidgetDef[] = [
     detail: "หน้าไตเติลตอนจบรายการ มีทีม สมาชิก เงินรางวัล และสกอร์นัดชิง",
   },
   {
+    key: "countdown",
+    name: "นาฬิกาจับเวลาสด",
+    path: "/widget/countdown/",
+    w: 520,
+    h: 260,
+    scope: "channel",
+    detail:
+      "นาฬิกาถอยหลังที่คุมจากหน้า “จับเวลา” — กดเดิน/หยุด/บวกเวลาแล้วขยับทันที",
+  },
+  {
+    key: "spin-wheel",
+    name: "วงล้อสุ่มเวลา",
+    path: "/widget/wheel/",
+    w: 420,
+    h: 480,
+    scope: "channel",
+    detail:
+      "หมุนตามที่กดในหน้า “จับเวลา” แล้วโชว์ผล — แยก source กับนาฬิกา เปิดเฉพาะตอนจะหมุนได้",
+  },
+  {
     key: "alert",
     name: "แจ้งเตือนโดเนท",
     path: "/widget/alert/",
@@ -124,7 +144,7 @@ const WIDGETS: WidgetDef[] = [
 const NO_CHANNELS: Channel[] = [];
 
 /** สีสำเร็จรูปชุดเดียวกับสีสถานะของทั้งเว็บ กดแล้วได้โทนที่เข้ากับงานแน่ๆ */
-const ACCENT_PRESETS = ["e6c894", "cfa765", "6f8fd8", "4db591", "a079d8", "e0566b"];
+const ACCENT_PRESETS = ["a99bff", "7c6cf5", "35d6e8", "34e3b0", "ff5b7a", "ffb454"];
 
 const OBS_STEPS: ReactNode[] = [
   <>

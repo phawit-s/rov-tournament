@@ -68,6 +68,7 @@ export const PAGE_NO: Record<string, string> = {
   "/c": "05",
   "/widgets": "06",
   "/activity": "07",
+  "/timer": "10",
 };
 
 /** หัวข้อใหญ่ประจำหน้า พร้อมเส้นทองที่ค่อยๆ ลากออก */

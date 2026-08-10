@@ -35,14 +35,14 @@ export default function SongBackdrop({ videoId }: { videoId: string | null }) {
           {
             "--glow": palette.glow,
             "--tint": palette.tint,
-            "--base": palette.base,
           } as React.CSSProperties
         }
       />
 
-      {/* ม่านคลุมให้ตัวหนังสืออ่านออก */}
+      {/* ม่านคลุมให้ตัวหนังสืออ่านออก
+          ไม่มีชั้นเกรนแล้ว — เกรนคือ noise สีเทาล้วน พอวางทับไล่สีที่อุตส่าห์
+          ดูดมาจากปก มันก็ลดความอิ่มตัวของสีลงทั้งจอ ได้ผลตรงข้ามกับที่ต้องการ */}
       <span className="song-veil absolute inset-0" />
-      <span className="grain absolute inset-0 opacity-40" />
     </div>
   );
 }

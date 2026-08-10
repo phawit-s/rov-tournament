@@ -33,6 +33,7 @@ import {
   IconMoon,
   IconMute,
   IconSun,
+  IconTimer,
   IconTrophy,
   IconUnlock,
   IconUsers,
@@ -96,6 +97,14 @@ export const NAV: NavItem[] = [
     no: "05",
     group: "channel",
     Icon: IconHeart,
+    admin: true,
+  },
+  {
+    href: "/timer/",
+    label: "จับเวลา",
+    no: "10",
+    group: "channel",
+    Icon: IconTimer,
     admin: true,
   },
   {

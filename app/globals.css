@@ -714,11 +714,18 @@ body {
   อ่านเป็นคราบเปื้อน ไม่ใช่บรรยากาศ
 */
 .song-wash {
+  /*
+    ใช้เฉพาะสีที่อิ่มตัวจากชุดสีของปก (glow กับ tint) — ไม่แตะ base/soft
+
+    base คือสีพื้นการ์ดของ widget ซึ่งถูกลดความอิ่มตัวลงเหลือหลักหน่วยโดยตั้งใจ
+    (มันมีหน้าที่เป็น "พื้นให้ตัวหนังสืออ่านออก" ไม่ใช่ "สีของเพลง")
+    เอามาแผ่เป็นฉากหลังเมื่อไหร่ก็ได้หมอกเทาคลุมจอ ไม่ว่าปกจะสีอะไร
+  */
   background:
-    radial-gradient(90% 72% at 16% 6%, var(--tint), transparent 62%),
-    radial-gradient(88% 78% at 84% 24%, var(--glow), transparent 66%),
-    radial-gradient(130% 95% at 50% 104%, var(--base), transparent 72%);
-  opacity: 0.55;
+    radial-gradient(92% 74% at 14% 4%, var(--glow), transparent 64%),
+    radial-gradient(86% 76% at 86% 22%, var(--tint), transparent 62%),
+    radial-gradient(120% 90% at 50% 106%, var(--glow), transparent 70%);
+  opacity: 0.5;
 }
 :root[data-theme="light"] .song-wash {
   background:

@@ -1,5 +1,6 @@
 import type { DonateConfig, LiveInfo, MemberConfig } from "@/lib/tournament/types";
 import { DEFAULT_SONG_CONFIG, type SongConfig } from "@/lib/song/types";
+import { DEFAULT_TIMER, type StreamTimer } from "@/lib/timer/types";
 
 /**
  * ช่อง = โปรไฟล์ของผู้จัด/สตรีมเมอร์ หนึ่งบัญชีหนึ่งช่อง
@@ -26,6 +27,8 @@ export type Channel = {
   member: MemberConfig;
   /** ระบบขอเพลง YouTube — ช่องเก่าที่ยังไม่มีฟิลด์นี้ให้ถือว่าปิดอยู่ */
   songs?: SongConfig;
+  /** นาฬิกาจับเวลาสด + วงล้อสุ่มเวลา — ช่องเก่าไม่มีฟิลด์นี้ ถือว่าปิดอยู่ */
+  timer?: StreamTimer;
 
   ownerUid: string;
   ownerEmail?: string;
@@ -56,6 +59,7 @@ export const DEFAULT_CHANNEL: Omit<Channel, "id" | "ownerUid" | "createdAt" | "u
       showMemberList: true,
     },
     songs: { ...DEFAULT_SONG_CONFIG },
+    timer: { ...DEFAULT_TIMER },
   };
 
 /** ทำ handle ให้ปลอดภัยสำหรับใส่ใน URL */

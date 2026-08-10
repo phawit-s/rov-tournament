@@ -84,7 +84,7 @@ export function useWidgetOptions() {
     /** ขยาย/ย่อทั้ง widget */
     scale: num("scale", 1),
     /** สีเน้น เช่น ddaf64 */
-    accent: `#${(params.get("accent") ?? "e6c894").replace("#", "")}`,
+    accent: `#${(params.get("accent") ?? "a99bff").replace("#", "")}`,
     /** โชว์พื้นหลังทึบไหม (ค่าเริ่มต้นคือโปร่งใสสำหรับ OBS) */
     solid: params.get("solid") === "1",
     /** id แมตช์ที่อยากปักหมุด */
