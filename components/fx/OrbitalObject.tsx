@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useReducedMotion } from "motion/react";
+import { watchActive } from "@/lib/fx/active";
 
 type Point3 = { x: number; y: number; z: number };
 type Pulse = { r: number; alpha: number };
@@ -304,8 +305,15 @@ export default function OrbitalObject({
 
     raf = requestAnimationFrame(draw);
 
+    /* พ้นจอ (หรือแท็บถูกซ่อน) = หยุดสนิท */
+    const unwatch = watchActive(canvas, (on) => {
+      cancelAnimationFrame(raf);
+      raf = on ? requestAnimationFrame(draw) : 0;
+    });
+
     return () => {
       cancelAnimationFrame(raf);
+      unwatch();
       if (interactive) {
         canvas.removeEventListener("pointerenter", onEnter);
         canvas.removeEventListener("pointerleave", onLeave);

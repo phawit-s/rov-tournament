@@ -25,8 +25,6 @@ export default function SilkCanvas() {
     let H = 124;
     let image = ctx.createImageData(W, H);
     let raf = 0;
-    let last = 0;
-    let t = 0;
 
     /**
      * ชั้นบิดพิกัดชั้นแรก (qx, qy) คิดไว้ล่วงหน้าตั้งแต่ตอน resize
@@ -127,14 +125,20 @@ export default function SilkCanvas() {
 
     const rgb: number[] = [0, 0, 0];
 
-    const paint = (time: number) => {
-      if (!reduced) t = time * 0.000045;
+    const stopsNow = () =>
+      document.documentElement.dataset.theme === "light" ? PALETTE.light : PALETTE.dark;
 
-      const light = document.documentElement.dataset.theme === "light";
-      const stops = light ? PALETTE.light : PALETTE.dark;
+    /**
+     * วาดเฉพาะแถบแถว y0..y1 ด้วยเวลาและจานสีที่ "ตรึงไว้" ตั้งแต่ต้นรอบ
+     *
+     * ตรึงไว้เพราะรอบหนึ่งกินหลายเฟรม ถ้าปล่อยให้แต่ละแถบใช้ t ของตัวเอง
+     * แถบบนกับแถบล่างจะเป็นคนละช่วงเวลากันแล้วเห็นเป็นรอยต่อแนวนอน
+     */
+    const paintRows = (y0: number, y1: number, tv: number, stops: readonly (readonly number[])[]) => {
+      const t = tv;
       const data = image.data;
 
-      for (let y = 0; y < H; y++) {
+      for (let y = y0; y < y1; y++) {
         const ny = (y / H) * 2.6;
         for (let x = 0; x < W; x++) {
           const nx = (x / W) * 4.2;
@@ -162,22 +166,38 @@ export default function SilkCanvas() {
         }
       }
 
-      ctx.putImageData(image, 0, 0);
+      /* ส่งขึ้นจอเฉพาะแถบที่เพิ่งวาด ไม่ต้องอัปโหลดทั้งผืนใหม่ */
+      ctx.putImageData(image, 0, 0, 0, y0, W, y1 - y0);
     };
 
+    const paintAll = (tv: number) => paintRows(0, H, tv, stopsNow());
+
     /*
-      ลายไหลช้ามาก (t เดินราว 0.000045 ต่อมิลลิวินาที) ระหว่างสองเฟรมที่ห่างกัน
-      80ms ค่าขยับแค่หลักหมื่นส่วน ตาแยกไม่ออกว่าวาด 30 หรือ 12 ครั้งต่อวินาที
-      แต่ราคาต่างกันสองเท่าครึ่ง — ลูปนี้เป็น JS ล้วนบน main thread เส้นเดียวกับ
-      ที่ React เรนเดอร์และตัวเล่น YouTube ยิง callback กลับมา
+      แบ่งวาดทีละแถบ แถบละเฟรม แทนที่จะวาดทั้งผืนรวดเดียว
+
+      โปรไฟล์บอกว่าฟังก์ชันนี้คือก้อน JS ที่หนักที่สุดในหน้า — ต่อพิกเซลมันเรียก
+      fbm สามครั้ง ครั้งละสี่ชั้น ชั้นละสี่ hash รวมแล้วเกือบห้าสิบครั้งต่อพิกเซล
+      คูณสองหมื่นเจ็ดพันพิกเซล ของเดิมยัดงานทั้งก้อนนั้นลงในเฟรมเดียวทุก 80ms
+      main thread จึงหยุดรับงานอื่นเป็นช่วงๆ ตลอดเวลา ซึ่งตรงกับจังหวะที่คนเลื่อนหน้า
+      หรือกดปุ่มแล้วรู้สึกว่า "สะดุดเป็นห้วงๆ"
+
+      งานรวมต่อวินาทีเท่าเดิม แต่ถูกซอยเป็นชิ้นละไม่ถึงมิลลิวินาที เบราว์เซอร์จึง
+      แทรกงานอื่นได้ทุกเฟรม ส่วนตาก็แยกไม่ออกอยู่ดีเพราะลายไหลช้ามาก (t เดินราว
+      0.000045 ต่อมิลลิวินาที) รอบหนึ่งกินราวสี่ร้อยมิลลิวินาที ค่าขยับแค่หลักหมื่นส่วน
     */
-    const FRAME_MS = 80;
+    let row = 0;
+    let passT = 0;
+    let passStops = stopsNow();
 
     const loop = (time: number) => {
       raf = requestAnimationFrame(loop);
-      if (time - last < FRAME_MS) return;
-      last = time;
-      paint(time);
+      if (row === 0) {
+        passT = time * 0.000045;
+        passStops = stopsNow();
+      }
+      const end = Math.min(H, row + Math.max(2, Math.ceil(H / 24)));
+      paintRows(row, end, passT, passStops);
+      row = end >= H ? 0 : end;
     };
 
     /* ผู้ใช้ขอลดแอนิเมชัน = t ถูกตรึงไว้ที่ 0 ทุกเฟรมได้ภาพเดิมเป๊ะ
@@ -185,19 +205,40 @@ export default function SilkCanvas() {
        โหมดนี้ไม่มีลูป จึงต้องวาดใหม่เองตอนขนาดจอเปลี่ยน */
     const onResize = () => {
       resize();
-      if (reduced) paint(0);
+      row = 0;
+      if (reduced) paintAll(0);
     };
     window.addEventListener("resize", onResize);
 
     if (reduced) {
-      paint(0);
+      paintAll(0);
     } else {
+      /* วาดเต็มผืนหนึ่งครั้งก่อน ไม่งั้นเฟรมแรกๆ จะเห็นแถบดำไล่ลงมา */
+      paintAll(0);
       raf = requestAnimationFrame(loop);
     }
+
+    /*
+      แท็บถูกซ่อน = ไม่ต้องคำนวณอะไรเลย
+
+      ลูปนี้เดินทีละพิกเซลทั้งผืนใน JS แล้ว putImageData — เป็นงานก้อนที่หนักที่สุด
+      ในหน้า ไม่มีเหตุผลให้เดินต่อตอนไม่มีใครมอง โดยเฉพาะบนเครื่องที่เปิดหน้านี้
+      ค้างไว้ใน OBS ระหว่างไลฟ์
+    */
+    const onVisibility = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      if (!document.hidden && !reduced) {
+        row = 0;
+        raf = requestAnimationFrame(loop);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
       if (raf) cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [reduced]);
 

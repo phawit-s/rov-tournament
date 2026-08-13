@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import QRCode from "qrcode";
 import { Skeleton } from "../tournament/ui";
 import MiniBtn, { CopyBtn, MiniLink } from "./MiniBtn";
 import { IconMonitor } from "./icons";
+
+/*
+  โหลดตัวสร้าง QR ตอนจะใช้จริงเท่านั้น
+
+  qrcode เป็นก้อนใหญ่ (ตัวเข้ารหัส Reed-Solomon กับตารางค่าคงที่) แต่ผลของมัน
+  ถูกใช้ในเอฟเฟกต์หลังคอมโพเนนต์ขึ้นจอแล้ว การ import ไว้บนหัวไฟล์จึงแปลว่า
+  ทุกคนที่เปิดหน้านี้ต้องดาวน์โหลดและแกะโค้ดก้อนนั้นให้เสร็จก่อน หน้าถึงจะเริ่ม
+  ทำงาน ทั้งที่ภาพ QR ยังไม่ต้องขึ้นในเฟรมแรกอยู่แล้ว
+*/
 
 /**
  * QR ของลิงก์สาธารณะ
@@ -18,11 +26,14 @@ export function useQr(text: string | null): string | null {
   useEffect(() => {
     if (!text || map[text]) return;
     let alive = true;
-    QRCode.toDataURL(text, {
-      margin: 1,
-      width: 180,
-      color: { dark: "#12100b", light: "#ffffff" },
-    })
+    import("qrcode")
+      .then((m) =>
+        m.default.toDataURL(text, {
+          margin: 1,
+          width: 180,
+          color: { dark: "#12100b", light: "#ffffff" },
+        }),
+      )
       .then((url) => alive && setMap((p) => ({ ...p, [text]: url })))
       .catch(() => undefined);
     return () => {

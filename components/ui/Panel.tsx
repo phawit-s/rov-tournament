@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import RingCluster from "../fx/RingCluster";
 
 type Variant = "plain" | "feature" | "quiet";
@@ -46,6 +46,36 @@ export default function Panel({
   ornament,
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
+  /*
+    ไฟนวลตามเมาส์ — เขียนค่าลง DOM อย่างมากเฟรมละครั้ง
+
+    pointermove ยิงถี่กว่าอัตราเฟรมของจอ (เมาส์เกม 1000Hz ยิงได้พันครั้งต่อวินาที)
+    ทุกครั้งที่เขียน --mx/--my เบราว์เซอร์ต้องคิดสไตล์ใหม่แล้ววาดไล่สีวงกลม
+    340px ใหม่ทั้งวง เขียนสิบหกครั้งระหว่างสองเฟรมจึงเป็นการวาดทิ้งสิบห้าครั้ง
+
+    เก็บตำแหน่งล่าสุดไว้ใน ref แล้วให้ rAF เป็นคนเขียนจริง — ได้ภาพเดียวกัน
+    ด้วยงานเท่าจำนวนเฟรมที่วาดจริงเท่านั้น
+  */
+  const pending = useRef<{ x: number; y: number } | null>(null);
+  const raf = useRef(0);
+
+  useEffect(() => () => cancelAnimationFrame(raf.current), []);
+
+  const trackPointer = (clientX: number, clientY: number) => {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    pending.current = { x: clientX - rect.left, y: clientY - rect.top };
+    if (raf.current) return;
+    raf.current = requestAnimationFrame(() => {
+      raf.current = 0;
+      const spot = pending.current;
+      const node = ref.current;
+      if (!spot || !node) return;
+      node.style.setProperty("--mx", `${spot.x}px`);
+      node.style.setProperty("--my", `${spot.y}px`);
+    });
+  };
 
   const vars = {
     ["--accent"]: accent,
@@ -57,13 +87,12 @@ export default function Panel({
     <div
       ref={ref}
       onPointerMove={
+        /* เฉพาะเมาส์จริง — นิ้วบนจอสัมผัสไม่มี "ตำแหน่งตอนไม่ได้กด" อยู่แล้ว
+           การไล่คำนวณให้จึงเป็นงานฟรีที่ไม่มีใครเห็นผล */
         interactive
           ? (e) => {
-              const el = ref.current;
-              if (!el) return;
-              const rect = el.getBoundingClientRect();
-              el.style.setProperty("--mx", `${e.clientX - rect.left}px`);
-              el.style.setProperty("--my", `${e.clientY - rect.top}px`);
+              if (e.pointerType === "touch") return;
+              trackPointer(e.clientX, e.clientY);
             }
           : undefined
       }

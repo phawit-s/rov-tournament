@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useReducedMotion } from "motion/react";
+import { watchActive } from "@/lib/fx/active";
 
 type Ring = {
   radius: number;
@@ -52,17 +53,38 @@ export default function RingCluster({
 
     const state = { spread: 0, target: 0, angle: 0, targetAngle: 0 };
 
+    /*
+      อ่านตำแหน่งกล่องอย่างมากเฟรมละครั้ง
+
+      ตัวฟังอยู่ที่ window จึงได้ทุกการขยับเมาส์ทั้งหน้า ไม่ใช่เฉพาะตอนชี้มาที่นี่
+      และ getBoundingClientRect บังคับให้เบราว์เซอร์จัดเลย์เอาต์ให้เสร็จเดี๋ยวนั้น
+      เพื่อตอบค่าที่ถูกต้อง เมาส์เกมยิง pointermove ได้ราวพันครั้งต่อวินาที
+      คูณจำนวนวงแหวนบนหน้า = บังคับจัดเลย์เอาต์หลายพันครั้งต่อวินาที เพื่อเอาไป
+      วาดภาพที่อัปเดตจริงแค่หกสิบครั้ง
+
+      เก็บพิกัดดิบไว้เฉยๆ แล้วให้ลูปวาดเป็นคนอ่านกล่องเอง — ลูปเดินเฟรมละครั้ง
+      อยู่แล้ว จำนวนครั้งที่จัดเลย์เอาต์จึงเท่ากับจำนวนเฟรมพอดี
+    */
+    let point: { x: number; y: number } | null = null;
+
     const onMove = (e: PointerEvent) => {
+      point = { x: e.clientX, y: e.clientY };
+    };
+    const onLeave = () => {
+      point = null;
+      state.target = 0;
+    };
+
+    const applyPoint = () => {
+      if (!point) return;
       const rect = canvas.getBoundingClientRect();
-      const px = e.clientX - (rect.left + rect.width / 2);
-      const py = e.clientY - (rect.top + rect.height / 2);
+      const px = point.x - (rect.left + rect.width / 2);
+      const py = point.y - (rect.top + rect.height / 2);
+      point = null;
       const dist = Math.hypot(px, py);
       const reach = size * 0.9;
       state.target = Math.max(0, 1 - dist / reach);
       if (dist > 4) state.targetAngle = Math.atan2(py, px);
-    };
-    const onLeave = () => {
-      state.target = 0;
     };
 
     window.addEventListener("pointermove", onMove, { passive: true });
@@ -70,6 +92,7 @@ export default function RingCluster({
 
     let raf = 0;
     const draw = (time: number) => {
+      applyPoint();
       state.spread += (state.target - state.spread) * 0.07;
 
       // หมุนเข็มไปทางเมาส์โดยเลือกทางที่ใกล้กว่า
@@ -152,8 +175,16 @@ export default function RingCluster({
     };
 
     raf = requestAnimationFrame(draw);
+
+    /* พ้นจอ (หรือแท็บถูกซ่อน) = หยุดสนิท ไม่ใช่แค่วาดช้าลง */
+    const unwatch = watchActive(canvas, (on) => {
+      cancelAnimationFrame(raf);
+      raf = on ? requestAnimationFrame(draw) : 0;
+    });
+
     return () => {
       cancelAnimationFrame(raf);
+      unwatch();
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerleave", onLeave);
     };

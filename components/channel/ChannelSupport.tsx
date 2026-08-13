@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import QRCode from "qrcode";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useHashParam } from "@/hooks/useClient";
 import { authStore, getAuthClient, hasBackend } from "@/lib/backend/firebase";
@@ -141,11 +140,15 @@ export default function ChannelSupport() {
   useEffect(() => {
     if (!payload || qrCache[payload]) return;
     let alive = true;
-    QRCode.toDataURL(payload, {
-      margin: 1,
-      width: 320,
-      color: { dark: "#12100b", light: "#ffffff" },
-    })
+    /* โหลดตัวสร้าง QR ตอนจะใช้จริง — เหตุผลเดียวกับใน LinkRow */
+    import("qrcode")
+      .then((m) =>
+        m.default.toDataURL(payload, {
+          margin: 1,
+          width: 320,
+          color: { dark: "#12100b", light: "#ffffff" },
+        }),
+      )
       .then((url) => alive && setQrCache((p) => ({ ...p, [payload]: url })))
       .catch(() => undefined);
     return () => {

@@ -7,6 +7,7 @@ import {
   useReducedMotion,
   useSpring,
   useTransform,
+  type MotionValue,
 } from "motion/react";
 import SilkCanvas from "./SilkCanvas";
 
@@ -47,12 +48,23 @@ export default function BackgroundFX() {
   const bx = useSpring(mx, { stiffness: 9, damping: 28, mass: 2.4 });
   const by = useSpring(my, { stiffness: 9, damping: 28, mass: 2.4 });
 
-  const glowLeft = useTransform(ax, (v) => `${26 + v * 16}%`);
-  const glowTop = useTransform(ay, (v) => `${-8 + v * 14}%`);
-  const glow2Left = useTransform(bx, (v) => `${84 - v * 18}%`);
-  const glow2Top = useTransform(by, (v) => `${76 - v * 14}%`);
-  const glow3Left = useTransform(bx, (v) => `${10 + v * 12}%`);
-  const glow3Top = useTransform(ay, (v) => `${88 - v * 12}%`);
+  /*
+    ระยะที่ก้อนแสงขยับ คิดเป็นพิกเซล ไม่ใช่เปอร์เซ็นต์ของจอ
+
+    ของเดิมขยับด้วย left/top ซึ่งเป็นค่าที่บังคับให้เบราว์เซอร์ "จัดเลย์เอาต์ใหม่"
+    ทุกครั้งที่เปลี่ยน — และของที่ขยับคือแผ่น blur 150px ขนาด 736px สามแผ่น
+    ที่ตามเมาส์ด้วยสปริงหน่วงหนัก (กว่าจะนิ่งใช้เวลาหลายวินาทีต่อการขยับเมาส์
+    หนึ่งครั้ง) ผลคือ layout + paint ก้อนใหญ่รัวๆ ตลอดเวลาที่มีคนขยับเมาส์
+
+    transform ทำงานบน compositor ล้วน ไม่แตะเลย์เอาต์ ไม่ต้องเบลอใหม่
+    ตาเห็นเหมือนเดิมเป๊ะ เพราะระยะที่ขยับจริงมีแค่ไม่กี่ร้อยพิกเซลอยู่แล้ว
+  */
+  const glowX = useTransform(ax, (v) => (v - 0.5) * 230);
+  const glowY = useTransform(ay, (v) => (v - 0.5) * 200);
+  const glow2X = useTransform(bx, (v) => (0.5 - v) * 260);
+  const glow2Y = useTransform(by, (v) => (0.5 - v) * 200);
+  const glow3X = useTransform(bx, (v) => (v - 0.5) * 170);
+  const glow3Y = useTransform(ay, (v) => (0.5 - v) * 170);
 
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
@@ -233,10 +245,28 @@ export default function BackgroundFX() {
       raf = requestAnimationFrame(draw);
     };
 
+    /*
+      แท็บถูกซ่อน = หยุดวาดทั้งหมด
+
+      เบราว์เซอร์หรี่ rAF ให้เองอยู่แล้วก็จริง แต่ "หรี่" ไม่ใช่ "หยุด" —
+      และที่สำคัญกว่าคือหน้านี้ถูกเปิดค้างไว้ใน OBS เป็นซีนที่ยังไม่ได้ใช้
+      ซึ่ง OBS เรนเดอร์ต่อแม้ไม่ได้แสดงผล เท่ากับเผาซีพียูของเครื่องที่กำลัง
+      เข้ารหัสวิดีโออยู่ทิ้งเปล่าๆ ทั้งไลฟ์
+    */
+    const onVisibility = () => {
+      cancelAnimationFrame(raf);
+      if (!document.hidden) {
+        last = 0;
+        raf = requestAnimationFrame(draw);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     raf = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [reduced]);
 
@@ -263,47 +293,35 @@ export default function BackgroundFX() {
         ส่วน opacity เปลี่ยนได้บน compositor เลย ใช้พื้นผิวที่เบลอไว้แล้วซ้ำได้
         ตาเห็นเหมือนเดิมคือ "แสงเต้นช้าๆ" แต่ราคาต่างกันคนละเรื่อง
       */}
-      <motion.div
-        aria-hidden
-        className="absolute h-184 w-184 rounded-full blur-[150px]"
-        style={{
-          left: glowLeft,
-          top: glowTop,
-          x: "-50%",
-          y: "-50%",
-          background:
-            "radial-gradient(circle, rgba(184,146,84,0.32) 0%, rgba(184,146,84,0) 68%)",
-        }}
-        animate={{ opacity: [0.34, 0.46, 0.34] }}
-        transition={{ duration: 24, repeat: Infinity, ease: "easeInOut" }}
+      <Glow
+        x={glowX}
+        y={glowY}
+        anchor={{ left: "34%", top: "-1%" }}
+        size="h-184 w-184"
+        blur="blur-[150px]"
+        tint="rgba(184,146,84,0.32)"
+        breathe={[0.34, 0.46, 0.34]}
+        seconds={24}
       />
-      <motion.div
-        aria-hidden
-        className="absolute h-160 w-160 rounded-full blur-[160px]"
-        style={{
-          left: glow2Left,
-          top: glow2Top,
-          x: "-50%",
-          y: "-50%",
-          background:
-            "radial-gradient(circle, rgba(84,110,178,0.28) 0%, rgba(84,110,178,0) 68%)",
-        }}
-        animate={{ opacity: [0.3, 0.42, 0.3] }}
-        transition={{ duration: 31, repeat: Infinity, ease: "easeInOut" }}
+      <Glow
+        x={glow2X}
+        y={glow2Y}
+        anchor={{ left: "75%", top: "69%" }}
+        size="h-160 w-160"
+        blur="blur-[160px]"
+        tint="rgba(84,110,178,0.28)"
+        breathe={[0.3, 0.42, 0.3]}
+        seconds={31}
       />
-      <motion.div
-        aria-hidden
-        className="absolute h-128 w-128 rounded-full blur-[140px]"
-        style={{
-          left: glow3Left,
-          top: glow3Top,
-          x: "-50%",
-          y: "-50%",
-          background:
-            "radial-gradient(circle, rgba(150,110,190,0.2) 0%, rgba(150,110,190,0) 70%)",
-        }}
-        animate={{ opacity: [0.22, 0.34, 0.22] }}
-        transition={{ duration: 38, repeat: Infinity, ease: "easeInOut" }}
+      <Glow
+        x={glow3X}
+        y={glow3Y}
+        anchor={{ left: "16%", top: "82%" }}
+        size="h-128 w-128"
+        blur="blur-[140px]"
+        tint="rgba(150,110,190,0.2)"
+        breathe={[0.22, 0.34, 0.22]}
+        seconds={38}
       />
 
       {/* แสงกวาดเฉียงผ่านจอช้าๆ */}
@@ -320,6 +338,55 @@ export default function BackgroundFX() {
 
       {/* ขอบมืดรอบจอ */}
       <div className="scene-vignette absolute inset-0" />
+    </div>
+  );
+}
+
+/**
+ * ก้อนแสงหนึ่งก้อน — จุดยึดอยู่กับที่ ส่วนที่ขยับเป็น transform ล้วน
+ *
+ * แยกกล่องนอก (จุดยึด + จัดกึ่งกลางด้วย translate คงที่) ออกจากกล่องใน
+ * (ตัวที่ขยับ) เพราะ motion เขียนทับ transform ทั้งก้อน ถ้าเอาการจัดกึ่งกลาง
+ * ไปไว้ในตัวเดียวกัน มันจะหายไปทันทีที่เริ่มขยับ
+ *
+ * การหายใจใช้ opacity อย่างเดียว ไม่แตะ scale — แผ่นเบลอ 150px ถ้าขยับ scale
+ * เบราว์เซอร์ต้องเบลอใหม่ทั้งก้อนทุกเฟรม ส่วน opacity เปลี่ยนบน compositor ได้เลย
+ */
+function Glow({
+  x,
+  y,
+  anchor,
+  size,
+  blur,
+  tint,
+  breathe,
+  seconds,
+}: {
+  x: MotionValue<number>;
+  y: MotionValue<number>;
+  anchor: { left: string; top: string };
+  size: string;
+  blur: string;
+  tint: string;
+  breathe: number[];
+  seconds: number;
+}) {
+  return (
+    <div
+      aria-hidden
+      className="absolute"
+      style={{ ...anchor, transform: "translate(-50%, -50%)" }}
+    >
+      <motion.div
+        className={`rounded-full ${size} ${blur}`}
+        style={{
+          x,
+          y,
+          background: `radial-gradient(circle, ${tint} 0%, transparent 68%)`,
+        }}
+        animate={{ opacity: breathe }}
+        transition={{ duration: seconds, repeat: Infinity, ease: "easeInOut" }}
+      />
     </div>
   );
 }
