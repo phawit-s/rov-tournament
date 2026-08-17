@@ -1,19 +1,16 @@
 import type { Metadata } from "next";
 import AppShell from "@/components/AppShell";
-import AdminGate from "@/components/auth/AdminGate";
-import ActivityView from "@/components/ActivityView";
+import RedirectTo from "@/components/RedirectTo";
 
 export const metadata: Metadata = {
   title: "ประวัติการทำงาน — Steamer Hub",
-  description: "บันทึกกิจกรรมทั้งหมดที่เกิดขึ้นในเครื่องนี้",
 };
 
-export default function ActivityPage() {
+/** ที่อยู่เดิมก่อนงานของผู้จัดจะย้ายไปรวมกันที่ /studio/ — ลิงก์เก่ายังต้องเปิดได้ */
+export default function ActivityRedirectPage() {
   return (
-    <AppShell wide>
-      <AdminGate>
-        <ActivityView />
-      </AdminGate>
+    <AppShell>
+      <RedirectTo href="/studio/activity/" label="ประวัติการทำงาน" />
     </AppShell>
   );
 }

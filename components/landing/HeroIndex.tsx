@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ComponentType } from "react";
-import { useIsAdmin } from "@/hooks/useAdmin";
+import { useSiteRole } from "@/hooks/useRole";
 import { IconDice, IconMonitor, IconTrophy, IconWheel } from "../ui/icons";
 
 type IconType = ComponentType<{ className?: string; strokeWidth?: number }>;
@@ -40,8 +40,8 @@ const INDEX: Entry[] = [
     no: "03",
     title: "จัดทัวร์นาเมนต์",
     detail: "รับสมัคร จัดสาย กรอกผล คิดเงินรางวัล",
-    href: "/tournaments/",
-    slug: "/tournaments",
+    href: "/studio/tournaments/",
+    slug: "/studio/tournaments",
     Icon: IconTrophy,
     admin: true,
   },
@@ -49,8 +49,8 @@ const INDEX: Entry[] = [
     no: "04",
     title: "Widget สตรีม",
     detail: "สกอร์บอร์ด คิวถัดไป ป้ายแชมป์",
-    href: "/widgets/",
-    slug: "/widgets",
+    href: "/studio/widgets/",
+    slug: "/studio/widgets",
     Icon: IconMonitor,
     admin: true,
   },
@@ -81,8 +81,9 @@ function IndexNo({ no }: { no: string }) {
  * เส้นจุดนำสายตาแบบสูจิบัตร: ชื่อบท … เลขหน้า
  */
 export default function HeroIndex({ className = "" }: { className?: string }) {
-  const admin = useIsAdmin();
-  const entries = admin ? INDEX : INDEX.filter((e) => !e.admin);
+  /* บทที่ล็อกไว้เปิดให้ "คนที่เข้าสตูดิโอได้" ไม่ใช่แค่ผู้ดูแลระบบ */
+  const { studio } = useSiteRole();
+  const entries = studio ? INDEX : INDEX.filter((e) => !e.admin);
 
   return (
     <nav aria-label="สารบัญเครื่องมือ" className={className}>

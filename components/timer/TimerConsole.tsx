@@ -10,8 +10,9 @@ import {
   type ReactNode,
 } from "react";
 import { useHashParam, useNow } from "@/hooks/useClient";
+import { useSiteRole } from "@/hooks/useRole";
 import { authStore } from "@/lib/backend/firebase";
-import { watchAllChannels, watchChannel } from "@/lib/channel/store";
+import { watchChannel, watchMyChannels } from "@/lib/channel/store";
 import type { Channel } from "@/lib/channel/types";
 import { uid } from "@/lib/random";
 import { sfx } from "@/lib/sound";
@@ -90,14 +91,42 @@ export default function TimerConsole() {
     authStore.getServerSnapshot,
   );
   const user = authStore.user();
+  const { role } = useSiteRole();
+  const admin = role === "admin";
 
-  /*
-    ช่องไหนอยู่ใน #ch= — คนหนึ่งมีได้หลายช่อง และแต่ละช่องมีนาฬิกากับวงล้อของตัวเอง
-    ไม่ใส่มา = ช่องแรกของบัญชี (ซึ่งใช้ uid เป็นรหัสช่อง)
-  */
   const chParam = useHashParam("ch");
   const own = user && !user.anonymous ? user.uid : null;
-  const channelId = chParam ?? own;
+
+  // ช่องทั้งหมดของบัญชีนี้ — ถามเฉพาะของตัวเอง ไม่ดึงทั้งระบบมากรองในเครื่อง
+  const [mine, setMine] = useState<Channel[]>(NO_CHANNELS);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    if (!own) return;
+    return watchMyChannels(
+      own,
+      (list) => {
+        setMine(list);
+        setLoaded(true);
+      },
+      () => {
+        setMine(NO_CHANNELS);
+        setLoaded(true);
+      },
+    );
+  }, [own]);
+
+  /*
+    ช่องไหน — ต้องเป็นช่องของตัวเองเท่านั้น
+
+    #ch= ที่ชี้ไปช่องคนอื่นถูกทิ้ง (ผู้ดูแลระบบเปิดของคนอื่นได้ตามหน้าที่)
+    กติกาฝั่งเซิร์ฟเวอร์ปฏิเสธการเขียนอยู่แล้ว แต่หน้าจอไม่ควรพาไปยืนอยู่หน้า
+    คอนโซลของช่องคนอื่นตั้งแต่แรก — กดปุ่มแล้ว error รัวๆ ไม่ได้บอกอะไรใครเลย
+
+    และเลิกเดาว่า "รหัสช่อง = uid" — ช่องที่สองเป็นต้นไปใช้รหัสสุ่ม
+    คนที่ช่องแรกไม่ได้ชื่อเท่ากับ uid จะเปิดหน้านี้ไม่ได้เลยถ้ายังเดาแบบเดิม
+  */
+  const canUseParam = !!chParam && (admin || mine.some((c) => c.id === chParam));
+  const channelId = canUseParam ? chParam : (mine[0]?.id ?? null);
 
   const [channel, setChannel] = useState<Channel | null>(null);
   useEffect(() => {
@@ -109,18 +138,20 @@ export default function TimerConsole() {
     );
   }, [channelId]);
 
-  // ช่องทั้งหมดของบัญชีนี้ ใช้ทำแถบสลับช่อง
-  const [mine, setMine] = useState<Channel[]>(NO_CHANNELS);
-  useEffect(() => {
-    if (!own) return;
-    return watchAllChannels(
-      (all) => setMine(all.filter((c) => c.ownerUid === own)),
-      () => setMine(NO_CHANNELS),
-    );
-  }, [own]);
+  if (!own) {
+    return <EmptyNote>ต้องล็อกอินด้วยบัญชีเจ้าของช่องก่อน</EmptyNote>;
+  }
+
+  if (!loaded) {
+    return <EmptyNote>กำลังอ่านช่องของคุณ…</EmptyNote>;
+  }
 
   if (!channelId) {
-    return <EmptyNote>ต้องล็อกอินด้วยบัญชีเจ้าของช่องก่อน</EmptyNote>;
+    return (
+      <EmptyNote>
+        ยังไม่มีช่องบนคลาวด์ — ไปที่หน้า “ช่องของฉัน” แล้วกดเผยแพร่ช่องหนึ่งครั้งก่อน
+      </EmptyNote>
+    );
   }
 
   return (

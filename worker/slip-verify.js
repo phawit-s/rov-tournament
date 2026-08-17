@@ -20,7 +20,14 @@
  * ตอบ 200 เสมอโดยตั้งใจ เพราะฝั่งเว็บถือว่า "ตรวจไม่ผ่าน" กับ "ตรวจไม่ได้"
  * เป็นคนละเรื่องกับ "เว็บพัง" การคืน 500 เปล่าๆ จะทำให้ fetch ฝั่งเว็บ
  * ต้องไปเดาเองว่าเกิดอะไรขึ้น
+ *
+ * Worker ตัวนี้รับงานอื่นที่ต้องมีเซิร์ฟเวอร์ด้วย แยกตามพารามิเตอร์ใน URL
+ *   GET  ?health=1   บอกว่าตั้งค่าครบไหม
+ *   GET  ?search=... ค้นเพลงบน YouTube (คีย์อยู่ฝั่งนี้)
+ *   POST ?ingest=1   รับคำขอเพลงจากแชทไลฟ์ (song-ingest.js)
  */
+
+import { handleSongIngest } from "./song-ingest.js";
 
 /* ------------------------------------------------------------------ *
  * ตาราง adapter ของผู้ให้บริการ
@@ -624,7 +631,9 @@ function corsHeaders(request, env) {
   return {
     "Access-Control-Allow-Origin": pickOrigin(request, env),
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    // Authorization มีไว้ให้ทาง ?ingest=1 — เครื่องมือดูดแชทบางตัว
+    // (เช่น Social Stream Ninja) รันในเบราว์เซอร์ จึงต้องผ่าน preflight ได้
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Max-Age": "86400",
     // คำตอบขึ้นกับ Origin ต้องบอก cache ไม่งั้นโดเมนหนึ่งจะได้ header ของอีกโดเมน
     Vary: "Origin",
@@ -676,12 +685,15 @@ const handler = {
         return new Response(null, { status: 204, headers: cors });
       }
 
+      // อ่านครั้งเดียวแล้วส่งต่อ ทุกทางแยกข้างล่างดูพารามิเตอร์จากตัวนี้
+      const params = new URL(request.url).searchParams;
+
       /*
         เช็คสถานะการตั้งค่า — เปิดด้วย GET ?health=1
         มีไว้เพราะถ้าไม่มีทางนี้ จะรู้ว่าตั้งค่าครบไหมก็ต่อเมื่อมีคนโอนจริง
         คืนแค่ว่า "ตั้งแล้วหรือยัง" กับ "ล็อกอินบอทผ่านไหม" ไม่คืนค่าความลับใดๆ
       */
-      if (new URL(request.url).searchParams.get("health") === "1") {
+      if (params.get("health") === "1") {
         /*
           รายงานความยาวกับอักขระหัวท้ายด้วย ไม่ใช่แค่ "มีค่าไหม"
           เพราะเคยเจอว่าเครื่องมือบางตัวใส่ newline ต่อท้ายค่าที่ pipe เข้ามา
@@ -738,7 +750,22 @@ const handler = {
         (ลองทางที่ไม่ต้องใช้คีย์มาแล้วสองทาง — listType:'search' ของตัวเล่นฝัง
         ถูกปิดไปแล้ว ส่วน endpoint คำแนะนำของ Google ก็โดน CORS บล็อก)
       */
-      const search = new URL(request.url).searchParams.get("search");
+      /*
+        รับคำขอเพลงจากแชทไลฟ์ — เปิดด้วย POST ?ingest=1
+
+        อยู่ก่อนด่าน rate limit ตาม IP ข้างล่างโดยตั้งใจ เพราะคำขอทั้งไลฟ์
+        มาจากไอพีเดียว (เครื่องสตรีมเมอร์) ถ้านับรวมกับคนโอนจะเต็มโควตา
+        ตั้งแต่คนที่สาม — ตัวมันมีเพดานของตัวเองอยู่แล้ว (MAX_INGEST_PER_MIN)
+      */
+      if (params.get("ingest") === "1") {
+        return handleSongIngest(request, env, cors, {
+          reply,
+          allow,
+          botLogin: botLogin_,
+        });
+      }
+
+      const search = params.get("search");
       if (search !== null) {
         const ip = request.headers.get("CF-Connecting-IP") || "unknown";
         if (!allow(ip, Number(env.MAX_PER_MIN || 0))) return fail("rate-limited", cors);

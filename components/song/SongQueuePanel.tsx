@@ -227,6 +227,19 @@ export default function SongQueuePanel({
           <LinkRow label="หน้าขอเพลง" url={requestUrl} />
         </div>
 
+        {/* รับคำขอจากแชท TikTok — ต้องรันสะพานบนเครื่องเอง ตั้งค่าในเว็บอย่างเดียวไม่พอ
+            บอกไว้ตรงนี้เพราะถ้าไม่บอก จะไม่มีใครรู้ว่ามีทางนี้ให้ใช้ */}
+        <div className="mt-4 rounded-xl tile p-4">
+          <p className="text-sm text-ice/85">รับคำขอจากแชท TikTok ด้วยก็ได้</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            คนดูพิมพ์ <code className="text-iris">!เพลง ชื่อเพลง</code> ในแชทไลฟ์
+            แล้วเพลงเด้งเข้าคิวนี้เลย โดยไม่ต้องเปิดลิงก์ข้างบน —
+            ต้องรันสะพานเล็กๆ บนเครื่องที่ไลฟ์คู่กันไปด้วย (TikTok ไม่เปิดให้อ่านแชท
+            จากเว็บตรงๆ) วิธีตั้งอยู่ในโฟลเดอร์{" "}
+            <code className="text-iris">bridge/</code> ของโปรเจกต์
+          </p>
+        </div>
+
         {!songs.enabled && (
           <p className="mt-3 text-xs text-muted">
             ตอนนี้ปิดรับอยู่ — คนดูยังเปิดหน้านี้ได้แต่ส่งลิงก์เข้ามาไม่ได้
@@ -316,6 +329,7 @@ export default function SongQueuePanel({
                 <p className="mt-0.5 truncate text-xs text-muted">{playing.author}</p>
                 <p className="mt-2 text-xs text-ice/70">
                   ขอโดย <span className="text-iris">{playing.byName}</span>
+                  <FromChat song={playing} />
                   <span className="num ml-2 text-muted/80">
                     {timeText(playing.createdAt)}
                   </span>
@@ -371,6 +385,7 @@ export default function SongQueuePanel({
                     <p className="truncate text-xs text-muted">{song.author}</p>
                     <p className="mt-0.5 truncate text-xs text-ice/65">
                       {song.byName}
+                      <FromChat song={song} />
                       <span className="num ml-2 text-muted/80">
                         {timeText(song.createdAt)}
                       </span>
@@ -491,6 +506,17 @@ export default function SongQueuePanel({
       />
     </div>
   );
+}
+
+/**
+ * ป้ายบอกว่าใบนี้มาจากแชทไลฟ์ ไม่ได้มาจากหน้าขอเพลง
+ *
+ * สำคัญตรงที่ชื่อคนขอคนละชนิดกัน — ใบจากแชทเป็นชื่อ TikTok จริงที่ตามไป
+ * ตอบในไลฟ์ได้ ส่วนใบจากหน้าเว็บเป็นชื่อที่คนดูพิมพ์เองจะเป็นอะไรก็ได้
+ */
+function FromChat({ song }: { song: SongRequest }) {
+  if (song.source !== "tiktok") return null;
+  return <span className="slug slug-2 ml-2">TikTok</span>;
 }
 
 /**

@@ -98,7 +98,7 @@ export default function PlayersView() {
             <>
               สถิติจะขึ้นเองเมื่อมีรายชื่อผู้เล่นในทีมและมีการกรอกผลแมตช์ — เริ่มที่{" "}
               <Link
-                href="/tournaments/"
+                href="/studio/tournaments/"
                 className="text-iris underline-offset-2 hover:underline"
               >
                 หน้าทัวร์นาเมนต์

@@ -11,37 +11,79 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
-import { getDb, hasBackend } from "@/lib/backend/firebase";
+import { authStore, getDb, hasBackend } from "@/lib/backend/firebase";
 import { DEFAULT_CHANNEL, type Channel } from "./types";
 
 const COL = "channels";
-const KEY = "tourney-hub/channel/v1";
 
-/* ---------------- สำเนาในเครื่อง ---------------- */
+/**
+ * ---------------- ฉบับร่างระหว่างแก้ (อยู่ในหน่วยความจำล้วน) ----------------
+ *
+ * ★ ห้ามเขียนลง localStorage ★
+ *
+ * ช่องเป็นของ "บัญชี" ไม่ใช่ของ "เครื่อง" — เจ้าของเปิดจากคอมที่บ้าน โน้ตบุ๊ก
+ * ที่ร้าน หรือมือถือ ก็ต้องเห็นของชุดเดียวกัน ต้นฉบับจึงต้องอยู่บนคลาวด์ที่เดียว
+ *
+ * ของเดิมเก็บร่างไว้ใน localStorage คีย์เดียวทั้งเบราว์เซอร์ ซึ่งพังสองทางพร้อมกัน:
+ *
+ *  1. ย้ายเครื่องแล้วของหาย — เปิดอีกเครื่องได้ช่องเปล่า ทั้งที่บนคลาวด์มีครบ
+ *  2. ใช้เครื่องร่วมกันแล้วของรั่ว — สลับบัญชีแล้วร่างของคนก่อนหน้าโผล่มาทั้งใบ
+ *     รวมเลขพร้อมเพย์ ชื่อบัญชีรับโอน และลิงก์ไลฟ์ของเขา
+ *     (กติกาฝั่งเซิร์ฟเวอร์กันการ "เขียน" ไว้อยู่แล้ว แต่กันการ "มองเห็น" ไม่ได้
+ *      เพราะของรั่วมาจากเครื่องนี้เอง ไม่ได้มาจากคลาวด์)
+ *
+ * ตอนนี้ร่างอยู่ในหน่วยความจำของแท็บนั้นเท่านั้น: สลับหน้าไปมาในสตูดิโอแล้ว
+ * งานที่แก้ค้างไว้ยังอยู่ · รีเฟรชหรือปิดแท็บแล้วหายไปตามที่ควรเป็น เพราะสิ่งที่
+ * ยังไม่ได้กด "เผยแพร่" ก็คือสิ่งที่ยังไม่มีอยู่จริง · และไม่มีอะไรค้างในเครื่อง
+ * ให้คนถัดไปที่มาล็อกอินเห็น
+ */
 
-let cache: Channel | null | undefined;
+/** คีย์รุ่นเก่าที่เคยเก็บร่างไว้ — ต้องล้างทิ้ง ไม่ใช่แค่เลิกใช้ */
+const LEGACY_KEY_PREFIX = "tourney-hub/channel/v1";
+
+/** uid ของคนที่ล็อกอินอยู่ — ผู้ใช้แบบไม่ระบุตัวตนไม่นับ ไม่มีช่องอยู่แล้ว */
+function currentUid(): string | null {
+  const u = authStore.user();
+  return u && !u.anonymous ? u.uid : null;
+}
+
+let draft: Channel | null = null;
+/** ร่างข้างบนเป็นของบัญชีไหน — สลับบัญชีเมื่อไหร่ถือว่าไม่มีร่าง */
+let draftUid: string | null = null;
 const listeners = new Set<() => void>();
 
-function read(): Channel | null {
-  if (cache !== undefined) return cache;
-  if (typeof window === "undefined") return null;
+/**
+ * ล้างของเก่าที่ค้างอยู่ในเครื่องทิ้งครั้งเดียว
+ *
+ * แค่เลิกเขียนไม่พอ — เครื่องที่เคยใช้รุ่นก่อนยังมีเลขพร้อมเพย์ของเจ้าของเดิม
+ * นอนอยู่ใน localStorage ต่อไปเรื่อยๆ จนกว่าจะมีใครมาลบ
+ */
+let purged = false;
+function purgeLegacy() {
+  if (purged || typeof window === "undefined") return;
+  purged = true;
   try {
-    const raw = localStorage.getItem(KEY);
-    cache = raw ? (JSON.parse(raw) as Channel) : null;
+    const doomed: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(LEGACY_KEY_PREFIX)) doomed.push(k);
+    }
+    doomed.forEach((k) => localStorage.removeItem(k));
   } catch {
-    cache = null;
+    /* โหมดส่วนตัวของเบราว์เซอร์อ่านไม่ได้ ก็ไม่มีอะไรให้ลบอยู่แล้ว */
   }
-  return cache;
+}
+
+function read(): Channel | null {
+  if (typeof window === "undefined") return null;
+  purgeLegacy();
+  // สลับบัญชีในแท็บเดิม = ร่างของคนก่อนหน้าไม่นับ ห้ามคืนออกไปเด็ดขาด
+  return draftUid === currentUid() ? draft : null;
 }
 
 function commit(next: Channel | null) {
-  cache = next;
-  try {
-    if (next) localStorage.setItem(KEY, JSON.stringify(next));
-    else localStorage.removeItem(KEY);
-  } catch {
-    /* ไม่ซีเรียส */
-  }
+  draft = next;
+  draftUid = currentUid();
   listeners.forEach((l) => l());
 }
 
@@ -57,7 +99,10 @@ export type SeedChoice = "wait" | "use-cloud" | "create-empty" | "keep-local";
 export function decideChannelSeed(input: {
   /** ล็อกอินอยู่ไหม */
   hasUser: boolean;
-  /** มีสำเนาในเครื่องแล้วหรือยัง */
+  /**
+   * มีร่างที่แก้ค้างไว้ในแท็บนี้ *ของบัญชีนี้* แล้วหรือยัง
+   * (ร่างอยู่ในหน่วยความจำล้วน ไม่ได้อยู่ในเครื่อง — ดูหัวไฟล์)
+   */
   hasLocal: boolean;
   /** ผู้ดูแลกำลังสลับไปแก้ช่องของคนอื่นอยู่ไหม (ช่องนั้นใช้สำเนาแยกของมันเอง) */
   editingOther: boolean;
@@ -67,7 +112,7 @@ export function decideChannelSeed(input: {
   cloudExists: boolean;
 }): SeedChoice {
   if (!input.hasUser) return "wait";
-  // ของที่แก้ค้างไว้ในเครื่องสำคัญกว่าเสมอ ห้ามเอาของคลาวด์มาทับงานที่ยังไม่ได้เผยแพร่
+  // ของที่แก้ค้างไว้ในแท็บนี้สำคัญกว่าเสมอ ห้ามเอาของคลาวด์มาทับงานที่ยังไม่ได้เผยแพร่
   if (input.hasLocal) return "keep-local";
   if (input.editingOther) return "keep-local";
   if (!input.cloudLoaded) return "wait";
@@ -167,7 +212,14 @@ export async function pushChannelAs(channel: Channel, targetId: string): Promise
   );
 }
 
-/** อัปโหลดช่องของตัวเอง — doc id คือ uid ของเจ้าของ */
+/**
+ * อัปโหลดช่องโดยเดาปลายทางจาก ownerUid
+ *
+ * @deprecated ห้ามใช้กับช่องที่อาจถูกโอนเจ้าของมา — มันเดาว่า "ชื่อเอกสาร = uid
+ * เจ้าของ" ซึ่งจริงเฉพาะช่องแรกที่สร้างจากบัญชีนั้นเอง ช่องที่โอนมาหรือช่องที่สอง
+ * จะถูกเขียนไปที่เอกสารใหม่ กลายเป็นช่องซ้ำโดยที่ลิงก์เดิมยังชี้ใบเก่า
+ * ให้ใช้ pushChannelAs(channel, idของเอกสารที่กำลังแก้) แทนเสมอ
+ */
 export async function pushChannel(channel: Channel): Promise<void> {
   await pushChannelAs(channel, channel.ownerUid);
 }
@@ -213,6 +265,37 @@ export function watchAllChannels(
     collection(db, COL),
     (snap) => {
       // id จาก doc เชื่อถือได้กว่าฟิลด์ในเอกสาร (เอกสารเก่าอาจไม่มี id)
+      const list = snap.docs.map((d) => ({ ...(d.data() as Channel), id: d.id }));
+      list.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+      onChange(list);
+    },
+    (err) => onError?.(err),
+  );
+}
+
+/**
+ * ฟังเฉพาะช่องที่ตัวเองเป็นเจ้าของ — หน้าภาพรวมของสตูดิโอใช้
+ *
+ * ตั้งใจไม่ใช้ watchAllChannels แล้วมากรองในเครื่อง เพราะสตรีมเมอร์คนหนึ่ง
+ * ไม่ควรต้องดาวน์โหลดช่องของทุกคนในระบบมาเพื่อดูช่องตัวเองสองสามช่อง
+ * (กติกาเปิดอ่านสาธารณะอยู่แล้ว ทำได้ แต่เปลืองเน็ตของคนใช้ฟรีๆ)
+ *
+ * ไม่ใส่ orderBy ด้วยเหตุผลเดียวกับ watchAllChannels — เอกสารที่ไม่มีฟิลด์
+ * ที่ใช้เรียงจะหายไปเงียบๆ โดยไม่มี error ให้จับ
+ */
+export function watchMyChannels(
+  uid: string,
+  onChange: (list: Channel[]) => void,
+  onError?: (e: Error) => void,
+): () => void {
+  const db = getDb();
+  if (!db || !uid) {
+    onChange([]);
+    return () => {};
+  }
+  return onSnapshot(
+    query(collection(db, COL), where("ownerUid", "==", uid)),
+    (snap) => {
       const list = snap.docs.map((d) => ({ ...(d.data() as Channel), id: d.id }));
       list.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
       onChange(list);

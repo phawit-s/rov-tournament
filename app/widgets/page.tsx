@@ -1,19 +1,16 @@
 import type { Metadata } from "next";
 import AppShell from "@/components/AppShell";
-import AdminGate from "@/components/auth/AdminGate";
-import WidgetBuilder from "@/components/widget/WidgetBuilder";
+import RedirectTo from "@/components/RedirectTo";
 
 export const metadata: Metadata = {
-  title: "Widget สำหรับสตรีม — Steamer Hub",
-  description: "สร้างลิงก์ widget ใส่ OBS หรือ Streamlabs พื้นหลังโปร่งใส",
+  title: "Widget — Steamer Hub",
 };
 
-export default function WidgetsPage() {
+/** ที่อยู่เดิมก่อนงานของผู้จัดจะย้ายไปรวมกันที่ /studio/ — ลิงก์เก่ายังต้องเปิดได้ */
+export default function WidgetsRedirectPage() {
   return (
-    <AppShell wide>
-      <AdminGate>
-        <WidgetBuilder />
-      </AdminGate>
+    <AppShell>
+      <RedirectTo href="/studio/widgets/" label="Widget" />
     </AppShell>
   );
 }

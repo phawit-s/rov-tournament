@@ -6,7 +6,7 @@ import Link from "next/link";
 import { motion, useReducedMotion, useScroll } from "motion/react";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { BRAND } from "@/lib/brand";
-import { useIsAdmin } from "@/hooks/useAdmin";
+import { useSiteRole } from "@/hooks/useRole";
 import { heroDelay } from "@/lib/intro";
 import Button from "../ui/Button";
 import Panel, { PanelHeader } from "../ui/Panel";
@@ -58,7 +58,7 @@ const FEATURES: {
       title: "จัดทัวร์นาเมนต์",
       detail:
         "รับสมัครทีมหรือรายบุคคล จัดสายแพ้คัดออก ตั้ง BO รายรอบ กรอกผล คิดเงินรางวัลให้อัตโนมัติ",
-      href: "/tournaments/",
+      href: "/studio/tournaments/",
       tag: "Cup",
       Icon: IconTrophy,
       admin: true,
@@ -68,7 +68,7 @@ const FEATURES: {
       title: "Widget สำหรับสตรีม",
       detail:
         "สกอร์บอร์ด คิวถัดไป นับถอยหลัง ป้ายแชมป์ และแจ้งเตือนโดเนท วางใน OBS ได้เลย",
-      href: "/widgets/",
+      href: "/studio/widgets/",
       tag: "OBS",
       Icon: IconMonitor,
       admin: true,
@@ -208,8 +208,10 @@ export default function Landing() {
     offset: ["start 70%", "end 60%"],
   });
 
-  /* ---- ผู้ชมทั่วไปเห็นแค่เครื่องมือที่เปิดให้ใช้ฟรี ---- */
-  const admin = useIsAdmin();
+  /* ---- ผู้ชมทั่วไปเห็นแค่เครื่องมือที่เปิดให้ใช้ฟรี ----
+     เกณฑ์คือ "เข้าสตูดิโอได้ไหม" ไม่ใช่ "เป็นแอดมินไหม" — สตรีมเมอร์ต้องเห็น
+     เมนูจัดทัวร์กับ widget ด้วย ไม่งั้นหน้าแรกจะบอกว่าไม่มีของพวกนี้ทั้งที่กดเข้าได้ */
+  const { studio: admin } = useSiteRole();
   const features = admin ? FEATURES : FEATURES.filter((f) => !f.admin);
   const big = features[0];
   const rest = features.slice(1);
@@ -320,7 +322,7 @@ export default function Landing() {
             {/* ผู้ชมทั่วไปต้องไม่ถูกพาไปชนหน้าล็อก ปุ่มหลักจึงชี้ไปเครื่องมือที่ใช้ได้จริง */}
             {admin ? (
               <>
-                <Link href="/tournaments/">
+                <Link href="/studio/tournaments/">
                   <Button size="lg">
                     {signedIn
                       ? "เข้าแดชบอร์ด"
@@ -484,7 +486,7 @@ export default function Landing() {
                   title="หน้าตาจริงบนจอสตรีม"
                   action={
                     <Link
-                      href="/widgets/"
+                      href="/studio/widgets/"
                       className="font-display text-xs text-iris hover:underline"
                     >
                       ตั้งค่า →
@@ -602,12 +604,12 @@ export default function Landing() {
             <div className="mt-9 flex flex-wrap justify-center gap-3">
               {admin ? (
                 <>
-                  <Link href="/tournaments/">
+                  <Link href="/studio/tournaments/">
                     <Button size="lg">
                       {signedIn ? "ไปที่ทัวร์นาเมนต์" : "เข้าสู่ระบบ"}
                     </Button>
                   </Link>
-                  <Link href="/widgets/">
+                  <Link href="/studio/widgets/">
                     <Button variant="ghost" size="lg">
                       ดู widget สำหรับ OBS
                     </Button>
@@ -626,6 +628,16 @@ export default function Landing() {
                 </>
               )}
             </div>
+
+            {/* ทางเข้าของสตรีมเมอร์ — เล็กๆ ท้ายสุด ไม่แย่งซีนปุ่มหลักที่ใครก็กดได้ */}
+            {!admin && (
+              <p className="mt-7 text-xs leading-relaxed text-muted">
+                เป็นสตรีมเมอร์และอยากเปิดช่องรับโดเนท คิวขอเพลง และจัดทัวร์นาเมนต์?{" "}
+                <Link href="/studio/" className="text-iris hover:underline">
+                  ขอเปิดช่องที่สตูดิโอ →
+                </Link>
+              </p>
+            )}
           </Panel>
         </Reveal>
       </section>

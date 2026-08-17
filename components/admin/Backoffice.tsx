@@ -12,7 +12,6 @@ import type { Channel } from "@/lib/channel/types";
 import { watchAllTournaments, type CloudTournament } from "@/lib/tournament/cloud";
 import { formatThaiDate } from "@/lib/tournament/share";
 import { safeImageSrc } from "@/lib/safe";
-import AdminTeamPanel from "../auth/AdminTeamPanel";
 import Button from "../ui/Button";
 import Panel from "../ui/Panel";
 import Figure, { FigureRow } from "../ui/Figure";
@@ -26,14 +25,17 @@ const NO_USERS: UserProfile[] = [];
 const NO_CHANNELS: Channel[] = [];
 const NO_TOURNAMENTS: CloudTournament[] = [];
 
-type Tab = "overview" | "users" | "channels" | "staff";
+type Tab = "overview" | "users" | "channels";
 
 /**
- * หลังบ้านรวม — ดูผู้ใช้ ช่อง ทัวร์ และจัดการสิทธิ์ผู้ดูแลที่เดียว
+ * ภาพรวมทั้งระบบ — ผู้ใช้ ช่อง และทัวร์ทั้งหมดบนคลาวด์
  *
  * ของทุกอย่างในนี้อ่านจากคลาวด์ทั้งหมด กติกา Firestore เปิด list ให้เฉพาะผู้ดูแล
  * คนที่ปลดด้วยรหัสในเครื่อง (โหมด local) จะได้รายการว่างเปล่า ไม่ใช่ error
  * จึงต้องบอกให้ชัดว่าต้องล็อกอินบัญชีผู้ดูแลจริงถึงจะเห็นข้อมูล
+ *
+ * การให้/ถอดสิทธิ์ย้ายไปอยู่ที่ /studio/roles/ แล้ว — คนละงานกับการดูข้อมูล
+ * และเป็นงานที่ต้องเห็นใบคำขอควบคู่ไปด้วย
  */
 export default function Backoffice() {
   const access = useAccess();
@@ -93,7 +95,7 @@ export default function Backoffice() {
         title="ต้องเป็นผู้ดูแลที่ยืนยันแล้ว"
         description="รายชื่อผู้ใช้ ช่อง และทัวร์ อ่านได้เฉพาะบัญชีที่อยู่ในรายชื่อผู้ดูแลบนคลาวด์ — รหัสผู้จัดในเครื่องเปิดได้แค่เครื่องมือที่ทำงานในเบราว์เซอร์"
         action={
-          <Link href="/channel/" className="font-display text-sm text-iris hover:underline">
+          <Link href="/studio/channel/" className="font-display text-sm text-iris hover:underline">
             ไปหน้าช่อง →
           </Link>
         }
@@ -105,7 +107,6 @@ export default function Backoffice() {
     { key: "overview", label: "ภาพรวม", count: 0 },
     { key: "users", label: "ผู้ใช้", count: users.length },
     { key: "channels", label: "ช่อง", count: channels.length },
-    { key: "staff", label: "ผู้ดูแล", count: roster.length },
   ];
 
   return (
@@ -113,8 +114,8 @@ export default function Backoffice() {
       <PageHeading
         no="10"
         eyebrow="Backoffice"
-        title="หลังบ้าน"
-        description="ดูผู้ใช้ทั้งระบบ ช่องที่เผยแพร่แล้ว ทัวร์ที่จัดอยู่ และจัดการสิทธิ์ผู้ดูแลที่เดียว"
+        title="ทั้งระบบ"
+        description="ผู้ใช้ทุกบัญชี ช่องที่เผยแพร่แล้ว และทัวร์ที่จัดอยู่บนคลาวด์"
         meta={`${users.length} บัญชี`}
       />
 
@@ -162,11 +163,6 @@ export default function Backoffice() {
       )}
       {tab === "users" && <Users users={users} loading={loading} />}
       {tab === "channels" && <Channels channels={channels} />}
-      {tab === "staff" && (
-        <Reveal>
-          <AdminTeamPanel />
-        </Reveal>
-      )}
     </div>
   );
 }
@@ -265,7 +261,7 @@ function Overview({
           <Panel.Header eyebrow="Staff" title="ผู้ดูแลระบบ" count={staff} />
           <p className="text-sm text-muted">
             เจ้าของเว็บถูกกำหนดไว้ในกติกา Firestore โดยตรง จึงไม่โผล่ในรายการนี้ —
-            ตัวเลขข้างบนคือคนที่ถูกเพิ่มเข้ามาทีหลัง ดูและแก้ได้ที่แท็บผู้ดูแล
+            ตัวเลขข้างบนคือคนที่ถูกเพิ่มเข้ามาทีหลัง ให้/ถอดสิทธิ์ได้ที่หน้าสิทธิ์และคำขอ
           </p>
         </Panel>
       </Reveal>
@@ -412,8 +408,8 @@ function Users({ users, loading }: { users: UserProfile[]; loading: boolean }) {
       )}
 
       <p className="mt-5 text-xs leading-relaxed text-muted">
-        อยากตั้งใครเป็นผู้ดูแล คัดลอกรหัสผู้ใช้จากแถวนั้นแล้วไปวางที่แท็บผู้ดูแล —
-        หรือเลือกจากรายชื่อในแท็บนั้นได้เลยโดยไม่ต้องคัดลอก
+        อยากให้ใครเป็นสตรีมเมอร์หรือผู้ดูแล ไปที่หน้า “สิทธิ์และคำขอ” แล้วเลือกจาก
+        รายชื่อได้เลย — รหัสผู้ใช้ตรงนี้มีไว้เผื่อต้องส่งให้คนอื่นทางแชท
       </p>
     </Panel>
   );

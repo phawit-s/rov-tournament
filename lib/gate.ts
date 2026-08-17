@@ -129,8 +129,19 @@ export const gateStore = {
   },
 };
 
-/** หน้าที่ผู้ชมทั่วไปเปิดได้ นอกจากนี้ต้องปลดล็อกก่อน */
-export const PUBLIC_PATHS = ["/", "/draw", "/wheel", "/tournament", "/c"];
+/**
+ * หน้าที่ผู้ชมทั่วไปเปิดได้ — งานของสตรีมเมอร์ทั้งหมดอยู่ใต้ /studio/ ซึ่งมีด่าน
+ * ของตัวเองอยู่แล้ว รายการนี้จึงเป็น "หน้าบ้าน" ทั้งหมดที่มี
+ */
+export const PUBLIC_PATHS = [
+  "/",
+  "/draw",
+  "/wheel",
+  "/tournament",
+  "/c",
+  "/song",
+  "/account",
+];
 
 export function isPublicPath(pathname: string | null): boolean {
   const clean = (pathname ?? "/").replace(/\/+$/, "") || "/";

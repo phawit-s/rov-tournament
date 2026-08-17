@@ -61,14 +61,21 @@ export default function Reveal({
 export const PAGE_NO: Record<string, string> = {
   "/draw": "01",
   "/wheel": "02",
-  "/tournaments": "03",
   "/tournament": "03",
-  "/players": "04",
-  "/channel": "05",
   "/c": "05",
-  "/widgets": "06",
-  "/activity": "07",
-  "/timer": "10",
+  "/song": "06",
+  "/account": "08",
+  // งานของผู้จัดย้ายไปอยู่ใต้ /studio/ แล้ว เลขบทต้องตามไปด้วย
+  // ไม่งั้นหัวหน้าเพจจะขึ้น "00" ทุกหน้าในหลังบ้าน
+  "/studio": "09",
+  "/studio/tournaments": "03",
+  "/studio/players": "04",
+  "/studio/channel": "05",
+  "/studio/widgets": "06",
+  "/studio/activity": "07",
+  "/studio/timer": "10",
+  "/studio/system": "10",
+  "/studio/roles": "11",
 };
 
 /** หัวข้อใหญ่ประจำหน้า พร้อมเส้นทองที่ค่อยๆ ลากออก */

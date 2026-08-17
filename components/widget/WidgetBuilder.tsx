@@ -12,7 +12,7 @@ import {
 import { motion } from "motion/react";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { tournamentStore } from "@/lib/tournament/store";
-import { channelStore, watchAllChannels } from "@/lib/channel/store";
+import { channelStore, watchMyChannels } from "@/lib/channel/store";
 import type { Channel } from "@/lib/channel/types";
 import Panel from "../ui/Panel";
 import Button from "../ui/Button";
@@ -211,13 +211,21 @@ export default function WidgetBuilder() {
   const [myChannels, setMyChannels] = useState<Channel[]>(NO_CHANNELS);
   const [pickedChannelId, setPickedChannelId] = useState("");
 
+  /*
+    ถามเฉพาะช่องของตัวเอง ไม่ใช่ดึงมาทั้งระบบแล้วค่อยกรองในเครื่อง
+
+    ของเดิมดึง channels ทั้งคอลเลกชัน (กติกาเปิดอ่านสาธารณะอยู่แล้ว จึงผ่าน)
+    แล้วค่อย filter ด้วย ownerUid — แปลว่าสตรีมเมอร์คนหนึ่งต้องโหลดข้อมูลช่อง
+    ของทุกคนในระบบลงเครื่อง เพื่อจะใช้ช่องตัวเองสองสามช่อง
+  */
   useEffect(() => {
-    if (!hasBackend) return;
-    return watchAllChannels(
+    if (!hasBackend || !user?.uid) return;
+    return watchMyChannels(
+      user.uid,
       (list) => setMyChannels(list),
       () => setMyChannels(NO_CHANNELS),
     );
-  }, []);
+  }, [user?.uid]);
 
   // หน่วงสีก่อนส่งเข้า iframe ไม่งั้นพิมพ์โค้ดสีทีละตัวแล้วพรีวิวรีโหลดรัวๆ
   const previewAccent = useDebounced(accent, 400);

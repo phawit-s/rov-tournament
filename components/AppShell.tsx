@@ -33,8 +33,16 @@ export default function AppShell({
       <IntroLoader />
       <BackgroundFX />
 
+      {/*
+        แถบเมนูลอยอยู่นอก <main> เพราะมันเป็น position:fixed แล้ว
+        ถ้าปล่อยไว้ข้างในตามเดิม กล่องของ main จะยังกันที่ให้มันไม่ได้อยู่ดี
+        และการที่มันอยู่นอกยังกันไม่ให้โดน filter ของแอนิเมชันพลิกหน้าครอบ
+        (filter สร้าง containing block ใหม่ ซึ่งจะทำให้ fixed หลุดกรอบทันที)
+      */}
+      <NavBar wide={wide} />
+
       <main
-        className={`relative z-10 mx-auto flex min-h-dvh w-full flex-col gap-6 px-3 pt-[calc(0.75rem+var(--sat))] pb-[calc(2.5rem+var(--sab))] sm:px-5 lg:px-8 ${
+        className={`relative z-10 mx-auto flex min-h-dvh w-full flex-col gap-6 px-3 pt-[calc(var(--nav-h)+1.25rem+var(--sat))] pb-[calc(2.5rem+var(--sab))] sm:px-5 lg:px-8 ${
           wide ? "max-w-420" : "max-w-350"
         }`}
       >
@@ -50,8 +58,6 @@ export default function AppShell({
             ))}
           </span>
         )}
-
-        <NavBar />
 
         <div className="relative flex-1 pt-2">
           {reduced ? (

@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { gateStore } from "@/lib/gate";
-import { useAccess } from "@/hooks/useAdmin";
+import { useSiteRole } from "@/hooks/useRole";
+import ThemeSoundButtons from "./ui/ThemeSound";
 import { IconLock, IconUnlock } from "./ui/icons";
-import { NAV_GROUPS, ThemeSoundButtons, visibleNav } from "./NavBar";
+import { NAV } from "./NavBar";
+import { studioNavFor } from "./studio/nav";
 
 /** บรรทัดข้อมูลเล่ม — ข้อเท็จจริงของเว็บ ไม่ใช่คำโฆษณา */
 const COLOPHON = [
@@ -13,17 +15,24 @@ const COLOPHON = [
   "เผยแพร่เมื่อกดเอง",
 ];
 
+/** หน้าสาธารณะที่ไม่ได้อยู่ในแถบเมนู แต่ควรหาเจอจากท้ายเล่ม */
+const PUBLIC_EXTRA = [
+  { href: "/c/", label: "สนับสนุนช่อง", no: "03" },
+  { href: "/song/", label: "ขอเพลง", no: "04" },
+  { href: "/account/", label: "โปรไฟล์ของฉัน", no: "05" },
+];
+
 /**
- * องก์ปิดของทุกหน้า — สารบัญท้ายเล่ม ข้อมูลเล่ม แล้วปิดด้วย wordmark ที่จมขอบจอ
+ * องก์ปิดของทุกหน้า — สารบัญท้ายเล่ม ข้อมูลเล่ม
+ *
+ * ตั้งแต่แถบเมนูถูกรื้อให้เหลือเท่าที่คนเปิดเว็บครั้งแรกต้องใช้
+ * ท้ายเล่มกลายเป็นที่เดียวที่เห็น "ทั้งเล่ม" — ทั้งหน้าสาธารณะและทางเข้าสตูดิโอ
  * ปีที่แสดงเป็นค่าคงที่ ไม่ใช้ new Date() เพราะ static export จะ prerender ค่าไว้ตอน build
  */
 export default function Footer() {
-  const access = useAccess();
-  const admin = access !== "none";
-  const nav = visibleNav(admin);
-  const groups = NAV_GROUPS.filter((g) =>
-    nav.some((item) => item.group === g.key),
-  );
+  const { role, local, studio } = useSiteRole();
+  const admin = role === "admin";
+  const studioNav = studioNavFor(admin);
 
   return (
     <footer className="relative mt-16">
@@ -33,36 +42,47 @@ export default function Footer() {
           <p className="slug slug-2 num">ฉบับ 2026</p>
         </div>
 
-        {/* สารบัญท้ายเล่ม — สร้างจาก NAV ชุดเดียวกับแถบเมนู */}
         <div className="mt-7 grid grid-cols-2 gap-x-6 gap-y-9 md:grid-cols-4">
-          {groups.map((group) => (
-            <div key={group.key}>
-              <p className="slug">{group.title}</p>
+          <FooterColumn
+            title="เครื่องมือ"
+            items={NAV.map((item) => ({
+              href: item.href,
+              label: item.label,
+              no: item.no,
+            }))}
+          />
+
+          <FooterColumn title="สำหรับผู้ชม" items={PUBLIC_EXTRA} />
+
+          {/* ทางเข้าหลังบ้าน — โผล่เฉพาะคนที่มีสิทธิ์จริง คนอื่นไม่ต้องเห็นเมนูที่กดแล้วเจอหน้าล็อก */}
+          {studio ? (
+            <FooterColumn
+              title="สตูดิโอ"
+              items={studioNav
+                .slice(0, 6)
+                .map((item, i) => ({
+                  href: item.href,
+                  label: item.label,
+                  no: String(i + 1).padStart(2, "0"),
+                }))}
+            />
+          ) : (
+            <div>
+              <p className="slug">เป็นสตรีมเมอร์</p>
               <span className="rule mt-3 block h-px" />
-              <ul className="mt-2">
-                {nav
-                  .filter((item) => item.group === group.key)
-                  .map((item) => {
-                    const Icon = item.Icon;
-                    return (
-                      <li key={item.href}>
-                        <Link
-                          href={item.href}
-                          className="group flex items-baseline gap-2.5 py-1.5 text-sm text-muted transition-colors hover:text-ice"
-                        >
-                          <span className="num text-eyebrow text-iris/45 transition-colors group-hover:text-iris">
-                            {item.no}
-                          </span>
-                          <span className="truncate">{item.label}</span>
-                          <span className="h-px flex-1 self-center border-b border-dotted border-hair transition-colors group-hover:border-[rgb(var(--accent)/.6)]" />
-                          <Icon className="h-3.5 w-3.5 self-center opacity-35 transition-opacity group-hover:opacity-90" />
-                        </Link>
-                      </li>
-                    );
-                  })}
-              </ul>
+              <p className="mt-3 text-sm leading-relaxed text-muted">
+                เปิดช่องรับโดเนท เปิดคิวขอเพลง และจัดทัวร์นาเมนต์ได้
+                จากหลังบ้านชุดเดียว
+              </p>
+              <Link
+                href="/studio/"
+                className="mt-3 inline-flex items-center gap-2 font-display text-xs text-iris transition-colors hover:text-ice"
+              >
+                ขอเปิดช่อง
+                <span aria-hidden>→</span>
+              </Link>
             </div>
-          ))}
+          )}
 
           <div>
             <p className="slug">เกี่ยวกับ</p>
@@ -97,29 +117,31 @@ export default function Footer() {
             ))}
           </p>
           <div className="flex items-center gap-1">
-            {/* ทางเข้าโหมดผู้จัด — วางท้ายเล่มไว้ ผู้ชมทั่วไปไม่ต้องสนใจ */}
-            {access === "verified" ? (
-              <span className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-iris">
-                <IconUnlock className="h-3.5 w-3.5" />
-                ผู้ดูแลระบบ
-              </span>
-            ) : access === "local" ? (
-              <button
-                type="button"
-                onClick={() => gateStore.lock()}
-                className="flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-iris transition-colors hover:bg-iris/10"
+            {studio ? (
+              <Link
+                href="/studio/"
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-iris transition-colors hover:bg-iris/10"
               >
                 <IconUnlock className="h-3.5 w-3.5" />
-                ออกจากโหมดผู้จัด
-              </button>
+                เข้าสตูดิโอ
+              </Link>
             ) : (
               <Link
-                href="/tournaments/"
+                href="/studio/"
                 className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-muted transition-colors hover:text-iris"
               >
                 <IconLock className="h-3.5 w-3.5" />
-                ผู้จัดแข่ง
+                สตรีมเมอร์
               </Link>
+            )}
+            {local && (
+              <button
+                type="button"
+                onClick={() => gateStore.lock()}
+                className="flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-xs text-muted transition-colors hover:text-iris"
+              >
+                ออกจากโหมดผู้จัด
+              </button>
             )}
             <ThemeSoundButtons />
           </div>
@@ -137,15 +159,37 @@ export default function Footer() {
           ))}
         </div>
       </div>
-
-      {/*
-        เอา wordmark ยักษ์ท้ายเล่มออกแล้ว
-
-        มันคือชื่อแบรนด์ตัวโตที่ถูกตัดครึ่งให้จมขอบล่างจอ ซึ่งอ่านออกว่าเป็นลูกเล่น
-        ก็ต่อเมื่อสีมันจางมากพอ พอเป็นม่วงสว่างมันกลายเป็นตัวหนังสือครึ่งตัว
-        ที่ดูเหมือนเลย์เอาต์พัง และไม่ได้ทำหน้าที่อะไรนอกจากพูดชื่อแบรนด์ซ้ำ
-        ซึ่งบอกไปแล้วสองที่ในหน้าเดียว (แถบเมนูบนสุด กับหัวท้ายเล่ม)
-      */}
     </footer>
+  );
+}
+
+function FooterColumn({
+  title,
+  items,
+}: {
+  title: string;
+  items: { href: string; label: string; no: string }[];
+}) {
+  return (
+    <div>
+      <p className="slug">{title}</p>
+      <span className="rule mt-3 block h-px" />
+      <ul className="mt-2">
+        {items.map((item) => (
+          <li key={item.href}>
+            <Link
+              href={item.href}
+              className="group flex items-baseline gap-2.5 py-1.5 text-sm text-muted transition-colors hover:text-ice"
+            >
+              <span className="num text-eyebrow text-iris/45 transition-colors group-hover:text-iris">
+                {item.no}
+              </span>
+              <span className="truncate">{item.label}</span>
+              <span className="h-px flex-1 self-center border-b border-dotted border-hair transition-colors group-hover:border-[rgb(var(--accent)/.6)]" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

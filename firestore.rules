@@ -53,6 +53,76 @@ service cloud.firestore {
     }
 
     /*
+      ---------- สตรีมเมอร์ ----------
+
+      ระดับกลางระหว่าง "ผู้ใช้ทั่วไป" กับ "ผู้ดูแลระบบ"
+      เปิดสตูดิโอ (/studio/) ได้ และจัดการ "ช่องของตัวเอง" ได้เท่านั้น
+      ไม่เห็นรายชื่อผู้ใช้ทั้งระบบ และแตะช่องคนอื่นไม่ได้ — สองอย่างนั้นเป็นของผู้ดูแล
+
+      เอกสารนี้เขียนได้เฉพาะผู้ดูแล คนที่อยากเป็นสตรีมเมอร์จึงปลอมเองไม่ได้
+      ต้องยื่นคำขอที่ streamerRequests/{uid} แล้วรอผู้ดูแลอนุมัติ
+
+      อ่านเอกสารของตัวเองได้ เพราะหน้าเว็บต้องรู้ว่าตัวเองมีสิทธิ์ไหม
+      ("อ่านไม่ได้" ในที่นี้แปลว่าไม่มีสิทธิ์ ซึ่งเป็นคำตอบที่ถูกอยู่แล้ว)
+    */
+    function isStreamer() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && (isAdmin()
+            || exists(/databases/$(database)/documents/streamers/$(request.auth.uid)));
+    }
+
+    match /streamers/{uid} {
+      allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /*
+      คำขอเป็นสตรีมเมอร์ — หนึ่งบัญชีหนึ่งใบ (ชื่อเอกสารคือ uid ของคนขอ)
+
+      คนขอสร้างใบของตัวเองได้ แต่ตั้งสถานะได้แค่ 'pending' เท่านั้น
+      ถ้าไม่ล็อกตรงนี้ ก็แค่แก้โค้ดหน้าเว็บให้เขียน 'approved' มาตั้งแต่แรก
+      แล้วอนุมัติตัวเองได้ทั้งที่ไม่มีใครกด — การอนุมัติจึงเป็นสิทธิ์ของผู้ดูแลล้วน
+
+      ใบที่ถูกปฏิเสธยื่นใหม่ได้ (แก้กลับเป็น pending) แต่ใบที่อนุมัติแล้วแตะไม่ได้
+      ไม่งั้นคนที่โดนถอดสิทธิ์จะรีเซ็ตใบเก่าของตัวเองเพื่อลบร่องรอยได้
+    */
+    match /streamerRequests/{uid} {
+      allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && request.resource.data.uid == uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.channelName is string
+        && request.resource.data.channelName.size() > 0
+        && request.resource.data.channelName.size() <= 60
+        && request.resource.data.platform is string
+        && request.resource.data.platform.size() <= 20
+        && (!('channelUrl' in request.resource.data)
+            || (request.resource.data.channelUrl is string
+                && request.resource.data.channelUrl.size() <= 200))
+        && (!('note' in request.resource.data)
+            || (request.resource.data.note is string
+                && request.resource.data.note.size() <= 300));
+
+      allow update: if isAdmin()
+        || (request.auth != null
+            && request.auth.uid == uid
+            && resource.data.status != 'approved'
+            && request.resource.data.status == 'pending'
+            && request.resource.data.uid == uid
+            && request.resource.data.channelName is string
+            && request.resource.data.channelName.size() > 0
+            && request.resource.data.channelName.size() <= 60);
+
+      allow delete: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+    }
+
+    /*
       ---------- โปรไฟล์ผู้ใช้ ----------
       มีไว้ให้เลือกคนจากรายชื่อตอนเพิ่มทีมงาน แทนการก๊อป uid มาวาง
       และผูกใบสมัครแข่งกับบัญชีจริง
@@ -133,8 +203,14 @@ service cloud.firestore {
       // ใครก็อ่านได้ หน้าโดเนทกับ widget ต้องใช้
       allow read: if true;
 
-      // สร้างใหม่ได้ถ้าใส่ ownerUid เป็นตัวเอง
-      allow create: if claimsChannel();
+      /*
+        เปิดช่องใหม่ได้เฉพาะคนที่มีสิทธิ์สตรีมเมอร์ (หรือผู้ดูแล) และต้องใส่ ownerUid เป็นตัวเอง
+
+        ตั้งใจล็อกแค่ "การเปิดช่องใหม่" ไม่ล็อก update — เจ้าของช่องที่มีอยู่ก่อน
+        กติกาข้อนี้ยังแก้ช่องตัวเองได้ตามปกติ ไม่งั้นการ deploy กติกาจะกลายเป็น
+        การยึดช่องของผู้จัดเดิมทุกคนพร้อมกัน
+      */
+      allow create: if claimsChannel() && isStreamer();
 
       // เจ้าของห้ามยกช่องให้คนอื่นด้วยการแก้ ownerUid ระหว่างทาง
       // ส่วนผู้ดูแลระบบแก้ของใครก็ได้ (ใช้ตอนช่วยตั้งค่าให้ผู้จัด)
@@ -228,12 +304,28 @@ service cloud.firestore {
 
         allow read: if true;
 
-        // ต้องล็อกอินก่อน (หน้าขอเพลงล็อกอินแบบไม่ระบุตัวตนให้เอง)
-        // และเปิดรับเฉพาะตอนเจ้าของช่องเปิดระบบไว้
-        allow create: if request.auth != null
+        /*
+          ใครสร้างใบได้บ้าง — มีสองทาง และเปิดรับเฉพาะตอนเจ้าของช่องเปิดระบบไว้
+
+          1. คนดูที่เปิดหน้าขอเพลงเอง (หน้านั้นล็อกอินแบบไม่ระบุตัวตนให้)
+             เขียนได้เฉพาะใบที่ byUid เป็นตัวเอง ปลอมเป็นคนอื่นไม่ได้
+
+          2. ตัวกลางที่เชื่อถือได้ เขียนแทนคนดูจากแพลตฟอร์มนอก (แชท TikTok)
+             คนที่พิมพ์ในแชทไลฟ์ไม่มีบัญชี Firebase จะให้เซ็นชื่อตัวเองไม่ได้
+             จึงต้องให้บอทของ Worker (ซึ่งเป็นผู้ดูแล) เขียนแทน
+             บังคับว่า byUid ต้องติดป้ายแพลตฟอร์มไว้ เช่น "tiktok:someone"
+             — ชนกับ uid จริงของใครไม่ได้ (uid ของ Firebase ไม่มี ':')
+             และเพดาน "กี่เพลงต่อคน" ยังนับแยกรายคนได้เหมือนเดิม
+        */
+        allow create: if (
+            (request.auth != null
+              && request.resource.data.byUid == request.auth.uid)
+            || (isAdmin()
+              && request.resource.data.byUid is string
+              && request.resource.data.byUid.matches('^(tiktok|youtube|twitch):.+$'))
+          )
           && channel().songs.enabled == true
           && request.resource.data.status == 'queued'
-          && request.resource.data.byUid == request.auth.uid
           && request.resource.data.videoId is string
           && request.resource.data.videoId.size() == 11
           && request.resource.data.title is string

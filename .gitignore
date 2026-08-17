@@ -48,3 +48,6 @@ next-env.d.ts
 
 # log ของ dev server ที่รันเบื้องหลัง
 .devlog.txt
+
+# กุญแจเซิร์ฟเวอร์ของสคริปต์ย้ายข้อมูล — ห้ามขึ้น git เด็ดขาด
+scripts/service-account.json

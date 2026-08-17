@@ -1,29 +1,16 @@
 import type { Metadata } from "next";
 import AppShell from "@/components/AppShell";
-import AdminGate from "@/components/auth/AdminGate";
-import AuthGate from "@/components/auth/AuthGate";
-import TimerConsole from "@/components/timer/TimerConsole";
+import RedirectTo from "@/components/RedirectTo";
 
 export const metadata: Metadata = {
   title: "จับเวลาสด — Steamer Hub",
-  description: "นาฬิกาถอยหลังบนสตรีม พร้อมวงล้อสุ่มบวก/ลบเวลา",
 };
 
-/**
- * คอนโซลจับเวลาสด — เปิดค้างไว้บนจอที่สองระหว่างไลฟ์
- * ทุกปุ่มมีผลกับ widget ใน OBS ทันที
- */
-export default function TimerPage() {
+/** ที่อยู่เดิมก่อนงานของผู้จัดจะย้ายไปรวมกันที่ /studio/ — ลิงก์เก่ายังต้องเปิดได้ */
+export default function TimerRedirectPage() {
   return (
     <AppShell>
-      <AdminGate>
-        <AuthGate
-          title="จับเวลาสด"
-          description="ล็อกอินด้วยบัญชีเจ้าของช่องเพื่อคุมนาฬิกาที่ขึ้นบนสตรีม"
-        >
-          <TimerConsole />
-        </AuthGate>
-      </AdminGate>
+      <RedirectTo href="/studio/timer/" label="จับเวลาสด" />
     </AppShell>
   );
 }

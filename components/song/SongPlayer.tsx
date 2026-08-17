@@ -11,9 +11,11 @@ import {
 } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { useHashParam } from "@/hooks/useClient";
+import { useSiteRole } from "@/hooks/useRole";
 import { authStore } from "@/lib/backend/firebase";
-import { watchChannel } from "@/lib/channel/store";
+import { watchAllChannels, watchChannel, watchMyChannels } from "@/lib/channel/store";
 import type { Channel } from "@/lib/channel/types";
+import { safeImageSrc } from "@/lib/safe";
 import {
   claimPlayerLock,
   playerInstanceId,
@@ -844,6 +846,9 @@ export function SongPlayerCore({
             {playing.source === "filler" && (
               <span className="slug slug-2">เพลงสำรอง</span>
             )}
+            {playing.source === "tiktok" && (
+              <span className="slug slug-2">จากแชท TikTok</span>
+            )}
           </div>
           <h2
             className={`mt-2 font-display leading-snug font-light text-ice ${
@@ -1062,7 +1067,9 @@ export function SongPlayerCore({
                       sub={
                         s.source === "filler"
                           ? "จากเพลย์ลิสต์สำรอง"
-                          : `ขอโดย ${s.byName}`
+                          : `ขอโดย ${s.byName}${
+                              s.source === "tiktok" ? " · TikTok" : ""
+                            }`
                       }
                       onClick={() => void playNow(s)}
                       onMove={(dir) =>
@@ -1360,6 +1367,9 @@ function MoveBtn({
    หน้า /player/ — ตัวเล่นเต็มจอ ไว้เปิดทิ้งไว้อีกจอ
    ========================================================================= */
 
+/* อ้างอิงคงที่ ไม่งั้น setState ตอน error จะสร้างอาร์เรย์ใหม่แล้วรีเรนเดอร์ไม่จบ */
+const NO_CHANNELS: Channel[] = [];
+
 export default function SongPlayer() {
   useSyncExternalStore(
     authStore.subscribe,
@@ -1367,10 +1377,39 @@ export default function SongPlayer() {
     authStore.getServerSnapshot,
   );
   const user = authStore.user();
+  const { role } = useSiteRole();
+  const admin = role === "admin";
+  const uid = user && !user.anonymous ? user.uid : null;
 
-  // ผู้ดูแลเปิดคิวของช่องอื่นได้ด้วยการใส่ #ch= ไม่งั้นใช้ช่องตัวเอง
+  /*
+    เลือกช่องที่จะเล่นยังไง
+
+    #ch= ในลิงก์ชนะเสมอ — เป็นทั้งที่คั่นหน้าและทางที่ผู้ดูแลใช้เปิดคิวช่องคนอื่น
+    ไม่มี #ch= ก็ดูจากช่องที่ "คนนี้แตะได้จริง":
+      ผู้ดูแล   → ทุกช่องในระบบ จึงต้องให้เลือกก่อนเสมอ (เดาแทนไม่ได้ว่าจะเล่นของใคร)
+      สตรีมเมอร์ → เฉพาะช่องตัวเอง มีช่องเดียวก็เข้าตัวเล่นเลย ไม่ต้องกดผ่านหน้าเลือก
+  */
   const chParam = useHashParam("ch");
-  const channelId = chParam ?? (user && !user.anonymous ? user.uid : null);
+  const [mine, setMine] = useState<Channel[]>(NO_CHANNELS);
+  const [minesLoaded, setMinesLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!uid || chParam) return;
+    return watchMyChannels(
+      uid,
+      (list) => {
+        setMine(list);
+        setMinesLoaded(true);
+      },
+      () => {
+        setMine(NO_CHANNELS);
+        setMinesLoaded(true);
+      },
+    );
+  }, [uid, chParam]);
+
+  const autoId = !admin && mine.length === 1 ? mine[0].id : null;
+  const channelId = chParam ?? autoId;
 
   // ต้องมีข้อมูลช่องเพื่ออ่านเพลย์ลิสต์สำรอง — hook ต้องอยู่เหนือ early return
   const [channel, setChannel] = useState<Channel | null>(null);
@@ -1383,13 +1422,17 @@ export default function SongPlayer() {
     );
   }, [channelId]);
 
-  if (!channelId) {
+  if (!uid) {
     return (
       <EmptyState
         title="ยังไม่รู้ว่าจะเล่นคิวของช่องไหน"
         description="ล็อกอินด้วยบัญชีเจ้าของช่อง หรือใส่รหัสช่องต่อท้ายลิงก์เป็น #ch=รหัสช่อง"
       />
     );
+  }
+
+  if (!channelId) {
+    return <ChannelPicker admin={admin} mine={mine} loaded={minesLoaded} />;
   }
 
   return (
@@ -1401,8 +1444,20 @@ export default function SongPlayer() {
       <PageHeading
         no="09"
         eyebrow="Player"
-        title="เล่นเพลงตามคิว"
+        title={channel?.name ? `คิวของ ${channel.name}` : "เล่นเพลงตามคิว"}
         description="เดินเอง — มีคนขอเพลงเข้ามาก็เล่นเลย เพลงจบก็ต่อให้เอง"
+        meta={
+          /* ทางกลับไปหน้าเลือกช่อง — โผล่เฉพาะคนที่มีให้เลือกจริงมากกว่าหนึ่งช่อง */
+          admin || mine.length > 1 ? (
+            <MiniBtn
+              onClick={() => {
+                window.location.hash = "";
+              }}
+            >
+              เปลี่ยนช่อง
+            </MiniBtn>
+          ) : undefined
+        }
         action={<AcceptToggle channelId={channelId} channel={channel} />}
       />
       <SongPlayerCore
@@ -1432,6 +1487,152 @@ export default function SongPlayer() {
       />
       <SongConsole channelId={channelId} channel={channel} />
       <SetupNote />
+    </div>
+  );
+}
+
+/* =========================================================================
+   หน้าเลือกช่อง — ด่านแรกของผู้ดูแล (สตรีมเมอร์ช่องเดียวไม่เจอหน้านี้)
+   ========================================================================= */
+
+function ChannelPicker({
+  admin,
+  mine,
+  loaded,
+}: {
+  admin: boolean;
+  mine: Channel[];
+  loaded: boolean;
+}) {
+  const [all, setAll] = useState<Channel[]>(NO_CHANNELS);
+  const [allLoaded, setAllLoaded] = useState(false);
+  const [q, setQ] = useState("");
+
+  useEffect(() => {
+    if (!admin) return;
+    return watchAllChannels(
+      (list) => {
+        setAll(list);
+        setAllLoaded(true);
+      },
+      () => {
+        setAll(NO_CHANNELS);
+        setAllLoaded(true);
+      },
+    );
+  }, [admin]);
+
+  const list = admin ? all : mine;
+  const ready = admin ? allLoaded : loaded;
+
+  const found = useMemo(() => {
+    const text = q.trim().toLocaleLowerCase("th");
+    if (!text) return list;
+    return list.filter((c) =>
+      [c.name, c.handle].filter(Boolean).some((v) => v!.toLocaleLowerCase("th").includes(text)),
+    );
+  }, [list, q]);
+
+  /* ช่องที่เปิดคิวขอเพลงไว้ต้องมาก่อน — หน้านี้มีไว้เล่นเพลง ไม่ใช่ไว้ดูรายชื่อช่อง */
+  const sorted = useMemo(() => {
+    const on = found.filter((c) => c.songs?.enabled);
+    const off = found.filter((c) => !c.songs?.enabled);
+    return [...on, ...off];
+  }, [found]);
+
+  return (
+    <div className="space-y-6">
+      <PageHeading
+        no="09"
+        eyebrow="Player"
+        title="จะเล่นคิวของช่องไหน"
+        description={
+          admin
+            ? "คุณเป็นผู้ดูแลระบบ จึงเปิดคิวของช่องไหนก็ได้ — เลือกช่องก่อนแล้วค่อยเข้าตัวเล่น"
+            : "เลือกช่องที่จะเปิดตัวเล่นให้"
+        }
+      />
+
+      {admin && list.length > 8 && (
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="ค้นหาจากชื่อช่องหรือ @handle"
+        />
+      )}
+
+      {!ready ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-2xl" />
+          ))}
+        </div>
+      ) : sorted.length === 0 ? (
+        <EmptyState
+          title={q ? "ไม่เจอช่องที่ตรงกับที่ค้นหา" : "ยังไม่มีช่องให้เล่น"}
+          description={
+            q
+              ? "ลองค้นด้วยคำที่สั้นลง"
+              : admin
+                ? "ช่องจะโผล่ที่นี่หลังมีเจ้าของกดเผยแพร่ครั้งแรก"
+                : "ตั้งค่าช่องของคุณให้เสร็จก่อน แล้วเปิดระบบขอเพลงในหน้าช่อง"
+          }
+          action={
+            !admin ? (
+              <a href="/studio/channel/" className="font-display text-sm text-iris hover:underline">
+                ไปตั้งค่าช่อง →
+              </a>
+            ) : undefined
+          }
+        />
+      ) : (
+        <ul className="grid gap-3 sm:grid-cols-2">
+          {sorted.map((c) => {
+            const on = !!c.songs?.enabled;
+            return (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  /* เก็บช่องที่เลือกไว้ใน #ch= จะได้คั่นหน้าไว้เปิดตรงคราวหน้าได้ */
+                  onClick={() => {
+                    window.location.hash = `ch=${c.id}`;
+                  }}
+                  className="tile hover-tile flex w-full cursor-pointer items-center gap-3 rounded-2xl p-4 text-left transition-colors"
+                >
+                  {c.avatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={safeImageSrc(c.avatar) ?? ""}
+                      alt=""
+                      loading="lazy"
+                      className="h-11 w-11 shrink-0 rounded-xl object-cover"
+                    />
+                  ) : (
+                    <span className="sunken grid h-11 w-11 shrink-0 place-items-center rounded-xl font-display text-sm text-iris">
+                      {(c.name || c.handle || "?").slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-display text-sm text-ice">
+                      {c.name || c.handle || c.id}
+                    </span>
+                    <span className="num mt-0.5 block truncate text-xs text-muted">
+                      {c.handle ? `@${c.handle}` : c.id}
+                    </span>
+                  </span>
+
+                  {on ? (
+                    <Badge rgb="52 227 176">เปิดคิว</Badge>
+                  ) : (
+                    <Badge rgb="126 130 153">ปิดคิว</Badge>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

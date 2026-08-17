@@ -1,22 +1,16 @@
 import type { Metadata } from "next";
 import AppShell from "@/components/AppShell";
-import AdminGate from "@/components/auth/AdminGate";
-import AuthGate from "@/components/auth/AuthGate";
-import ChannelSettings from "@/components/channel/ChannelSettings";
+import RedirectTo from "@/components/RedirectTo";
 
 export const metadata: Metadata = {
-  title: "ช่องของคุณ — Steamer Hub",
-  description: "ตั้งค่าพร้อมเพย์ แพ็กเกจสมาชิก และลิงก์ widget สำหรับสตรีม",
+  title: "ช่องของฉัน — Steamer Hub",
 };
 
-export default function ChannelPage() {
+/** ที่อยู่เดิมก่อนงานของผู้จัดจะย้ายไปรวมกันที่ /studio/ — ลิงก์เก่ายังต้องเปิดได้ */
+export default function ChannelRedirectPage() {
   return (
     <AppShell>
-      <AdminGate>
-        <AuthGate description="ต้องล็อกอินก่อนถึงจะตั้งค่าช่องและรับการสนับสนุนได้">
-          <ChannelSettings />
-        </AuthGate>
-      </AdminGate>
+      <RedirectTo href="/studio/channel/" label="ช่องของฉัน" />
     </AppShell>
   );
 }

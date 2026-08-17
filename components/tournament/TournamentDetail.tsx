@@ -112,7 +112,7 @@ export default function TournamentDetail() {
     return (
       <EmptyNote>
         ไม่พบทัวร์นาเมนต์นี้ในเครื่อง —{" "}
-        <Link href="/tournaments/" className="text-iris underline-offset-2 hover:underline">
+        <Link href="/studio/tournaments/" className="text-iris underline-offset-2 hover:underline">
           กลับไปหน้ารายการ
         </Link>
       </EmptyNote>
@@ -219,7 +219,7 @@ export default function TournamentDetail() {
           {/* ชั้น 3 — เนื้อหาโปสเตอร์ */}
           <div className="relative z-10 p-6 sm:p-8">
             <Link
-              href="/tournaments/"
+              href="/studio/tournaments/"
               className="slug slug-2 inline-block transition-colors hover:text-iris"
             >
               ← ทัวร์นาเมนต์ทั้งหมด

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
-import { useIsAdmin } from "@/hooks/useAdmin";
+import { ROLE_LABEL, useSiteRole } from "@/hooks/useRole";
 import { recordActivity } from "@/lib/activity";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { profileStore } from "@/lib/backend/users";
@@ -40,7 +41,7 @@ export default function AccountView() {
     authStore.getServerSnapshot,
   );
 
-  const isAdmin = useIsAdmin();
+  const { role, studio } = useSiteRole();
   const user = authStore.user();
   const state = profileStore.state();
   const profile = profileStore.profile();
@@ -55,13 +56,19 @@ export default function AccountView() {
         title="โปรไฟล์ของฉัน"
         description="ชื่อในเกมกับช่องทางติดต่อที่ผู้จัดจะเห็นตอนคุณสมัครแข่ง แก้ได้ตลอดเวลา"
         meta={
-          isAdmin ? (
-            <Badge rgb="169 155 255" hex="var(--color-iris)">
-              ผู้ดูแลระบบ
-            </Badge>
-          ) : undefined
+          <Badge rgb="169 155 255" hex="var(--color-iris)">
+            {ROLE_LABEL[role]}
+          </Badge>
         }
       />
+
+      {/*
+        ทางเข้าหลังบ้าน — แถบเมนูถูกรื้อให้เหลือแค่เมนูสาธารณะแล้ว
+        รูปโปรไฟล์บนแถบพามาที่หน้านี้ ที่นี่จึงต้องเป็นที่ที่ "หาสตูดิโอเจอ"
+      */}
+      {hasBackend && user && !user.anonymous && (
+        <StudioEntry studio={studio} />
+      )}
 
       {!hasBackend ? (
         <EmptyState
@@ -147,13 +154,11 @@ export default function AccountView() {
                 <p className="truncate font-display text-lg text-ice">
                   {profile?.gameName || user.name}
                 </p>
-                {isAdmin && (
-                  <span className="mt-1.5 inline-flex">
-                    <Badge rgb="169 155 255" hex="var(--color-iris)">
-                      ผู้ดูแลระบบ
-                    </Badge>
-                  </span>
-                )}
+                <span className="mt-1.5 inline-flex">
+                  <Badge rgb="169 155 255" hex="var(--color-iris)">
+                    {ROLE_LABEL[role]}
+                  </Badge>
+                </span>
               </div>
             </div>
 
@@ -197,6 +202,36 @@ export default function AccountView() {
         }}
       />
     </div>
+  );
+}
+
+/**
+ * แถบพาเข้าสตูดิโอ — ต่างกันสองแบบตามสิทธิ์
+ * มีสิทธิ์แล้ว = ทางลัดเข้าไปทำงาน · ยังไม่มี = ชวนขอเปิดช่อง
+ */
+function StudioEntry({ studio }: { studio: boolean }) {
+  return (
+    <Panel
+      variant={studio ? "feature" : "plain"}
+      className="flex flex-wrap items-center gap-x-6 gap-y-4 p-5 sm:p-6"
+    >
+      <div className="min-w-60 grow">
+        <p className="slug">Studio</p>
+        <p className="mt-1.5 font-display text-lg text-ice">
+          {studio ? "สตูดิโอของคุณ" : "อยากเปิดช่องของตัวเองไหม"}
+        </p>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted">
+          {studio
+            ? "ตั้งค่าช่อง คุมคิวเพลง จับเวลาบนสตรีม จัดทัวร์นาเมนต์ และสร้าง widget ลง OBS"
+            : "สตรีมเมอร์ตั้งพร้อมเพย์รับโดเนท เปิดคิวขอเพลง และจัดทัวร์นาเมนต์ได้ — ส่งคำขอแล้วรอผู้ดูแลอนุมัติ"}
+        </p>
+      </div>
+      <Link href="/studio/" className="shrink-0">
+        <Button variant={studio ? "primary" : "outline"}>
+          {studio ? "เข้าสตูดิโอ" : "ขอเปิดช่อง"}
+        </Button>
+      </Link>
+    </Panel>
   );
 }
 

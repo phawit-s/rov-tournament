@@ -5,6 +5,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useHashParam } from "@/hooks/useClient";
 import { useAccess } from "@/hooks/useAdmin";
+import { useMyChannels } from "@/hooks/useMyChannel";
 import { recordActivity } from "@/lib/activity";
 import { recordAudit } from "@/lib/audit";
 import { authStore } from "@/lib/backend/firebase";
@@ -20,7 +21,6 @@ import {
   decideChannelSeed,
   emptyChannel,
   markDonationAutoApproved,
-  pushChannel,
   pushChannelAs,
   watchAllChannels,
   watchChannel,
@@ -68,11 +68,10 @@ import Figure, { FigureRow } from "../ui/Figure";
 import ImagePicker from "../ui/ImagePicker";
 import LinkRow from "../ui/LinkRow";
 import MiniBtn from "../ui/MiniBtn";
-import Panel from "../ui/Panel";
+import Panel, { PanelHeader } from "../ui/Panel";
 import Reveal, { PageHeading } from "../ui/Reveal";
 import Switch from "../ui/Switch";
-import Tabs, { StickyTabs } from "../ui/Tabs";
-import AdminTeamPanel from "../auth/AdminTeamPanel";
+import Tabs from "../ui/Tabs";
 import SongQueuePanel from "../song/SongQueuePanel";
 import { toast } from "../ui/Toast";
 import { IconCheck } from "../ui/icons";
@@ -84,6 +83,7 @@ import {
   Label,
   NumberInput,
   RegStatusBadge,
+  Skeleton,
   Textarea,
 } from "../tournament/ui";
 
@@ -104,14 +104,21 @@ const money = (n: number) => formatMoney(Math.round(n));
  * ชื่อส่วนอยู่ใน #tab= จึงบุ๊กมาร์กหน้าที่ใช้ทุกวันได้ตรงๆ
  * และปุ่มย้อนกลับของเบราว์เซอร์พาไปส่วนก่อนหน้าตามที่คนคาด
  */
-type Section = "home" | "inbox" | "settings" | "songs" | "team";
+/*
+  ส่วนของหน้าช่อง — ชุดเดียวกับเมนูลูกในแถบข้างของสตูดิโอ (components/studio/nav.ts)
+  แก้ที่ไหนต้องแก้อีกที่ให้ตรงกัน ไม่งั้นแถบข้างจะพาไปส่วนที่หน้านี้ไม่รู้จัก
 
-const SECTIONS: { key: Section; label: string; admin?: boolean }[] = [
-  { key: "home", label: "ภาพรวม" },
-  { key: "inbox", label: "สลิป" },
+  "ผู้ดูแลระบบ" ถูกถอดออกจากหน้านี้แล้ว — ย้ายไปอยู่ที่ /studio/roles/
+  ซึ่งเป็นที่ที่ให้/ถอดสิทธิ์ทั้งหมด การมีสองทางเข้าไปแผงเดียวกันคือสาเหตุหนึ่ง
+  ที่หน้านี้เคยมีเมนูเยอะเกินจำเป็น
+*/
+type Section = "home" | "inbox" | "settings" | "songs";
+
+const SECTIONS: { key: Section; label: string }[] = [
+  { key: "home", label: "ภาพรวมช่อง" },
+  { key: "inbox", label: "สลิปโดเนท" },
   { key: "settings", label: "ตั้งค่าช่อง" },
-  { key: "songs", label: "ขอเพลง" },
-  { key: "team", label: "ผู้ดูแล", admin: true },
+  { key: "songs", label: "คิวขอเพลง" },
 ];
 
 type Tab = "all" | "pending" | "approved" | "rejected";
@@ -242,6 +249,7 @@ export default function ChannelSettings() {
   );
 
   const access = useAccess();
+  const { channels: myChannels, loaded: myLoaded } = useMyChannels();
   const reduced = useReducedMotion();
   const [donations, setDonations] = useState<ChannelDonation[]>([]);
   const [stats, setStats] = useState<Stats>(NO_STATS);
@@ -285,7 +293,24 @@ export default function ChannelSettings() {
 
   const isAdmin = access === "verified";
   const channel = remote ? remote.draft : stored;
-  const activeId = remote?.id ?? user?.uid ?? null;
+
+  /*
+    รหัสช่องของตัวเอง — ถามคลาวด์ว่า "ช่องไหนที่ ownerUid เป็นเรา"
+    ไม่ใช่เดาว่า doc id เท่ากับ uid
+
+    การเดาแบบเดิมถูกเฉพาะช่องแรกที่สร้างจากบัญชีนั้นเอง พอช่องถูกโอนให้คนอื่น
+    (หรือเป็นช่องที่สองซึ่งใช้รหัสสุ่ม) เจ้าของจะเปิดหน้านี้แล้วเจอช่องเปล่า
+    ทั้งที่ช่องจริงอยู่บนคลาวด์ครบ — และถ้าเผลอกดเผยแพร่ตอนนั้นจะได้ช่องซ้ำ
+    ขึ้นมาอีกใบแทนที่จะทับของเดิม
+
+    ★ ห้ามใส่ fallback เป็น user.uid กลับมา ★
+    ช่องที่โอนให้คนอื่นไปแล้วยังใช้ชื่อเอกสาร = uid ของเจ้าของ *เดิม* อยู่
+    เจ้าของเดิมที่ไม่เหลือช่องแล้วจะตกไป fallback แล้วไปเปิดเอกสารนั้นเจอพอดี
+    หน้าจะขึ้นว่า "ช่องของคุณ" ทั้งที่เป็นช่องของคนอื่น และถ้าคนนั้นเป็นผู้ดูแล
+    (ซึ่งเป็นกรณีที่เกิดจริง) การกดเผยแพร่จะทับช่องเขาได้เลย
+  */
+  const ownId = myChannels[0]?.id ?? null;
+  const activeId = remote?.id ?? ownId;
   const liveLoaded = !!activeId && liveSnap?.id === activeId;
   const live = liveLoaded ? (liveSnap?.data ?? null) : null;
   const autoApprove = !!channel?.donate.autoApprove;
@@ -309,7 +334,15 @@ export default function ChannelSettings() {
   useEffect(() => {
     const choice = decideChannelSeed({
       hasUser: !!user,
-      hasLocal: !!stored,
+      /*
+        "มีของค้างในเครื่อง" ต้องหมายถึงของ *ของคนนี้* เท่านั้น
+
+        เครื่องหนึ่งมีคนใช้หลายบัญชีได้ (สตรีมเมอร์ยืมโน้ตบุ๊กกันเป็นเรื่องปกติ)
+        ถ้าไม่เช็คเจ้าของ ร่างของคนก่อนหน้าจะถูกหยิบมาแสดงทั้งใบ — เลขพร้อมเพย์
+        ชื่อบัญชี ลิงก์ไลฟ์ ครบ ทั้งที่คนที่นั่งอยู่ตอนนี้เป็นคนละคน
+        (channelStore กรองให้อีกชั้นแล้ว ตรงนี้คือด่านที่มองเห็นได้จากที่เรียกใช้)
+      */
+      hasLocal: !!stored && stored.ownerUid === user?.uid,
       editingOther: !!remote,
       cloudLoaded: liveLoaded,
       cloudExists: !!live,
@@ -357,7 +390,36 @@ export default function ChannelSettings() {
   }, [activeId, autoApprove, canManage]);
 
   if (!user) return null;
-  if (!channel || !activeId) return null;
+
+  /*
+    ยังไม่มีช่องเลย — ต้องมีทางออกให้กด ไม่ใช่หน้าว่าง
+
+    ของเดิม return null เฉยๆ เพราะสมมติว่าทุกคนมีช่องที่ชื่อเอกสาร = uid เสมอ
+    พอเลิกสมมติแบบนั้นแล้ว "ยังไม่มีช่อง" กลายเป็นสถานะที่เกิดได้จริง
+    (บัญชีใหม่ · เจ้าของที่เพิ่งโอนช่องสุดท้ายให้คนอื่น)
+  */
+  if (!activeId || !channel) {
+    if (!myLoaded) return <ChannelSkeleton />;
+    return (
+      <div className="space-y-6">
+        <PageHeading
+          eyebrow="Channel"
+          title="ช่องของคุณ"
+          description="ตั้งพร้อมเพย์ แพ็กเกจสมาชิก และลิงก์สำหรับสตรีมที่เดียว ใช้ได้กับทุกทัวร์"
+        />
+        <Panel variant="feature" className="p-6 sm:p-7">
+          <PanelHeader eyebrow="Channel" title="ยังไม่มีช่อง" />
+          <p className="text-sm leading-relaxed text-muted">
+            ช่องคือที่รวมทุกอย่างของคุณ — พร้อมเพย์สำหรับรับโดเนท แพ็กเกจสมาชิก
+            คิวขอเพลง และลิงก์ widget ที่ใช้ได้ตลอดโดยไม่ต้องเปลี่ยนทุกครั้งที่จัดทัวร์ใหม่
+          </p>
+          <Button className="mt-5" loading={busy} onClick={() => void addChannel()}>
+            เปิดช่องของคุณ
+          </Button>
+        </Panel>
+      </div>
+    );
+  }
 
   const editingOther = !!remote;
   const otherName = channel.name || channel.handle || "ช่องนี้";
@@ -396,7 +458,8 @@ export default function ChannelSettings() {
    * ช่องที่สร้างทีหลังมีรหัสของตัวเอง จึงแก้ผ่านสำเนาชั่วคราวใน state แทน
    */
   const selectChannel = (next: Channel | null) => {
-    if (next && next.id === user.uid) {
+    // เทียบกับรหัสช่องของเราจริงๆ ไม่ใช่ uid — ช่องที่โอนมามีรหัสคนละตัวกับ uid
+    if (next && next.id === ownId) {
       setRemote(null);
     } else {
       setRemote(next ? { id: next.id, draft: next } : null);
@@ -432,9 +495,19 @@ export default function ChannelSettings() {
     }
     setBusy(true);
     try {
-      // แก้ช่องคนอื่นห้ามทับ ownerEmail ของเจ้าของด้วยอีเมลผู้ดูแล
+      /*
+        เขียนกลับไปที่เอกสารเดิมเสมอ (activeId) ไม่ใช่ที่ชื่อเอกสาร = ownerUid
+
+        pushChannel() ของเดิมเลือกปลายทางจาก channel.ownerUid ซึ่งเท่ากับสมมติว่า
+        "ชื่อเอกสาร = uid เจ้าของ" — พอช่องถูกโอนมา สมมติฐานนั้นผิด แล้วการกด
+        เผยแพร่จะไปสร้างเอกสารใหม่ที่ชื่อ = uid เจ้าของใหม่ กลายเป็นช่องซ้ำสองใบ
+        โดยที่ลิงก์ทั้งหมดยังชี้ใบเก่า
+
+        แก้ช่องคนอื่นห้ามทับ ownerEmail ของเจ้าของด้วยอีเมลผู้ดูแล
+      */
       if (remote) await pushChannelAs(channel, remote.id);
-      else await pushChannel({ ...channel, ownerEmail: user.email ?? undefined });
+      else if (activeId)
+        await pushChannelAs({ ...channel, ownerEmail: user.email ?? undefined }, activeId);
       toast(editingOther ? `เผยแพร่ช่อง ${otherName} แล้ว` : "เผยแพร่ช่องแล้ว", "success");
       recordActivity("tournament.publish", `เผยแพร่ช่อง "${channel.name || channel.handle}"`, {
         actor: user.name,
@@ -556,24 +629,36 @@ export default function ChannelSettings() {
         description="ตั้งพร้อมเพย์ แพ็กเกจสมาชิก และลิงก์สำหรับสตรีมที่เดียว ใช้ได้กับทุกทัวร์"
         meta={channel.handle ? `@${channel.handle}` : undefined}
         action={
-          <Button onClick={publish} loading={busy} variant={dirty ? "primary" : "outline"}>
-            {dirty ? "เผยแพร่ช่อง" : "เผยแพร่แล้ว"}
-          </Button>
+          /* ไม่มีสิทธิ์แก้ช่องนี้ก็ไม่ต้องมีปุ่มให้กด — กดไปก็ได้แต่ error จากกติกา */
+          canManage ? (
+            <Button onClick={publish} loading={busy} variant={dirty ? "primary" : "outline"}>
+              {dirty ? "เผยแพร่ช่อง" : "เผยแพร่แล้ว"}
+            </Button>
+          ) : undefined
         }
       />
 
-      <StickyTabs
-        label="ส่วนของหน้าช่อง"
-        value={section}
-        onChange={goSection}
-        items={SECTIONS.filter((s) => !s.admin || isAdmin).map((s) => ({
-          key: s.key,
-          label: s.label,
-          // จุดทองที่แท็บสลิป = มีใบรอตรวจอยู่ เห็นได้จากทุกส่วนโดยไม่ต้องเข้าไปดู
-          dot: s.key === "inbox" && stats.pending > 0 ? "169 155 255" : undefined,
-          count: s.key === "inbox" ? stats.pending || null : null,
-        }))}
-      />
+      {/*
+        บนจอใหญ่ ส่วนของหน้านี้อยู่ในแถบข้างของสตูดิโอแล้ว (เมนูลูกใต้ "ช่องของฉัน")
+        จึงเหลือแถบนี้ไว้เฉพาะจอเล็กที่แถบข้างถูกพับเป็นลิ้นชัก —
+        ถ้าโชว์ทั้งสองที่ หน้าจอจะมีที่กดเปลี่ยนเรื่องสองชุดซ้อนกันจนอ่านไม่ออกว่าอันไหนคุมอะไร
+      */}
+      <div className="lg:hidden">
+        <Tabs
+          label="ส่วนของหน้าช่อง"
+          value={section}
+          onChange={goSection}
+          size="md"
+          grow
+          items={SECTIONS.map((s) => ({
+            key: s.key,
+            label: s.label,
+            // จุดทองที่แท็บสลิป = มีใบรอตรวจอยู่ เห็นได้โดยไม่ต้องเข้าไปดู
+            dot: s.key === "inbox" && stats.pending > 0 ? "169 155 255" : undefined,
+            count: s.key === "inbox" ? stats.pending || null : null,
+          }))}
+        />
+      </div>
 
       {/* ================= ภาพรวม ================= */}
       {section === "home" && (
@@ -1174,14 +1259,6 @@ export default function ChannelSettings() {
         </Reveal>
       )}
 
-      {/* ================= ผู้ดูแลระบบ =================
-          ตัวแผงเช็คสิทธิ์ซ้ำอีกชั้นในตัวเอง แท็บนี้แค่ไม่โชว์ทางเข้าให้เปล่าๆ */}
-      {section === "team" && isAdmin && (
-        <Reveal>
-          <AdminTeamPanel />
-        </Reveal>
-      )}
-
       {/* แถบบันทึกลอย — โผล่เฉพาะตอนมีของค้าง จะได้กดได้จากตรงไหนก็ได้ในหน้า */}
       <AnimatePresence>
         {dirty && canManage && (
@@ -1190,18 +1267,34 @@ export default function ChannelSettings() {
             animate={{ y: 0, opacity: 1 }}
             exit={reduced ? undefined : { y: 80, opacity: 0 }}
             transition={{ type: "spring", stiffness: 320, damping: 30 }}
-            className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            /*
+              ลอยพ้นขอบจอจริงๆ ไม่ใช่แปะติดขอบ — แถบที่ชนขอบล่างอ่านเป็น
+              "แถบเครื่องมือของเบราว์เซอร์" ส่วนแถบที่ลอยขึ้นมาอ่านเป็น
+              "ของที่เพิ่งเด้งขึ้นมาบอกอะไรบางอย่าง" ซึ่งคือสิ่งที่มันเป็น
+
+              lg:pl-66 = ความกว้างแถบข้างของสตูดิโอ ไม่ชดเชยแล้วกล่องจะไป
+              อยู่กลางจอ ซึ่งเยื้องจากกลางเนื้อหาที่ตาเรากำลังอ่านอยู่
+            */
+            className="pointer-events-none fixed inset-x-0 bottom-[max(1.25rem,var(--sab))] z-40 px-4 lg:pl-66"
           >
-            <div className="pointer-events-auto mx-auto flex max-w-3xl flex-wrap items-center gap-3 rounded-2xl border border-hair bg-ink/92 px-4 py-3 shadow-lift-3 backdrop-blur-xl sm:px-5">
-              <span
-                className="h-2 w-2 shrink-0 rounded-full"
-                style={{ background: "rgb(var(--st-next))" }}
-              />
+            <div className="glass-panel pointer-events-auto mx-auto flex max-w-2xl flex-wrap items-center gap-x-4 gap-y-3 rounded-3xl py-3.5 pr-3.5 pl-5">
+              {/* จุดสถานะเต้นเบาๆ — บอกว่ายังค้างอยู่ ไม่ใช่ป้ายนิ่งที่อ่านผ่านไปแล้วลืม */}
+              <span className="relative grid h-2.5 w-2.5 shrink-0 place-items-center">
+                <span
+                  className="absolute inset-0 animate-ping rounded-full opacity-60"
+                  style={{ background: "rgb(var(--st-next))" }}
+                />
+                <span
+                  className="relative h-2.5 w-2.5 rounded-full"
+                  style={{ background: "rgb(var(--st-next))" }}
+                />
+              </span>
+
               <div className="min-w-0 flex-1">
-                <p className="font-display text-sm text-ice">
+                <p className="font-display text-sm leading-tight text-ice">
                   {neverPublished ? "ช่องนี้ยังไม่เคยเผยแพร่" : "มีการแก้ที่ยังไม่ได้เผยแพร่"}
                 </p>
-                <p className="mt-0.5 truncate text-xs text-muted">
+                <p className="mt-1 truncate text-xs leading-tight text-muted">
                   {channel.handle
                     ? editingOther
                       ? `กดแล้วค่าจะขึ้นช่องของ ${otherName}`
@@ -1209,11 +1302,12 @@ export default function ChannelSettings() {
                     : "ตั้งชื่อช่อง (handle) ก่อนถึงจะเผยแพร่ได้"}
                 </p>
               </div>
+
               <Button
                 onClick={publish}
                 loading={busy}
                 disabled={!channel.handle}
-                className="shrink-0"
+                className="shrink-0 rounded-2xl"
               >
                 เผยแพร่ช่อง
               </Button>
@@ -1445,3 +1539,13 @@ function ChannelChip({
   );
 }
 
+/** โครงหน้ารอตอนยังไม่รู้ว่ามีช่องหรือยัง — ดีกว่าจอว่างที่แยกไม่ออกจาก "พัง" */
+function ChannelSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy="true" aria-label="กำลังอ่านช่องของคุณ">
+      <Skeleton className="h-10 w-56" />
+      <Skeleton className="h-3 w-96 max-w-full" />
+      <Skeleton className="h-64 w-full rounded-2xl" />
+    </div>
+  );
+}

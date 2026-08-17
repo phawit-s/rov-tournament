@@ -246,6 +246,59 @@ export const IconUnlock = ({ className, strokeWidth }: IconProps) =>
     strokeWidth,
   );
 
+/* ---------- ชุดที่สตูดิโอใช้ ---------- */
+
+export const IconGauge = ({ className, strokeWidth }: IconProps) =>
+  base(
+    <>
+      <path d="M3.6 17.5a9 9 0 1 1 16.8 0" />
+      <path d="M12 12.8 15.8 9" />
+      <circle cx="12" cy="13.6" r="1.4" fill="currentColor" stroke="none" />
+    </>,
+    className,
+    strokeWidth,
+  );
+
+export const IconShield = ({ className, strokeWidth }: IconProps) =>
+  base(
+    <>
+      <path d="M12 3.2 19.5 6v5.6c0 4.2-3 7.4-7.5 9.2-4.5-1.8-7.5-5-7.5-9.2V6z" />
+      <path d="m9 12.2 2.2 2.2L15.2 10" />
+    </>,
+    className,
+    strokeWidth,
+  );
+
+export const IconMusic = ({ className, strokeWidth }: IconProps) =>
+  base(
+    <>
+      <path d="M9.5 18V6.4l9-1.9v11.1" />
+      <circle cx="7" cy="18" r="2.5" />
+      <circle cx="16" cy="15.6" r="2.5" />
+    </>,
+    className,
+    strokeWidth,
+  );
+
+export const IconMenu = ({ className, strokeWidth }: IconProps) =>
+  base(<path d="M4 7h16M4 12h16M4 17h16" />, className, strokeWidth);
+
+export const IconClose = ({ className, strokeWidth }: IconProps) =>
+  base(<path d="M6 6l12 12M18 6 6 18" />, className, strokeWidth);
+
+export const IconLogout = ({ className, strokeWidth }: IconProps) =>
+  base(
+    <>
+      <path d="M14.5 4.5H6.8A1.8 1.8 0 0 0 5 6.3v11.4a1.8 1.8 0 0 0 1.8 1.8h7.7" />
+      <path d="M17 8.5 20.5 12 17 15.5M20 12h-9" />
+    </>,
+    className,
+    strokeWidth,
+  );
+
+export const IconArrowLeft = ({ className, strokeWidth }: IconProps) =>
+  base(<path d="M19 12H5m0 0 6-6m-6 6 6 6" />, className, strokeWidth);
+
 /* ---------- ไอคอนตำแหน่งในทีม ---------- */
 
 export const LaneDark = ({ className, strokeWidth }: IconProps) =>

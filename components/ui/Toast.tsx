@@ -69,7 +69,7 @@ export default function ToastHost() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.97 }}
               transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-              className="surface hairline-top pointer-events-auto relative w-full overflow-hidden rounded-xl px-4 py-3 shadow-lift-2"
+              className="surface glass-panel hairline-top pointer-events-auto relative w-full overflow-hidden rounded-xl px-4 py-3"
               role="status"
             >
               <span className="flex items-center gap-2.5">

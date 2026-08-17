@@ -11,7 +11,7 @@ import {
   watchChannelDonations,
   type ChannelDonation,
 } from "@/lib/channel/donations";
-import { channelStore } from "@/lib/channel/store";
+import { useMyChannels } from "@/hooks/useMyChannel";
 import { safeImageSrc } from "@/lib/safe";
 import {
   cloudReady,
@@ -45,11 +45,9 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
     authStore.getServerSnapshot,
   );
   const user = authStore.user();
-  const channel = useSyncExternalStore(
-    channelStore.subscribe,
-    channelStore.getSnapshot,
-    channelStore.getServerSnapshot,
-  );
+  /* ช่องของเราอ่านจากคลาวด์ ไม่ใช่จากร่างที่ค้างอยู่ในหน้าตั้งค่าช่อง —
+     ไม่งั้นลิงก์สนับสนุนจะหายไปเฉยๆ ถ้ายังไม่ได้เปิดหน้านั้นในแท็บนี้ */
+  const { first: channel } = useMyChannels();
 
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [donations, setDonations] = useState<ChannelDonation[]>([]);
@@ -178,7 +176,7 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
             ) : (
               <p className="text-xs text-muted">
                 ตั้งชื่อช่องที่{" "}
-                <Link href="/channel/" className="text-iris underline-offset-2 hover:underline">
+                <Link href="/studio/channel/" className="text-iris underline-offset-2 hover:underline">
                   หน้าช่อง
                 </Link>{" "}
                 ก่อน แล้วจะได้ลิงก์สมทบทุน

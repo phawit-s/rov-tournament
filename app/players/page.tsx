@@ -1,19 +1,16 @@
 import type { Metadata } from "next";
 import AppShell from "@/components/AppShell";
-import AdminGate from "@/components/auth/AdminGate";
-import PlayersView from "@/components/tournament/PlayersView";
+import RedirectTo from "@/components/RedirectTo";
 
 export const metadata: Metadata = {
   title: "ผู้เล่น — Steamer Hub",
-  description: "ประวัติการแข่งขันของผู้เล่นแต่ละคน",
 };
 
-export default function PlayersPage() {
+/** ที่อยู่เดิมก่อนงานของผู้จัดจะย้ายไปรวมกันที่ /studio/ — ลิงก์เก่ายังต้องเปิดได้ */
+export default function PlayersRedirectPage() {
   return (
-    <AppShell wide>
-      <AdminGate>
-        <PlayersView />
-      </AdminGate>
+    <AppShell>
+      <RedirectTo href="/studio/players/" label="ผู้เล่น" />
     </AppShell>
   );
 }

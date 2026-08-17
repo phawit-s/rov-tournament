@@ -67,7 +67,7 @@ export default function ConfirmDialog({
             <Panel
               variant="feature"
               interactive={false}
-              className="w-full rounded-t-3xl p-7 pb-[calc(1.75rem+var(--sab))] sm:w-[min(92vw,26rem)] sm:rounded-2xl sm:pb-7"
+              className="glass-panel w-full rounded-t-3xl p-7 pb-[calc(1.75rem+var(--sab))] sm:w-[min(92vw,26rem)] sm:rounded-2xl sm:pb-7"
             >
               <p className="slug">ยืนยัน</p>
               <h3 className="mt-2 font-display text-xl font-light text-ice">{title}</h3>

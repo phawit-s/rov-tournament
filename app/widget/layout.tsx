@@ -32,8 +32,12 @@ export default function WidgetLayout({
 
               ตัวนี้อยู่ใน HTML ตั้งแต่แรก จึงรอดทุกกรณีข้างบน
               หน่วงไว้ 6 วินาทีเพื่อไม่ให้แวบมาให้เห็นตอนโหลดปกติ
-              แล้วโค้ดจะถอดมันทิ้งทันทีที่ทำงานได้ (ดูใน WidgetShell)
+              แล้วโค้ดจะซ่อนมันทันทีที่ทำงานได้ ด้วยการติดธงที่ <html>
+              (ดูใน BootFallback — ห้ามลบโหนดนี้ทิ้ง มันเป็นของที่ React เรนเดอร์)
             */
+            html[data-widget-booted] #widget-boot-fallback {
+              display: none;
+            }
             #widget-boot-fallback {
               position: fixed;
               inset: 12px;
