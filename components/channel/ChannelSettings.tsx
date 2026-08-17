@@ -402,16 +402,37 @@ export default function ChannelSettings() {
     if (!myLoaded) return <ChannelSkeleton />;
     return (
       <div className="space-y-6">
+        {/*
+          แถบสลับช่องต้องอยู่ "เหนือ" ทางออกนี้เสมอ
+
+          ผู้ดูแลระบบไม่จำเป็นต้องมีช่องของตัวเองเลยสักช่อง — หน้าที่ของเขาคือ
+          เข้าไปช่วยตั้งค่าช่องของคนอื่น ถ้าปล่อยให้หน้า "ยังไม่มีช่อง" คืนค่า
+          ก่อนถึงแถบนี้ ผู้ดูแลที่โอนช่องตัวเองออกไปหมดแล้วจะแตะช่องใครไม่ได้เลย
+        */}
+        {isAdmin && (
+          <ChannelSwitcher
+            channels={channels}
+            activeId=""
+            ownUid={user.uid}
+            onSelect={selectChannel}
+            onCreate={() => void addChannel()}
+            busy={busy}
+          />
+        )}
+
         <PageHeading
           eyebrow="Channel"
           title="ช่องของคุณ"
           description="ตั้งพร้อมเพย์ แพ็กเกจสมาชิก และลิงก์สำหรับสตรีมที่เดียว ใช้ได้กับทุกทัวร์"
         />
         <Panel variant="feature" className="p-6 sm:p-7">
-          <PanelHeader eyebrow="Channel" title="ยังไม่มีช่อง" />
+          <PanelHeader eyebrow="Channel" title="ยังไม่มีช่องของตัวเอง" />
           <p className="text-sm leading-relaxed text-muted">
             ช่องคือที่รวมทุกอย่างของคุณ — พร้อมเพย์สำหรับรับโดเนท แพ็กเกจสมาชิก
             คิวขอเพลง และลิงก์ widget ที่ใช้ได้ตลอดโดยไม่ต้องเปลี่ยนทุกครั้งที่จัดทัวร์ใหม่
+            {isAdmin
+              ? " · ถ้าจะเข้าไปช่วยตั้งค่าช่องของคนอื่น เลือกจากแถบด้านบนได้เลย"
+              : ""}
           </p>
           <Button className="mt-5" loading={busy} onClick={() => void addChannel()}>
             เปิดช่องของคุณ
@@ -457,7 +478,9 @@ export default function ChannelSettings() {
    * ช่องแรกของแต่ละคนใช้ uid เป็นชื่อเอกสาร และมีสำเนาอยู่ใน localStorage
    * ช่องที่สร้างทีหลังมีรหัสของตัวเอง จึงแก้ผ่านสำเนาชั่วคราวใน state แทน
    */
-  const selectChannel = (next: Channel | null) => {
+  /* ประกาศแบบ function ไม่ใช่ const — ทางออก "ยังไม่มีช่อง" อยู่เหนือบรรทัดนี้
+     และต้องส่งฟังก์ชันนี้ให้แถบสลับช่องใช้ (const จะติด TDZ) */
+  function selectChannel(next: Channel | null) {
     // เทียบกับรหัสช่องของเราจริงๆ ไม่ใช่ uid — ช่องที่โอนมามีรหัสคนละตัวกับ uid
     if (next && next.id === ownId) {
       setRemote(null);
@@ -468,10 +491,12 @@ export default function ChannelSettings() {
     setDonations([]);
     setStats(NO_STATS);
     setTab("all");
-  };
+  }
 
   /** เปิดช่องใหม่ให้ตัวเอง แล้วสลับไปแก้ช่องนั้นเลย */
-  const addChannel = async () => {
+  async function addChannel() {
+    // ประกาศแบบ function จึงไม่ได้รับผลจากการเช็ค !user ด้านบน ต้องกันเองตรงนี้
+    if (!user) return;
     setBusy(true);
     try {
       const made = await createChannel(
@@ -486,7 +511,7 @@ export default function ChannelSettings() {
     } finally {
       setBusy(false);
     }
-  };
+  }
 
   const publish = async () => {
     if (!channel.handle) {
@@ -599,8 +624,6 @@ export default function ChannelSettings() {
           channels={channels}
           activeId={activeId}
           ownUid={user.uid}
-          ownName={stored?.name || stored?.handle || user.name}
-          ownAvatar={stored?.avatar}
           onSelect={selectChannel}
           onCreate={() => void addChannel()}
           busy={busy}
@@ -1394,8 +1417,6 @@ function ChannelSwitcher({
   channels,
   activeId,
   ownUid,
-  ownName,
-  ownAvatar,
   onSelect,
   onCreate,
   busy,
@@ -1403,36 +1424,36 @@ function ChannelSwitcher({
   channels: Channel[];
   activeId: string;
   ownUid: string;
-  ownName: string;
-  ownAvatar?: string;
   onSelect: (c: Channel | null) => void;
   onCreate: () => void;
   busy: boolean;
 }) {
-  /* ช่องแรกของเราใช้ uid เป็นชื่อเอกสาร ส่วนช่องที่สร้างทีหลังมีรหัสของตัวเอง
-     แยกเป็นสองกลุ่มให้เห็นชัดว่าอันไหนของเรา อันไหนของคนอื่นที่เข้าไปช่วยดูแล */
-  const first = channels.find((c) => c.id === ownUid);
-  const mine = channels.filter((c) => c.id !== ownUid && c.ownerUid === ownUid);
-  const others = channels.filter((c) => c.id !== ownUid && c.ownerUid !== ownUid);
+  /*
+    แยกด้วย ownerUid อย่างเดียว ไม่แตะชื่อเอกสารเลย
+
+    ของเดิมยกช่องที่ "ชื่อเอกสาร = uid ของเรา" ออกมาเป็นชิปแรกเสมอ ซึ่งพังสองทาง
+    หลังเริ่มมีการโอนช่อง: ช่องที่โอนให้คนอื่นไปแล้วยังใช้ชื่อเอกสารเดิม
+    (= uid ของเรา) มันเลยถูกป้ายว่า "ของคุณ" ทั้งที่ไม่ใช่แล้ว
+    และตัวเลขนับก็บวกหนึ่งตายตัวราวกับทุกคนต้องมีช่องอย่างน้อยหนึ่งช่องเสมอ
+  */
+  const mine = channels.filter((c) => c.ownerUid === ownUid);
+  const others = channels.filter((c) => c.ownerUid !== ownUid);
 
   return (
     <Panel variant="quiet" className="p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="slug slug-2">Admin · สลับช่อง</span>
         <span className="num text-eyebrow text-muted">
-          ของคุณ {mine.length + 1} · ของคนอื่น {others.length}
+          ของคุณ {mine.length} · ของคนอื่น {others.length}
         </span>
       </div>
 
       <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
-        <ChannelChip
-          name={first?.name || ownName}
-          handle={first?.handle}
-          avatar={first?.avatar ?? ownAvatar}
-          mine
-          active={activeId === ownUid}
-          onClick={() => onSelect(null)}
-        />
+        {mine.length === 0 && (
+          <span className="flex min-h-11 shrink-0 items-center rounded-xl px-1 text-xs text-muted">
+            คุณยังไม่มีช่องของตัวเอง
+          </span>
+        )}
         {mine.map((c) => (
           <ChannelChip
             key={c.id}
