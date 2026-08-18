@@ -183,6 +183,7 @@ export function SongPlayerCore({
     stateRef.current = { channelId, queue, active: lock === "leader" };
   }, [channelId, queue, lock]);
 
+
   const { playing, queued, done } = useMemo(() => splitQueue(queue), [queue]);
   /* แยกออกมาเป็นค่าพื้นฐาน เพราะ playing เป็นอ็อบเจกต์ใหม่ทุกสแนปช็อต
      ถ้าใส่ทั้งก้อนใน deps เอฟเฟกต์จะรีสตาร์ตทุกครั้งที่คิวขยับแม้เพลงไม่เปลี่ยน */
@@ -236,6 +237,24 @@ export function SongPlayerCore({
     if (cur) await setSongStatus(ch, cur.id, "played");
     if (next.length > 0) await setSongStatus(ch, next[0].id, "playing", list);
   }, []);
+
+  /*
+    ★ callback ต้องเข้าถึงผ่าน ref เท่านั้น ห้ามใส่เป็น dependency ของตัวเล่น ★
+
+    ตัวเล่น YouTube ถูกสร้างใน effect ที่ cleanup แล้วเรียก destroy() —
+    dependency ตัวไหนเปลี่ยน แปลว่า iframe ถูกรื้อทิ้งแล้วสร้างใหม่กลางเพลง
+    ซึ่ง YouTube จะขึ้น "An error occurred. Please try again later."
+
+    onUnplayable ถูกส่งมาเป็น arrow function เขียนสดในหน้าแม่ จึงเป็นคนละตัว
+    ทุกครั้งที่หน้าแม่รีเรนเดอร์ — และหน้าแม่รีเรนเดอร์ทุกครั้งที่เอกสารช่อง
+    เปลี่ยน เช่นตอนลบเพลงออกจากกองสำรอง ผลคือแตะคิวทีเดียวเพลงที่ฟังอยู่ดับ
+  */
+  const advanceRef = useRef(advance);
+  const unplayableRef = useRef(onUnplayable);
+  useEffect(() => {
+    advanceRef.current = advance;
+    unplayableRef.current = onUnplayable;
+  });
 
   /** ไม่มีเพลงเล่นอยู่แต่มีคนรอคิว = ดันขึ้นมาเล่นเลย ไม่ต้องรอใครกด */
   useEffect(() => {
@@ -350,7 +369,7 @@ export function SongPlayerCore({
               */
               if (e.data === YT_STATE.ENDED) {
                 const cur = loadedRef.current;
-                if (cur && playedOkRef.current) void advance(cur);
+                if (cur && playedOkRef.current) void advanceRef.current(cur);
               }
             },
             /*
@@ -369,7 +388,7 @@ export function SongPlayerCore({
                 ? stateRef.current.queue.find((x) => x.id === cur)
                 : undefined;
               if (cur && song?.source === "filler") {
-                onUnplayable?.(song.videoId, e.data);
+                unplayableRef.current?.(song.videoId, e.data);
                 /* ลบใบทิ้งเลย ไม่ใช่ปิดเป็น "เล่นจบแล้ว" — มันไม่เคยเล่น
                    ใส่ไว้ในประวัติก็มีแต่จะรกโดยไม่ได้บอกอะไร
                    พอใบหาย ตัวดันคิวจะหยิบเพลงถัดไปขึ้นมาให้เอง */
@@ -393,7 +412,8 @@ export function SongPlayerCore({
       playerRef.current?.destroy();
       playerRef.current = null;
     };
-  }, [advance, onUnplayable]);
+    // สร้างครั้งเดียวตลอดอายุหน้า — เหตุผลอยู่ที่ advanceRef/unplayableRef ด้านบน
+  }, []);
 
   /*
     ปรับตัวเล่นให้ตรงกับคิวเสมอ
