@@ -34,6 +34,8 @@ type Props = {
    */
   preview?: boolean;
   className?: string;
+  /** ชื่อช่องที่ทัวร์นี้สังกัด — ส่งมาเฉพาะตอนที่มีหลายช่องให้สับสน */
+  channelName?: string | null;
 };
 
 /**
@@ -46,6 +48,7 @@ export default function TournamentCard({
   actions,
   preview = false,
   className = "",
+  channelName,
 }: Props) {
   const prize = calcPrizes(tournament.prize);
   const top = prize.breakdown[0];
@@ -86,6 +89,13 @@ export default function TournamentCard({
             </div>
           )}
         </Wrap>
+
+        {/* ป้ายช่อง — วางบนปกมุมซ้าย ไม่แย่งที่แผ่นวันที่ที่อยู่มุมขวา */}
+        {channelName && (
+          <span className="glass-panel pointer-events-none absolute top-3 left-3 max-w-[60%] truncate rounded-xl px-2.5 py-1 font-display text-[11px] text-ice">
+            {channelName}
+          </span>
+        )}
 
         {validStart && (
           <span className="surface pointer-events-none absolute top-3 right-3 grid w-16 place-items-center rounded-xl px-1 py-2 text-center shadow-lift-1">

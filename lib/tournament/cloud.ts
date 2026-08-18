@@ -80,7 +80,15 @@ export async function pushTournament(
       ...sanitize(tournament),
       ownerUid: owner.uid,
       ownerName: owner.name,
-      channelId: owner.uid,
+      /*
+        ช่องที่ทัวร์นี้สังกัด — เอาค่าที่ผู้จัดเลือกไว้เป็นหลัก
+
+        ของเดิมทับด้วย owner.uid ทุกครั้ง ซึ่งถูกเฉพาะตอนที่ "รหัสช่อง = uid
+        เจ้าของ" คือช่องแรกที่บัญชีนั้นสร้างเอง ช่องที่สองหรือช่องที่โอนมา
+        มีรหัสคนละตัว ยอดสมทบทุนเงินรางวัลจึงไปดึงจากช่องผิดใบเงียบๆ
+        (uid ยังใช้เป็นทางสำรองให้ทัวร์เก่าที่ยังไม่เคยเลือกช่อง)
+      */
+      channelId: tournament.channelId ?? owner.uid,
       ownerEmail: owner.email ?? null,
       adminEmails: (tournament.adminEmails ?? []).map((e) => e.toLowerCase()),
       isPublic,

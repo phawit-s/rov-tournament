@@ -5,6 +5,9 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useHashParam } from "@/hooks/useClient";
 import { useAccess } from "@/hooks/useAdmin";
+import { useMyChannels } from "@/hooks/useMyChannel";
+import { watchAllChannels } from "@/lib/channel/store";
+import type { Channel } from "@/lib/channel/types";
 import { authStore } from "@/lib/backend/firebase";
 import {
   cloudReady,
@@ -27,6 +30,10 @@ import { ArtShield, EmptyState } from "./ui";
 
 /** อ้างอิงคงที่ ไม่งั้น setCloud([]) ตอน error จะทำให้รีเรนเดอร์ไม่จบ */
 const NO_CLOUD: CloudTournament[] = [];
+const NO_CHANNELS: Channel[] = [];
+
+/** ค่าตัวกรอง "ทุกช่อง" — แยกจากรหัสช่องจริงด้วยเครื่องหมายที่ใช้เป็น id ไม่ได้ */
+const ALL = "*";
 
 export default function TournamentsView() {
   const all = useSyncExternalStore(
@@ -51,6 +58,25 @@ export default function TournamentsView() {
   const uid = user && !user.anonymous ? user.uid : null;
   const seesAll = access === "verified";
 
+  /*
+    ช่องที่เอามาทำตัวกรอง — ผู้ดูแลเห็นทุกช่องในระบบ คนอื่นเห็นเฉพาะของตัวเอง
+    ตรงกับชุดทัวร์ที่แต่ละคนดึงมาได้จริง ไม่งั้นตัวกรองจะมีตัวเลือกที่กดแล้วว่างเปล่า
+  */
+  const { channels: myChannels } = useMyChannels();
+  const [allChannels, setAllChannels] = useState<Channel[]>(NO_CHANNELS);
+  useEffect(() => {
+    if (!seesAll) return;
+    return watchAllChannels(setAllChannels, () => setAllChannels(NO_CHANNELS));
+  }, [seesAll]);
+  const scopeChannels = seesAll ? allChannels : myChannels;
+
+  const [channelFilter, setChannelFilter] = useState<string>(ALL);
+  const channelName = (id?: string) => {
+    if (!id) return null;
+    const hit = scopeChannels.find((c) => c.id === id);
+    return hit?.name || (hit?.handle ? `@${hit.handle}` : null);
+  };
+
   useEffect(() => {
     if (!cloudReady() || !uid) return;
     // ผู้ดูแลเห็นทุกอัน คนอื่นเห็นเฉพาะของตัวเอง (กติกาก็อนุญาตแค่นั้น)
@@ -68,9 +94,19 @@ export default function TournamentsView() {
   );
   const incoming = dismissed ? null : shared;
 
-  const list = all
+  const sorted = all
     .slice()
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  /* "ยังไม่ผูกช่อง" ต้องเป็นตัวเลือกจริง ไม่ใช่ของที่หายไปเฉยๆ —
+     ทัวร์ที่สร้างก่อนมีระบบช่องทั้งหมดอยู่ในกองนี้ */
+  const unassigned = sorted.filter((t) => !t.channelId).length;
+  const list =
+    channelFilter === ALL
+      ? sorted
+      : channelFilter === ""
+        ? sorted.filter((t) => !t.channelId)
+        : sorted.filter((t) => t.channelId === channelFilter);
 
   const running = list.filter((t) => t.status === "running").length;
 
@@ -85,6 +121,7 @@ export default function TournamentsView() {
     return (
       <TournamentForm
         tournament={editing}
+        channels={scopeChannels}
         onClose={() => setEditing(null)}
         onSaved={() => toast("บันทึกแล้ว", "success")}
       />
@@ -103,11 +140,58 @@ export default function TournamentsView() {
             : undefined
         }
         action={
-          <Button onClick={() => setEditing(emptyTournament(""))}>
+          <Button
+            onClick={() =>
+              setEditing({
+                ...emptyTournament(""),
+                /* กรองอยู่ที่ช่องไหน ก็สร้างทัวร์ให้ช่องนั้นเลย —
+                   คนที่กำลังดูช่องหนึ่งอยู่แล้วกดสร้าง ตั้งใจสร้างให้ช่องนั้นแทบทุกครั้ง */
+                channelId:
+                  channelFilter !== ALL && channelFilter !== ""
+                    ? channelFilter
+                    : undefined,
+              })
+            }
+          >
             + สร้างทัวร์นาเมนต์
           </Button>
         }
       />
+
+      {/*
+        ตัวกรองตามช่อง — โผล่เมื่อมีอะไรให้แยกจริงเท่านั้น
+
+        ถ้ามีช่องเดียวและไม่มีทัวร์ที่ยังไม่ผูกช่อง แถบนี้จะมีปุ่มเดียว
+        ซึ่งไม่ได้ช่วยอะไรนอกจากกินที่ — ซ่อนไปเลยดีกว่า
+      */}
+      {scopeChannels.length + (unassigned > 0 ? 1 : 0) > 1 && (
+        <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          <FilterChip
+            active={channelFilter === ALL}
+            onClick={() => setChannelFilter(ALL)}
+          >
+            ทุกช่อง
+          </FilterChip>
+          {scopeChannels.map((c) => (
+            <FilterChip
+              key={c.id}
+              active={channelFilter === c.id}
+              onClick={() => setChannelFilter(c.id)}
+            >
+              {c.name || (c.handle ? `@${c.handle}` : c.id.slice(0, 8))}
+            </FilterChip>
+          ))}
+          {unassigned > 0 && (
+            <FilterChip
+              active={channelFilter === ""}
+              onClick={() => setChannelFilter("")}
+            >
+              ยังไม่ผูกช่อง
+              <span className="num ml-1.5 opacity-60">{unassigned}</span>
+            </FilterChip>
+          )}
+        </div>
+      )}
 
       {incoming && (
         <Panel accent="110 155 240" state="next" className="p-5">
@@ -156,6 +240,10 @@ export default function TournamentsView() {
               <Reveal key={t.id} index={i} from="scale">
                 <TournamentCard
                   tournament={t}
+                  /* โชว์ชื่อช่องเฉพาะตอนที่มีหลายช่องปนกันจริง มีช่องเดียวก็รู้อยู่แล้ว */
+                  channelName={
+                    scopeChannels.length > 1 ? channelName(t.channelId) : null
+                  }
                   href={`/tournament/#t=${t.id}`}
                   actions={
                     <CardActions
@@ -313,6 +401,30 @@ function MoreItem({
         danger
           ? "text-muted hover:bg-danger/10 hover:text-danger"
           : "hover-tile text-ice/80 hover:text-ice"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** ปุ่มกรองหนึ่งเม็ด — ทรงเดียวกับเม็ดยาเมนูของทั้งเว็บ */
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`min-h-10 shrink-0 cursor-pointer rounded-xl px-4 font-display text-xs whitespace-nowrap transition-colors ${
+        active ? "accent-fill text-onaccent" : "tile text-muted hover:text-ice"
       }`}
     >
       {children}

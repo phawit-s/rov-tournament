@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
+import type { Channel } from "@/lib/channel/types";
 import { safeImageSrc } from "@/lib/safe";
 import { PRIZE_PRESETS, calcPrizes, formatMoney } from "@/lib/tournament/prize";
 import { formatThaiDay } from "@/lib/tournament/share";
@@ -27,18 +28,44 @@ type Props = {
   tournament: Tournament;
   onClose: () => void;
   onSaved?: (t: Tournament) => void;
+  /**
+   * ช่องที่ "คนที่เปิดฟอร์มอยู่" ผูกทัวร์เข้าไปได้
+   *
+   * ต้องรับมาจากผู้เรียก ไม่ใช่ไปถาม useMyChannels() เอง — เพราะผู้ดูแลระบบ
+   * ไม่จำเป็นต้องมีช่องของตัวเองสักช่อง แต่ต้องสร้างทัวร์ให้ช่องไหนก็ได้
+   * ถ้าฟอร์มถามเอง ผู้ดูแลที่ไม่มีช่องจะไม่เห็นตัวเลือกเลย แล้วทัวร์ที่สร้าง
+   * จะกลายเป็นทัวร์ที่ไม่ผูกกับช่องไหนโดยที่คนสร้างไม่รู้ตัว
+   */
+  channels?: Channel[];
 };
 
 const MAX_COVER_KB = 400;
 
 /** ฟอร์มสร้าง/แก้ข้อมูลทัวร์ — เก็บลง localStorage ทันทีที่กดบันทึก */
-export default function TournamentForm({ tournament, onClose, onSaved }: Props) {
+export default function TournamentForm({
+  tournament,
+  onClose,
+  onSaved,
+  channels = [],
+}: Props) {
   const [draft, setDraft] = useState<Tournament>(tournament);
   const [coverError, setCoverError] = useState<string | null>(null);
   const reduced = useReducedMotion();
 
   const set = <K extends keyof Tournament>(key: K, value: Tournament[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
+
+  /*
+    มีช่องเดียวให้เลือกก็ผูกให้เลย ไม่ต้องถาม
+
+    ปรับ state ระหว่างเรนเดอร์ตามที่ React แนะนำ ไม่ใช่ setState ใน effect
+    (เงื่อนไขแคบมาก: ทำครั้งเดียวตอนที่ยังไม่เคยผูกช่อง แล้วจะไม่เข้าอีก)
+  */
+  if (!draft.channelId && channels.length === 1) {
+    setDraft((prev) =>
+      prev.channelId ? prev : { ...prev, channelId: channels[0].id },
+    );
+  }
 
   const prizePreview = calcPrizes(draft.prize);
 
@@ -96,6 +123,41 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
               <SectionHead no="01" eyebrow="Identity" title="ข้อมูลทั่วไป" />
 
               <div className="mt-6 space-y-5">
+                {/*
+                  ทัวร์สังกัดช่องไหน — ถามตั้งแต่ตอนสร้าง ไม่ใช่เดาตอนเผยแพร่
+
+                  ยอดสมทบทุนเงินรางวัลดึงจากใบโดเนทของช่องที่ผูกไว้ ผูกผิดช่อง
+                  แปลว่าเงินไปโผล่ผิดทัวร์เงียบๆ โดยไม่มีอะไรฟ้อง
+                  มีช่องเดียวก็ไม่ต้องถาม เลือกให้เลย
+                */}
+                {channels.length > 1 && (
+                  <div>
+                    <Label hint="ยอดสมทบทุนเงินรางวัลจะดึงจากใบโดเนทของช่องนี้">
+                      ทัวร์ของช่องไหน
+                    </Label>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {channels.map((c) => {
+                        const on = draft.channelId === c.id;
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => set("channelId", c.id)}
+                            aria-pressed={on}
+                            className={`min-h-11 cursor-pointer rounded-xl px-4 py-2 font-display text-xs transition-colors ${
+                              on
+                                ? "accent-fill text-onaccent"
+                                : "tile text-muted hover:text-ice"
+                            }`}
+                          >
+                            {c.name || (c.handle ? `@${c.handle}` : c.id.slice(0, 8))}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <Label>ชื่อทัวร์นาเมนต์</Label>
                   <Input
@@ -439,29 +501,51 @@ export default function TournamentForm({ tournament, onClose, onSaved }: Props) 
         </aside>
       </div>
 
-      {/* ---------- แถบบันทึกที่ติดขอบล่างจอ ---------- */}
-      <div
-        className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-hair px-1 py-3 pb-[calc(0.75rem+var(--sab))] backdrop-blur-md"
-        style={{
-          background: "color-mix(in srgb, var(--color-ink) 84%, transparent)",
-        }}
-      >
-        <p className="num min-w-0 flex-1 truncate text-xs text-muted">
-          <span className="text-ice">{draft.name.trim() || "ยังไม่ได้ตั้งชื่อ"}</span>
-          {" · "}
-          {draft.startAt ? formatThaiDay(draft.startAt) : "ยังไม่ระบุวันแข่ง"}
-          {" · "}
-          {draft.prize.total > 0
-            ? formatMoney(draft.prize.total, draft.prize.currency)
-            : "ไม่มีเงินรางวัล"}
-        </p>
-        <div className="flex shrink-0 gap-2">
-          <Button size="sm" variant="ghost" onClick={onClose} className="min-h-11">
-            ยกเลิก
-          </Button>
-          <Button size="sm" onClick={save} className="min-h-11">
-            บันทึก
-          </Button>
+      {/* ---------- แถบบันทึกที่ลอยอยู่เหนือขอบล่าง ---------- */}
+      <div className="sticky bottom-0 z-20 -mx-1 px-1 pt-3 pb-[max(1rem,var(--sab))]">
+        <div className="glass-panel flex flex-wrap items-center gap-x-4 gap-y-3 rounded-3xl py-3 pr-3 pl-5">
+          {/*
+            สามอย่างนี้เคยเป็นข้อความยาวบรรทัดเดียวคั่นด้วยจุด ซึ่งอ่านแล้วแยกไม่ออก
+            ว่าอันไหน "กรอกแล้ว" อันไหน "ยังไม่ได้กรอก" — ทั้งที่นั่นคือสิ่งเดียว
+            ที่แถบนี้ควรบอกก่อนคนกดบันทึก จุดนำหน้าเลยทำหน้าที่นั้นแทน
+          */}
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1.5">
+            <FormStat
+              filled={!!draft.name.trim()}
+              text={draft.name.trim() || "ยังไม่ได้ตั้งชื่อ"}
+            />
+            {/* มีหลายช่องให้เลือกแล้วยังไม่เลือก = ยอดโดเนทจะไปผูกผิดที่ ต้องเห็นก่อนกดบันทึก */}
+            {channels.length > 1 && (
+              <FormStat
+                filled={!!draft.channelId}
+                text={
+                  channels.find((c) => c.id === draft.channelId)?.name ||
+                  (draft.channelId ? "ช่องที่เลือกไว้" : "ยังไม่ได้เลือกช่อง")
+                }
+              />
+            )}
+            <FormStat
+              filled={!!draft.startAt}
+              text={draft.startAt ? formatThaiDay(draft.startAt) : "ยังไม่ระบุวันแข่ง"}
+            />
+            <FormStat
+              filled={draft.prize.total > 0}
+              text={
+                draft.prize.total > 0
+                  ? formatMoney(draft.prize.total, draft.prize.currency)
+                  : "ไม่มีเงินรางวัล"
+              }
+            />
+          </div>
+
+          <div className="flex shrink-0 gap-2">
+            <Button variant="ghost" onClick={onClose}>
+              ยกเลิก
+            </Button>
+            <Button onClick={save} className="rounded-2xl">
+              บันทึก
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -518,5 +602,30 @@ function Choice({
         ))}
       <span className="relative block">{children}</span>
     </button>
+  );
+}
+
+/**
+ * สถานะหนึ่งช่องบนแถบบันทึก — จุดทองคือกรอกแล้ว วงกลมกลวงคือยังว่าง
+ *
+ * ตั้งใจไม่ใช้เครื่องหมายถูก/กากบาท เพราะสามอย่างนี้ไม่ได้ "ผิด" ถ้าไม่กรอก
+ * (บันทึกได้อยู่ดี) มันแค่ยังไม่ได้ใส่ — จุดกับวงกลมสื่อว่า "มี/ยังไม่มี"
+ * โดยไม่ตำหนิคนกรอก
+ */
+function FormStat({ filled, text }: { filled: boolean; text: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <span
+        aria-hidden
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+          filled ? "accent-fill" : "border border-hair"
+        }`}
+      />
+      <span
+        className={`truncate text-xs ${filled ? "text-ice" : "text-muted"}`}
+      >
+        {text}
+      </span>
+    </span>
   );
 }

@@ -80,10 +80,11 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
   }, [live]);
 
   useEffect(() => {
-    const channelId = tournament.channelId ?? user?.uid;
+    /* ช่องของทัวร์นี้ — ถ้ายังไม่เคยผูก ค่อยเดาจากช่องแรกของเรา */
+    const channelId = tournament.channelId ?? channel?.id ?? user?.uid;
     if (!live || !channelId) return;
     return watchChannelDonations(channelId, setDonations, { onlyApproved: true });
-  }, [live, tournament.channelId, user?.uid]);
+  }, [live, tournament.channelId, channel?.id, user?.uid]);
 
   useEffect(() => {
     if (!note) return;
@@ -142,7 +143,8 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
                   tournamentStore.update(tournament.id, {
                     ownerUid: user.uid,
                     ownerEmail: user.email ?? undefined,
-                    channelId: user.uid,
+                    // ช่องที่เลือกไว้ในฟอร์มชนะเสมอ ไม่งั้นกดเผยแพร่ทีเดียวก็ผูกผิดช่อง
+                    channelId: tournament.channelId ?? channel?.id ?? user.uid,
                   });
                   setNote("เผยแพร่ขึ้นคลาวด์แล้ว");
                   recordActivity(

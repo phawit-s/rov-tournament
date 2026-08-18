@@ -6,6 +6,9 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useHashParam, useHydrated, useNow } from "@/hooks/useClient";
 import { useAccess } from "@/hooks/useAdmin";
+import { useMyChannels } from "@/hooks/useMyChannel";
+import { watchAllChannels } from "@/lib/channel/store";
+import type { Channel } from "@/lib/channel/types";
 import { adminStore } from "@/lib/tournament/admin";
 import { authStore } from "@/lib/backend/firebase";
 import { CAN, ROLE_META, roleFor } from "@/lib/tournament/roles";
@@ -53,6 +56,9 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]["key"];
 
+/* อ้างอิงคงที่ ไม่งั้น setState ตอน error จะรีเรนเดอร์ไม่จบ */
+const NO_CHANNELS: Channel[] = [];
+
 export default function TournamentDetail() {
   const all = useSyncExternalStore(
     tournamentStore.subscribe,
@@ -71,6 +77,18 @@ export default function TournamentDetail() {
   );
   const user = authStore.user();
   const access = useAccess();
+
+  /*
+    ช่องที่เอาไปให้ฟอร์มเลือก — ชุดเดียวกับที่หน้ารายการใช้
+    ผู้ดูแลเห็นทุกช่อง (ต้องแก้ทัวร์ของคนอื่นได้) คนอื่นเห็นเฉพาะของตัวเอง
+  */
+  const { channels: ownChannels } = useMyChannels();
+  const [everyChannel, setEveryChannel] = useState<Channel[]>(NO_CHANNELS);
+  useEffect(() => {
+    if (access !== "verified") return;
+    return watchAllChannels(setEveryChannel, () => setEveryChannel(NO_CHANNELS));
+  }, [access]);
+  const formChannels = access === "verified" ? everyChannel : ownChannels;
   const reduced = useReducedMotion();
 
   const [tab, setTab] = useState<TabKey>("overview");
@@ -139,6 +157,7 @@ export default function TournamentDetail() {
     return (
       <TournamentForm
         tournament={tournament}
+        channels={formChannels}
         onClose={() => setEditing(false)}
         onSaved={() => toast("บันทึกแล้ว", "success")}
       />
