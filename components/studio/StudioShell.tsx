@@ -1,15 +1,25 @@
 "use client";
 
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { BRAND_MONOGRAM } from "@/lib/brand";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
+import { useLive } from "@/lib/backend/live";
+import {
+  watchStreamerRequests,
+  type StreamerRequest,
+} from "@/lib/backend/roles";
 import { profileStore } from "@/lib/backend/users";
 import { recordActivity } from "@/lib/activity";
 import { gateStore } from "@/lib/gate";
-import { useHashParam } from "@/hooks/useClient";
+import { setHashParams, useHashParam } from "@/hooks/useClient";
 import { ROLE_LABEL, useSiteRole, type RoleInfo } from "@/hooks/useRole";
 import AdminGate from "@/components/auth/AdminGate";
 import AuthPanel from "@/components/auth/AuthPanel";
@@ -20,16 +30,20 @@ import ToastHost, { toast } from "@/components/ui/Toast";
 import {
   IconArrowLeft,
   IconClose,
+  IconExternal,
   IconLogout,
   IconMenu,
+  IconSearch,
 } from "@/components/ui/icons";
 import { Skeleton } from "@/components/tournament/ui";
 import StreamerRequestPanel from "./StreamerRequest";
+import CommandPalette from "./CommandPalette";
 import {
   STUDIO_GROUPS,
   isStudioActive,
   studioNavFor,
-  studioTitle,
+  studioPage,
+  type StudioItem,
   type StudioSub,
 } from "./nav";
 
@@ -39,11 +53,70 @@ import {
  * ตั้งใจไม่ใช้ AppShell ของหน้าสาธารณะ เพราะสองที่นี้คนละงานกัน:
  * หน้าสาธารณะขายของ (ฉากหลังเคลื่อนไหว หน้าปก แอนิเมชันพลิกหน้า)
  * ส่วนหลังบ้านคือที่ทำงาน — เปิดค้างไว้ทั้งไลฟ์ ต้องนิ่ง เบา และหาเมนูเจอเสมอ
+ *
+ * สิ่งที่รื้อรอบนี้:
+ *  · จอใหญ่มีแถบบนแล้ว — เดิมมีแต่จอเล็ก พอเข้าหน้าลึกๆ แล้วไม่มีอะไรบอกว่า
+ *    อยู่ตรงไหน ต้องไล่หาจากแถบข้างเอง
+ *  · แถบข้างพับเป็นไอคอนได้ คนที่ทำงานกับตารางกว้างๆ จะได้พื้นที่คืน 12rem
+ *  · มีตัวค้นหา (Ctrl/⌘ + K) กระโดดไปหน้าไหนก็ได้โดยไม่ต้องรู้ว่าเมนูอยู่กลุ่มไหน
+ *  · งานที่ค้าง (คำขอเป็นสตรีมเมอร์) ขึ้นเป็นตัวเลขบนเมนู ไม่ต้องเข้าไปเช็คเอง
  */
+const NO_REQUESTS: StreamerRequest[] = [];
+
+/**
+ * สถานะพับ/กางของแถบข้าง — เก็บในเครื่อง เพราะเป็นความชอบของ "โต๊ะทำงาน" ตัวนั้น
+ * ไม่ใช่ของบัญชี คนเดียวกันใช้จอ 27 นิ้วที่บ้านกับโน้ตบุ๊ก 13 นิ้วนอกบ้าน
+ * ก็ต้องการคนละแบบ
+ *
+ * ทำเป็น external store แทน useState + effect เพราะหน้านี้เป็น static export —
+ * ฝั่งเซิร์ฟเวอร์ไม่มีทางรู้ค่าในเครื่อง getServerSnapshot จึงต้องคืน "กาง" เสมอ
+ * แล้วให้ React สลับให้เองหลัง hydrate โดยไม่ฟ้อง mismatch
+ */
+const RAIL_KEY = "tourney-hub/studio-rail";
+const railListeners = new Set<() => void>();
+let railCache: boolean | null = null;
+
+const railStore = {
+  subscribe(onChange: () => void) {
+    railListeners.add(onChange);
+    return () => {
+      railListeners.delete(onChange);
+    };
+  },
+  getSnapshot(): boolean {
+    if (railCache === null) {
+      try {
+        railCache = localStorage.getItem(RAIL_KEY) === "1";
+      } catch {
+        railCache = false;
+      }
+    }
+    return railCache;
+  },
+  getServerSnapshot: () => false,
+  toggle() {
+    const next = !railStore.getSnapshot();
+    railCache = next;
+    try {
+      localStorage.setItem(RAIL_KEY, next ? "1" : "0");
+    } catch {
+      /* โหมดส่วนตัวเขียนไม่ได้ ก็ใช้แค่รอบนี้ */
+    }
+    railListeners.forEach((l) => l());
+  },
+};
+
 export default function StudioShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/studio";
   const info = useSiteRole();
   const [open, setOpen] = useState(false);
+  const [palette, setPalette] = useState(false);
+
+  const rail = useSyncExternalStore(
+    railStore.subscribe,
+    railStore.getSnapshot,
+    railStore.getServerSnapshot,
+  );
 
   /* ปิดลิ้นชักเมื่อเปลี่ยนหน้า (รวมกรณีกดปุ่มย้อนกลับ)
      ปรับ state ระหว่างเรนเดอร์ตามที่ React แนะนำ ไม่ใช่ setState ใน effect */
@@ -51,7 +124,31 @@ export default function StudioShell({ children }: { children: ReactNode }) {
   if (lastPath !== pathname) {
     setLastPath(pathname);
     if (open) setOpen(false);
+    if (palette) setPalette(false);
   }
+
+  const admin = info.admin;
+
+  /* งานค้างของผู้ดูแล — ท่อเดียวใช้ร่วมกับหน้าภาพรวมและหน้าสิทธิ์ */
+  const { data: requests } = useLive<StreamerRequest[]>(
+    admin && hasBackend ? "streamerRequests" : null,
+    NO_REQUESTS,
+    (onChange, onError) => watchStreamerRequests(onChange, onError),
+  );
+  const pendingRequests = requests.filter((r) => r.status === "pending").length;
+  const badges = { streamerRequests: pendingRequests };
+
+  /* ⌘K / Ctrl+K เปิดตัวค้นหา — ผูกไว้ตลอดเวลาที่อยู่ในสตูดิโอ */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPalette((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   if (!info.studio) {
     return (
@@ -62,49 +159,35 @@ export default function StudioShell({ children }: { children: ReactNode }) {
     );
   }
 
-  const admin = info.role === "admin";
-  const title = studioTitle(pathname);
+  const page = studioPage(pathname);
 
   return (
-    <div className="relative min-h-dvh lg:flex">
+    <div className="studio-canvas relative min-h-dvh lg:flex">
       {/* ---- แถบข้าง (จอใหญ่) ---- */}
       <aside
-        className="sticky top-0 hidden h-dvh w-66 shrink-0 flex-col border-r border-hair lg:flex"
-        style={{ background: "var(--color-ink-2)" }}
+        className={`studio-rail sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-hair transition-[width] duration-300 lg:flex ${
+          rail ? "w-18" : "w-66"
+        }`}
       >
-        <SidebarBody admin={admin} info={info} />
+        <SidebarBody
+          admin={admin}
+          info={info}
+          rail={rail}
+          onToggleRail={railStore.toggle}
+          badges={badges}
+        />
       </aside>
 
       {/* ---- เนื้อหา ---- */}
       <div className="flex min-w-0 grow flex-col">
-        {/*
-          พื้นทึบ ไม่ใช่เบลอ — แถบนี้ค้างอยู่ทั้งวันระหว่างไลฟ์ การเบลอฉากหลัง
-          แปลว่าต้องสุ่มพื้นหลังมาวาดใหม่ทุกครั้งที่เนื้อหาข้างหลังขยับ
-        */}
-        <header
-          className="sticky top-0 z-30 flex items-center gap-3 border-b border-hair px-4 lg:hidden"
-          style={{
-            background: "var(--color-ink)",
-            paddingTop: "var(--sat)",
-            height: "calc(3.5rem + var(--sat))",
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            aria-label="เปิดเมนูสตูดิโอ"
-            className="-ml-1.5 grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-xl text-muted transition-colors hover:bg-iris/12 hover:text-iris"
-          >
-            <IconMenu className="h-5 w-5" />
-          </button>
-          <Mark />
-          <p className="min-w-0 grow truncate font-display text-sm text-ice">
-            {title}
-          </p>
-          <ThemeSoundButtons />
-        </header>
+        <TopBar
+          page={page}
+          info={info}
+          onOpenMenu={() => setOpen(true)}
+          onOpenPalette={() => setPalette(true)}
+        />
 
-        <main className="mx-auto w-full max-w-420 grow px-4 py-6 pb-[calc(2.5rem+var(--sab))] sm:px-6 lg:px-8 lg:py-9">
+        <main className="mx-auto w-full max-w-420 grow px-4 py-6 pb-[calc(2.5rem+var(--sab))] sm:px-6 lg:px-8 lg:py-8">
           {info.local && hasBackend && info.role === "viewer" && <LocalModeNotice />}
           <ProfileGate>{children}</ProfileGate>
         </main>
@@ -112,11 +195,118 @@ export default function StudioShell({ children }: { children: ReactNode }) {
 
       {/* ---- ลิ้นชัก (จอเล็ก) ---- */}
       <Drawer open={open} onClose={() => setOpen(false)}>
-        <SidebarBody admin={admin} info={info} onNavigate={() => setOpen(false)} />
+        <SidebarBody
+          admin={admin}
+          info={info}
+          rail={false}
+          badges={badges}
+          onNavigate={() => setOpen(false)}
+        />
       </Drawer>
+
+      <CommandPalette
+        open={palette}
+        admin={admin}
+        badges={badges}
+        onClose={() => setPalette(false)}
+      />
 
       <ToastHost />
     </div>
+  );
+}
+
+/* =========================================================================
+   แถบบน — มีทั้งจอเล็กและจอใหญ่แล้ว
+   ========================================================================= */
+
+/**
+ * พื้นทึบ ไม่ใช่เบลอ — แถบนี้ค้างอยู่ทั้งวันระหว่างไลฟ์ การเบลอฉากหลัง
+ * แปลว่าเบราว์เซอร์ต้องสุ่มพื้นหลังมาวาดใหม่ทุกครั้งที่เนื้อหาข้างหลังขยับ
+ */
+function TopBar({
+  page,
+  info,
+  onOpenMenu,
+  onOpenPalette,
+}: {
+  page: StudioItem | null;
+  info: RoleInfo;
+  onOpenMenu: () => void;
+  onOpenPalette: () => void;
+}) {
+  return (
+    <header
+      className="sticky top-0 z-30 flex items-center gap-3 border-b border-hair px-4 lg:px-8"
+      style={{
+        /* พื้นทึบ ไม่ใช่เบลอ — แถบนี้ค้างอยู่ทั้งวันระหว่างไลฟ์
+           การเบลอฉากหลังแปลว่าต้องวาดใหม่ทุกครั้งที่เนื้อหาข้างหลังขยับ */
+        background: "var(--color-ink)",
+        paddingTop: "var(--sat)",
+        height: "calc(3.5rem + var(--sat))",
+      }}
+    >
+      <button
+        type="button"
+        onClick={onOpenMenu}
+        aria-label="เปิดเมนูสตูดิโอ"
+        className="-ml-1.5 grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-xl text-muted transition-colors hover:bg-iris/12 hover:text-iris lg:hidden"
+      >
+        <IconMenu className="h-5 w-5" />
+      </button>
+      <span className="lg:hidden">
+        <Mark />
+      </span>
+
+      <div className="min-w-0 grow">
+        <p className="truncate font-display text-sm text-ice">
+          {page?.label ?? "สตูดิโอ"}
+        </p>
+        {page?.detail && (
+          <p className="hidden truncate text-xs leading-none text-muted lg:block">
+            {page.detail}
+          </p>
+        )}
+      </div>
+
+      {/*
+        ตัวค้นหา — ทางเข้าที่ไม่ต้องรู้ว่าเมนูอยู่กลุ่มไหน
+        จอใหญ่โชว์เป็นช่องพร้อมคีย์ลัด จอเล็กเหลือแค่ไอคอนเพราะพื้นที่ไม่พอ
+      */}
+      <button
+        type="button"
+        onClick={onOpenPalette}
+        className="hover-tile tile hidden min-h-9 cursor-pointer items-center gap-2 rounded-xl px-3 text-xs text-muted transition-colors hover:text-ice md:flex"
+      >
+        <IconSearch className="h-3.5 w-3.5" />
+        <span>ค้นหาเมนู</span>
+        <kbd className="num rounded-md border border-hair px-1.5 py-0.5 text-[10px] text-muted/80">
+          Ctrl K
+        </kbd>
+      </button>
+      <button
+        type="button"
+        onClick={onOpenPalette}
+        aria-label="ค้นหาเมนู"
+        className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-xl text-muted transition-colors hover:bg-iris/12 hover:text-iris md:hidden"
+      >
+        <IconSearch className="h-4 w-4" />
+      </button>
+
+      <span className="hidden lg:block">
+        <RoleChip info={info} />
+      </span>
+      <ThemeSoundButtons />
+    </header>
+  );
+}
+
+function RoleChip({ info }: { info: RoleInfo }) {
+  const label = info.local && !info.signedIn ? "รหัสเครื่องนี้" : ROLE_LABEL[info.role];
+  return (
+    <span className="rounded-full bg-iris/12 px-2.5 py-1 font-display text-eyebrow text-iris">
+      {label}
+    </span>
   );
 }
 
@@ -137,13 +327,21 @@ function Mark({ className = "" }: { className?: string }) {
   );
 }
 
+export type StudioBadges = { streamerRequests: number };
+
 function SidebarBody({
   admin,
   info,
+  rail,
+  badges,
+  onToggleRail,
   onNavigate,
 }: {
   admin: boolean;
   info: RoleInfo;
+  rail: boolean;
+  badges: StudioBadges;
+  onToggleRail?: () => void;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -155,83 +353,136 @@ function SidebarBody({
   return (
     <>
       <div
-        className="flex shrink-0 items-center gap-2.5 border-b border-hair px-4"
-        style={{ height: "calc(4rem + var(--sat))", paddingTop: "var(--sat)" }}
+        className={`flex shrink-0 items-center border-b border-hair ${
+          rail ? "justify-center px-2" : "gap-2.5 px-4"
+        }`}
+        style={{ height: "calc(3.5rem + var(--sat))", paddingTop: "var(--sat)" }}
       >
         <Mark />
-        <div className="min-w-0">
-          <p className="font-display text-sm leading-none font-medium text-ice">
-            สตูดิโอ
-          </p>
-          <p className="slug slug-2 mt-1.5 leading-none">Studio</p>
-        </div>
+        {!rail && (
+          <div className="min-w-0 grow">
+            <p className="font-display text-sm leading-none font-medium text-ice">
+              สตูดิโอ
+            </p>
+            <p className="slug slug-2 mt-1.5 leading-none">Studio</p>
+          </div>
+        )}
+        {onToggleRail && !rail && (
+          <button
+            type="button"
+            onClick={onToggleRail}
+            aria-label="พับแถบเมนู"
+            title="พับแถบเมนู"
+            className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-lg text-muted transition-colors hover:bg-iris/12 hover:text-iris"
+          >
+            <IconArrowLeft className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
-      <nav className="grow overflow-y-auto px-3 py-4">
+      <nav className={`grow overflow-y-auto py-4 ${rail ? "px-2" : "px-3"}`}>
         {groups.map((group) => (
           <div key={group.key} className="mb-5 last:mb-0">
-            <p className="slug px-3 pb-2">{group.title}</p>
+            {rail ? (
+              <span className="rail-divider mx-2 mb-2 block" />
+            ) : (
+              <p className="slug px-3 pb-2">{group.title}</p>
+            )}
             <ul>
               {nav
                 .filter((item) => item.group === group.key)
-                .map((item) => {
-                  const active = isStudioActive(item.href, pathname);
-                  const Icon = item.Icon;
-                  return (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        onClick={onNavigate}
-                        aria-current={active ? "page" : undefined}
-                        title={item.detail}
-                        className={`group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 font-display text-[13px] transition-colors ${
-                          active
-                            ? "text-onaccent"
-                            : "text-muted hover:bg-iris/8 hover:text-ice"
-                        }`}
-                      >
-                        {active && (
-                          <motion.span
-                            layoutId="studio-active"
-                            className="accent-fill absolute inset-0 rounded-xl"
-                            transition={{
-                              type: "spring",
-                              stiffness: 380,
-                              damping: 34,
-                            }}
-                          />
-                        )}
-                        <span className="relative z-10 grid h-4 w-4 shrink-0 place-items-center">
-                          <Icon className="h-4 w-4" />
-                        </span>
-                        <span className="relative z-10 truncate">{item.label}</span>
-                        {item.external && (
-                          <span
-                            aria-hidden
-                            className={`relative z-10 ml-auto text-[10px] ${
-                              active ? "text-onaccent/60" : "text-muted/60"
-                            }`}
-                          >
-                            ↗
-                          </span>
-                        )}
-                      </Link>
-
-                      {/* ส่วนย่อยของหน้านั้น — กางเฉพาะตอนอยู่ในหน้านั้นจริง
-                          ถ้ากางค้างไว้ตลอด แถบข้างจะยาวจนเมนูจริงหาย */}
-                      {active && item.sub && (
-                        <SubNav items={item.sub} onNavigate={onNavigate} />
-                      )}
-                    </li>
-                  );
-                })}
+                .map((item) => (
+                  <NavRow
+                    key={item.href}
+                    item={item}
+                    active={isStudioActive(item.href, pathname, item.alsoActive)}
+                    rail={rail}
+                    count={item.badge ? badges[item.badge] : 0}
+                    onNavigate={onNavigate}
+                  />
+                ))}
             </ul>
           </div>
         ))}
       </nav>
 
-      <SidebarFooter info={info} />
+      <SidebarFooter info={info} rail={rail} onExpand={onToggleRail} />
     </>
+  );
+}
+
+function NavRow({
+  item,
+  active,
+  rail,
+  count,
+  onNavigate,
+}: {
+  item: StudioItem;
+  active: boolean;
+  rail: boolean;
+  count: number;
+  onNavigate?: () => void;
+}) {
+  const Icon = item.Icon;
+
+  return (
+    <li>
+      <Link
+        href={item.href}
+        onClick={onNavigate}
+        aria-current={active ? "page" : undefined}
+        title={rail ? `${item.label} — ${item.detail}` : item.detail}
+        className={`group relative flex items-center rounded-xl font-display text-[13px] transition-colors ${
+          rail ? "justify-center px-0 py-2.5" : "gap-2.5 px-3 py-2.5"
+        } ${active ? "text-onaccent" : "text-muted hover:bg-iris/8 hover:text-ice"}`}
+      >
+        {active && (
+          <motion.span
+            layoutId="studio-active"
+            className="accent-fill absolute inset-0 rounded-xl"
+            transition={{ type: "spring", stiffness: 380, damping: 34 }}
+          />
+        )}
+        <span className="relative z-10 grid h-4 w-4 shrink-0 place-items-center">
+          <Icon className="h-4 w-4" />
+          {/* พับแถบแล้วยังต้องรู้ว่ามีงานค้าง — เหลือเป็นจุดแทนตัวเลข */}
+          {rail && count > 0 && (
+            <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-iris ring-2 ring-ink-2" />
+          )}
+        </span>
+        {!rail && (
+          <>
+            <span className="relative z-10 truncate">{item.label}</span>
+            {count > 0 && (
+              <span
+                className={`num relative z-10 ml-auto rounded-full px-1.5 py-0.5 text-[10px] ${
+                  active ? "bg-black/20 text-onaccent" : "bg-iris/18 text-iris"
+                }`}
+              >
+                {count}
+              </span>
+            )}
+            {item.external && (
+              <span
+                aria-hidden
+                className={`relative z-10 text-[10px] ${
+                  count > 0 ? "" : "ml-auto"
+                } ${active ? "text-onaccent/60" : "text-muted/60"}`}
+              >
+                <IconExternal className="h-3 w-3" />
+              </span>
+            )}
+          </>
+        )}
+      </Link>
+
+      {/* ส่วนย่อยของหน้านั้น — กางเฉพาะตอนอยู่ในหน้านั้นจริง
+          ถ้ากางค้างไว้ตลอด แถบข้างจะยาวจนเมนูจริงหาย */}
+      {active && item.sub && !rail && (
+        <SubNav items={item.sub} onNavigate={onNavigate} />
+      )}
+    </li>
   );
 }
 
@@ -261,7 +512,9 @@ function SubNav({
               type="button"
               aria-current={on ? "true" : undefined}
               onClick={() => {
-                window.location.hash = `tab=${sub.hash}`;
+                /* แก้เฉพาะ tab= อย่าเขียนทับทั้ง hash — หน้าช่องเก็บรหัสช่อง
+                   ไว้ใน #c= ด้วย ถ้าทับทั้งก้อนจะเด้งกลับไปช่องเริ่มต้น */
+                setHashParams({ tab: sub.hash });
                 onNavigate?.();
               }}
               className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left font-display text-xs transition-colors ${
@@ -283,7 +536,15 @@ function SubNav({
   );
 }
 
-function SidebarFooter({ info }: { info: RoleInfo }) {
+function SidebarFooter({
+  info,
+  rail,
+  onExpand,
+}: {
+  info: RoleInfo;
+  rail: boolean;
+  onExpand?: () => void;
+}) {
   useSyncExternalStore(
     authStore.subscribe,
     authStore.getSnapshot,
@@ -300,6 +561,45 @@ function SidebarFooter({ info }: { info: RoleInfo }) {
 
   const name = profile?.gameName?.trim() || user?.name || "โหมดเครื่องนี้";
 
+  const avatar = user?.photo ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={user.photo}
+      alt=""
+      referrerPolicy="no-referrer"
+      className="h-full w-full object-cover"
+    />
+  ) : (
+    <span className="font-display text-xs text-iris">
+      {name.slice(0, 1).toUpperCase()}
+    </span>
+  );
+
+  if (rail) {
+    return (
+      <div
+        className="flex shrink-0 flex-col items-center gap-2 border-t border-hair p-2"
+        style={{ paddingBottom: "calc(0.5rem + var(--sab))" }}
+      >
+        <button
+          type="button"
+          onClick={onExpand}
+          aria-label="กางแถบเมนู"
+          title="กางแถบเมนู"
+          className="grid h-9 w-9 cursor-pointer place-items-center rounded-xl text-muted transition-colors hover:bg-iris/12 hover:text-iris"
+        >
+          <IconMenu className="h-4 w-4" />
+        </button>
+        <span
+          title={name}
+          className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-hair"
+        >
+          {avatar}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
       className="shrink-0 border-t border-hair p-3"
@@ -315,19 +615,7 @@ function SidebarFooter({ info }: { info: RoleInfo }) {
 
       <div className="tile mb-2 flex items-center gap-2.5 rounded-xl px-3 py-2.5">
         <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full border border-hair">
-          {user?.photo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={user.photo}
-              alt=""
-              referrerPolicy="no-referrer"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <span className="font-display text-xs text-iris">
-              {name.slice(0, 1).toUpperCase()}
-            </span>
-          )}
+          {avatar}
         </span>
         <div className="min-w-0 grow">
           <p className="truncate text-[13px] leading-tight text-ice">{name}</p>

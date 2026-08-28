@@ -8,7 +8,6 @@ import { calcPrizes, formatMoney } from "@/lib/tournament/prize";
 import { formatThaiDay } from "@/lib/tournament/share";
 import type { Tournament, TournamentStatus } from "@/lib/tournament/types";
 import Crest from "../team/Crest";
-import TiltCard from "../fx/TiltCard";
 import Panel from "../ui/Panel";
 import { Meter } from "../ui/hud";
 import { LiveBadge, STATUS_META, StatusBadge } from "./ui";
@@ -36,6 +35,8 @@ type Props = {
   className?: string;
   /** ชื่อช่องที่ทัวร์นี้สังกัด — ส่งมาเฉพาะตอนที่มีหลายช่องให้สับสน */
   channelName?: string | null;
+  /** ป้ายเพิ่มเติมบนหัวการ์ด เช่น "อยู่ในเครื่องนี้" / ชื่อเจ้าของ */
+  tags?: ReactNode;
 };
 
 /**
@@ -49,13 +50,23 @@ export default function TournamentCard({
   preview = false,
   className = "",
   channelName,
+  tags,
 }: Props) {
   const prize = calcPrizes(tournament.prize);
   const top = prize.breakdown[0];
   const teams = tournament.teams;
   const max = tournament.maxTeams;
-  const full = max > 0 && teams.length >= max;
   const rest = Math.max(0, teams.length - 5);
+
+  /*
+    โหมดเดี่ยวนับหัวคน ไม่ใช่นับทีม — maxTeams ของสองโหมดหมายถึงคนละอย่าง
+    (registerGate ใน lib/tournament/registration.ts ก็นับแบบนี้)
+    ของเดิมการ์ดนับทีมเสมอ ทัวร์รับสมัครเดี่ยวที่มีคนสมัครแล้วสิบเจ็ดคนจึงขึ้นว่า
+    "ทีมที่รับแล้ว 0/25" ทั้งที่ใกล้เต็มแล้ว
+  */
+  const solo = tournament.entryMode === "solo";
+  const taken = solo ? tournament.soloPlayers.length : teams.length;
+  const full = max > 0 && taken >= max;
 
   const start = tournament.startAt ? new Date(tournament.startAt) : null;
   const validStart = start && !Number.isNaN(start.getTime()) ? start : null;
@@ -115,6 +126,7 @@ export default function TournamentCard({
           {tournament.live.isLive && tournament.live.url && (
             <LiveBadge url={tournament.live.url} />
           )}
+          {tags}
         </div>
 
         <Wrap href={href}>
@@ -129,12 +141,14 @@ export default function TournamentCard({
         {/* ---- ความจุทีม ---- */}
         <div className="mt-4">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="slug slug-2">ทีมที่รับแล้ว</span>
+            <span className="slug slug-2">
+              {solo ? "ผู้สมัครที่รับแล้ว" : "ทีมที่รับแล้ว"}
+            </span>
             <span
               className="num font-display text-sm"
               style={{ color: full ? STATUS_META.ready.hex : "var(--color-ice)" }}
             >
-              {teams.length}
+              {taken}
               {max > 0 ? (
                 <span className="text-muted">/{max}</span>
               ) : (
@@ -143,7 +157,7 @@ export default function TournamentCard({
             </span>
           </div>
           {max > 0 ? (
-            <Meter pct={teams.length / max} h={3} className="mt-2" />
+            <Meter pct={taken / max} h={3} className="mt-2" />
           ) : (
             <span className="rule mt-2 block h-0.75 w-full" />
           )}
@@ -206,13 +220,18 @@ export default function TournamentCard({
     </Panel>
   );
 
-  if (preview) return card;
+  /*
+    เลิกห่อด้วย TiltCard แล้ว
 
-  return (
-    <TiltCard max={4} className="h-full">
-      {card}
-    </TiltCard>
-  );
+    สองเหตุผลที่ตรงกันพอดี: การ์ดเอียงตามเมาส์เป็นเอฟเฟกต์ที่ถูกตัดออกจากที่อื่น
+    ทั้งเว็บไปแล้ว (เหลือแค่แสงนวลหน่วงๆ) และในหน้ารายการหลังบ้านที่มีการ์ด
+    ยี่สิบกว่าใบ แต่ละใบพก spring สี่ตัวกับ transform 3D ของตัวเอง —
+    เลื่อนหน้าทีเบราว์เซอร์ต้องยกทุกใบขึ้นเลเยอร์แยกโดยไม่ได้อะไรกลับมา
+
+    ความรู้สึก "จับต้องได้" ยังอยู่ที่ .spotlight ของ Panel ซึ่งเป็นแค่การเขียน
+    ตัวแปร CSS สองตัวอย่างมากเฟรมละครั้ง
+  */
+  return card;
 }
 
 /** ห่อด้วยลิงก์เฉพาะตอนมีปลายทาง — โหมดพรีวิวในฟอร์มยังไม่มี id ให้ไป */

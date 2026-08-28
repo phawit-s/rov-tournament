@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { AnimatePresence, motion } from "motion/react";
 import { recordActivity } from "@/lib/activity";
 import { AUDIT_META, watchAudit, type AuditEntry } from "@/lib/audit";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
@@ -12,31 +11,24 @@ import {
   type ChannelDonation,
 } from "@/lib/channel/donations";
 import { useMyChannels } from "@/hooks/useMyChannel";
-import { safeImageSrc } from "@/lib/safe";
-import {
-  cloudReady,
-  pushTournament,
-  registrationToSolo,
-  registrationToTeam,
-  setRegistrationStatus,
-  watchRegistrations,
-  type Registration,
-} from "@/lib/tournament/cloud";
+import { cloudReady, pushTournament } from "@/lib/tournament/cloud";
 import { formatMoney } from "@/lib/tournament/prize";
 import { formatThaiDate } from "@/lib/tournament/share";
 import { tournamentStore } from "@/lib/tournament/store";
 import type { Tournament } from "@/lib/tournament/types";
 import Button from "../ui/Button";
 import { LinkLine } from "../ui/LinkRow";
-import MiniBtn from "../ui/MiniBtn";
 import Panel from "../ui/Panel";
-import { Badge, EmptyNote, RegStatusBadge } from "./ui";
+import { Badge, EmptyNote } from "./ui";
 
 type Props = { tournament: Tournament; isAdmin: boolean };
 
 /**
- * แท็บคลาวด์ของทัวร์ — เผยแพร่ รับใบสมัครข้ามเครื่อง และดูยอดสมทบทุน
+ * แท็บคลาวด์ของทัวร์ — เผยแพร่ ดูยอดสมทบทุน และประวัติการแก้
+ *
  * ส่วนตั้งค่าโดเนท/สมาชิกย้ายไปอยู่ที่ "ช่อง" แล้ว จะได้ตั้งครั้งเดียวใช้ได้ทุกทัวร์
+ * ส่วนกล่องใบสมัครย้ายไปเป็นแท็บ "ใบสมัคร" ของตัวเอง (EntriesPanel) —
+ * มันเป็นงานประจำวันของผู้จัด ไม่ควรอยู่ท้ายแท็บตั้งค่าที่แก้ปีละครั้ง
  */
 export default function CloudPanel({ tournament, isAdmin }: Props) {
   useSyncExternalStore(
@@ -49,7 +41,6 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
      ไม่งั้นลิงก์สนับสนุนจะหายไปเฉยๆ ถ้ายังไม่ได้เปิดหน้านั้นในแท็บนี้ */
   const { first: channel } = useMyChannels();
 
-  const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [donations, setDonations] = useState<ChannelDonation[]>([]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -64,11 +55,6 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
   }>({ status: "loading", items: [] });
 
   const live = cloudReady() && !!user && !user.anonymous;
-
-  useEffect(() => {
-    if (!live) return;
-    return watchRegistrations(tournament.id, setRegistrations);
-  }, [live, tournament.id]);
 
   useEffect(() => {
     if (!live) return;
@@ -275,105 +261,6 @@ export default function CloudPanel({ tournament, isAdmin }: Props) {
         )}
       </Panel>
 
-      {/* ใบสมัคร */}
-      <Panel className="p-6">
-        <h3 className="mb-4 font-display text-lg font-medium text-ice">
-          ใบสมัครที่ส่งเข้ามา{" "}
-          <span className="text-muted">
-            ({registrations.filter((r) => r.status === "pending").length} รออนุมัติ)
-          </span>
-        </h3>
-
-        {!live ? (
-          <EmptyNote>ล็อกอินก่อนถึงจะเห็นใบสมัคร</EmptyNote>
-        ) : registrations.length === 0 ? (
-          <EmptyNote>ยังไม่มีใครสมัครผ่านคลาวด์</EmptyNote>
-        ) : (
-          <ul className="space-y-2.5">
-            <AnimatePresence initial={false}>
-              {registrations.map((reg) => (
-                <motion.li
-                  key={reg.id}
-                  layout
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.97 }}
-                  className="flex flex-wrap items-center gap-3 rounded-xl tile px-4 py-3"
-                >
-                  {reg.image && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={safeImageSrc(reg.image) ?? ""}
-                      alt=""
-                      className="h-10 w-10 shrink-0 rounded-lg object-cover"
-                    />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm text-ice">{reg.teamName}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted">
-                      {[
-                        reg.kind === "solo"
-                          ? [reg.ign, reg.lane].filter(Boolean).join(" · ")
-                          : reg.members.join(" · "),
-                        `โดย ${reg.byName}`,
-                        formatThaiDate(reg.createdAt),
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                    {/* ช่องติดต่อกับข้อความถึงผู้จัดต้องอ่านได้ก่อนกดรับ ไม่ใช่ต้องไปหาทีหลัง */}
-                    {(reg.contact || reg.note) && (
-                      <p className="mt-1 truncate text-xs text-iris/80">
-                        {[reg.contact, reg.note].filter(Boolean).join(" — ")}
-                      </p>
-                    )}
-                  </div>
-                  <RegStatusBadge status={reg.status} />
-                  {isAdmin && reg.status === "pending" && (
-                    <div className="flex gap-1.5">
-                      <MiniBtn
-                        onClick={async () => {
-                          /* โหมดเดี่ยวต้องลงกองผู้เล่น ไม่ใช่กองทีม
-                             ไม่งั้นทีมที่ผู้จัดสุ่มแบ่งทีหลังจะถูกทับ */
-                          const asSolo =
-                            tournament.entryMode === "solo" || reg.kind === "solo";
-                          tournamentStore.mutate(tournament.id, (t) =>
-                            asSolo
-                              ? {
-                                  ...t,
-                                  soloPlayers: [...t.soloPlayers, registrationToSolo(reg)],
-                                }
-                              : { ...t, teams: [...t.teams, registrationToTeam(reg)] },
-                          );
-                          await setRegistrationStatus(tournament.id, reg.id, "approved");
-                          recordActivity(
-                            "registration.approve",
-                            `อนุมัติ "${reg.teamName}"`,
-                            {
-                              tournamentId: tournament.id,
-                              tournamentName: tournament.name,
-                            },
-                          );
-                        }}
-                      >
-                        รับเข้าทัวร์
-                      </MiniBtn>
-                      <MiniBtn
-                        danger
-                        onClick={() =>
-                          void setRegistrationStatus(tournament.id, reg.id, "rejected")
-                        }
-                      >
-                        ปฏิเสธ
-                      </MiniBtn>
-                    </div>
-                  )}
-                </motion.li>
-              ))}
-            </AnimatePresence>
-          </ul>
-        )}
-      </Panel>
     </div>
   );
 }

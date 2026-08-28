@@ -4,15 +4,19 @@ import { safeImageSrc } from "@/lib/safe";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { usePathname } from "next/navigation";
 import { useHashParam, useHydrated, useNow } from "@/hooks/useClient";
-import { useAccess } from "@/hooks/useAdmin";
-import { useMyChannels } from "@/hooks/useMyChannel";
-import { watchAllChannels } from "@/lib/channel/store";
-import type { Channel } from "@/lib/channel/types";
+import { useManageableChannels } from "@/hooks/useChannels";
+import { useSiteRole } from "@/hooks/useRole";
 import { adminStore } from "@/lib/tournament/admin";
 import { authStore } from "@/lib/backend/firebase";
 import { CAN, ROLE_META, roleFor } from "@/lib/tournament/roles";
-import { cloudReady, watchTournament } from "@/lib/tournament/cloud";
+import {
+  cloudReady,
+  watchRegistrations,
+  watchTournament,
+  type Registration,
+} from "@/lib/tournament/cloud";
 import { championId, standings } from "@/lib/tournament/bracket";
 import { calcPrizes, formatMoney } from "@/lib/tournament/prize";
 import { tournamentStore } from "@/lib/tournament/store";
@@ -37,15 +41,22 @@ import PrizePanel from "./PrizePanel";
 import SchedulePanel, { Countdown } from "./SchedulePanel";
 import AccessPanel from "./AccessPanel";
 import CloudPanel from "./CloudPanel";
+import EntriesPanel from "./EntriesPanel";
 import RegisterPanel from "./RegisterPanel";
 import TeamsPanel from "./TeamsPanel";
 import TournamentForm from "./TournamentForm";
 import { EmptyNote, Input, LiveBadge, Stat, StatRow, StatusBadge } from "./ui";
 
-/** manage = true คือแท็บที่เปิดให้เฉพาะเจ้าของกับทีมงาน */
+/**
+ * manage = true คือแท็บที่เปิดให้เฉพาะเจ้าของกับทีมงาน
+ *
+ * "ใบสมัคร" เคยเป็นการ์ดท้ายแท็บคลาวด์ ซึ่งเป็นงานที่ผู้จัดกดถี่ที่สุดช่วง
+ * เปิดรับสมัครแต่ถูกซ่อนอยู่ลึกสุด — ยกขึ้นมาเป็นแท็บของตัวเองพร้อมตัวเลขรอตรวจ
+ */
 const TABS = [
   { key: "overview", label: "ภาพรวม", manage: false },
   { key: "register", label: "สมัคร", manage: false },
+  { key: "entries", label: "ใบสมัคร", manage: true },
   { key: "teams", label: "ทีม", manage: false },
   { key: "bracket", label: "สายแข่ง", manage: false },
   { key: "schedule", label: "ตารางแข่ง", manage: false },
@@ -57,7 +68,7 @@ const TABS = [
 type TabKey = (typeof TABS)[number]["key"];
 
 /* อ้างอิงคงที่ ไม่งั้น setState ตอน error จะรีเรนเดอร์ไม่จบ */
-const NO_CHANNELS: Channel[] = [];
+const NO_REGS: Registration[] = [];
 
 export default function TournamentDetail() {
   const all = useSyncExternalStore(
@@ -76,20 +87,23 @@ export default function TournamentDetail() {
     authStore.getServerSnapshot,
   );
   const user = authStore.user();
-  const access = useAccess();
+  const { admin: siteAdmin, uid: myUid } = useSiteRole();
 
   /*
     ช่องที่เอาไปให้ฟอร์มเลือก — ชุดเดียวกับที่หน้ารายการใช้
     ผู้ดูแลเห็นทุกช่อง (ต้องแก้ทัวร์ของคนอื่นได้) คนอื่นเห็นเฉพาะของตัวเอง
   */
-  const { channels: ownChannels } = useMyChannels();
-  const [everyChannel, setEveryChannel] = useState<Channel[]>(NO_CHANNELS);
-  useEffect(() => {
-    if (access !== "verified") return;
-    return watchAllChannels(setEveryChannel, () => setEveryChannel(NO_CHANNELS));
-  }, [access]);
-  const formChannels = access === "verified" ? everyChannel : ownChannels;
+  const { channels: formChannels } = useManageableChannels(siteAdmin, myUid);
   const reduced = useReducedMotion();
+
+  /*
+    หน้าเดียวกันนี้ถูกใช้สองที่: ในสตูดิโอ (/studio/tournament/) กับหน้าสาธารณะ
+    (/tournament/ สำหรับลิงก์ที่แชร์ออกไป) ทางกลับจึงต้องต่างกัน —
+    คนดูที่มาจากลิงก์แชร์กดแล้วไปโผล่หน้ารายการของหลังบ้านคือทางตัน
+  */
+  const inStudio = (usePathname() ?? "").startsWith("/studio");
+  const backHref = inStudio ? "/studio/tournaments/" : "/";
+  const backLabel = inStudio ? "ทัวร์นาเมนต์ทั้งหมด" : "กลับหน้าแรก";
 
   const [tab, setTab] = useState<TabKey>("overview");
   const [editing, setEditing] = useState(false);
@@ -122,6 +136,24 @@ export default function TournamentDetail() {
     });
   }, [cloudId]);
 
+  /*
+    ใบสมัครที่ยังไม่ตัดสิน — เอามาทำตัวเลขบนแท็บ "ใบสมัคร"
+
+    ต้องรู้ตรงนี้ ไม่ใช่รู้ตอนกดเข้าไปแล้ว เพราะเหตุผลเดียวที่ผู้จัดเปิดหน้าทัวร์
+    ระหว่างช่วงรับสมัครคือมาดูว่ามีใบใหม่ไหม ถ้าไม่มีตัวเลขก็ต้องกดเข้าไปเช็คทุกครั้ง
+    กติกาเปิด list ให้เฉพาะเจ้าของกับทีมงาน คนอื่นจะได้ศูนย์ ไม่ใช่ error
+  */
+  const [regs, setRegs] = useState<Registration[]>(NO_REGS);
+  useEffect(() => {
+    if (!id || !cloudReady() || !user || user.anonymous) return;
+    return watchRegistrations(
+      id,
+      (list) => setRegs(list),
+      () => setRegs(NO_REGS),
+    );
+  }, [id, user]);
+  const pendingRegs = regs.filter((r) => r.status === "pending").length;
+
   const tournament = all.find((t) => t.id === id) ?? null;
 
   if (!hydrated) return null;
@@ -130,8 +162,8 @@ export default function TournamentDetail() {
     return (
       <EmptyNote>
         ไม่พบทัวร์นาเมนต์นี้ในเครื่อง —{" "}
-        <Link href="/studio/tournaments/" className="text-iris underline-offset-2 hover:underline">
-          กลับไปหน้ารายการ
+        <Link href={backHref} className="text-iris underline-offset-2 hover:underline">
+          {backLabel}
         </Link>
       </EmptyNote>
     );
@@ -146,7 +178,7 @@ export default function TournamentDetail() {
       anonymous: user?.anonymous,
     },
     // เฉพาะสิทธิ์ที่ Firestore ยืนยัน รหัสในเครื่องไม่นับ เพราะคลาวด์ก็ไม่ให้เขียนอยู่ดี
-    access === "verified",
+    siteAdmin,
   );
   const pinOk = adminStore.isUnlocked(tournament.id, tournament.adminPin);
   const isAdmin = CAN.manage(role) && pinOk;
@@ -181,6 +213,18 @@ export default function TournamentDetail() {
   const pending = tournament.teams.filter((t) => !t.approved).length;
   const noBracket = tournament.bracket === null;
 
+  /*
+    โหมดเดี่ยวนับหัวคน ไม่ใช่นับทีม — maxTeams ของสองโหมดหมายถึงคนละอย่าง
+    (registerGate ใน lib/tournament/registration.ts นับแบบนี้อยู่แล้ว)
+    ของเดิมหัวข้อสถิติกับบรรทัดบนโปสเตอร์นับทีมเสมอ ทัวร์รับสมัครเดี่ยวที่มีคน
+    สมัครแล้วสิบเจ็ดคนจึงขึ้นว่า "0 ทีม · รับ 25" ทั้งที่ใกล้เต็ม
+  */
+  const soloMode = tournament.entryMode === "solo";
+  const entryCount = soloMode
+    ? tournament.soloPlayers.length
+    : tournament.teams.length;
+  const entryWord = soloMode ? "คน" : "ทีม";
+
   /* สถานะการสมัครของคนที่กำลังดูอยู่ — ใช้ตัดสินว่าปุ่มใหญ่ควรพูดว่าอะไร */
   const gate = registerGate(tournament, now, cloudReady() && !!tournament.ownerUid);
   const myEntry = findMyEntry(tournament, user?.uid);
@@ -190,6 +234,7 @@ export default function TournamentDetail() {
 
   /** ตัวเลขมุมขวาของแท็บ — ให้รู้ว่ามีอะไรรออยู่โดยไม่ต้องกดเข้าไปดู */
   const badgeOf = (key: TabKey): number | null => {
+    if (key === "entries") return pendingRegs || null;
     if (key === "teams") return tournament.teams.length || null;
     if (key === "bracket" || key === "schedule") {
       const list = tournament.bracket?.matches.filter((m) => !m.bye) ?? [];
@@ -204,7 +249,20 @@ export default function TournamentDetail() {
     <div className="space-y-6">
       {/* ---------- โปสเตอร์ทัวร์ ---------- */}
       <Panel variant="feature" interactive={false} className="overflow-hidden p-0">
-        <div className="relative flex min-h-[clamp(260px,38vw,380px)] flex-col justify-end">
+        {/*
+          โปสเตอร์เตี้ยลงเมื่อเปิดในสตูดิโอ
+
+          หน้าสาธารณะคือ "หน้าปกงาน" ที่คนกดมาจากลิงก์แชร์ — ปกใหญ่คุ้ม
+          แต่ในหลังบ้านนี่คือหน้าทำงาน ปกสูง 380px ดันแท็บกับตารางผลลงไปใต้ขอบจอ
+          ทุกครั้งที่เปิด ทั้งที่ผู้จัดรู้อยู่แล้วว่าทัวร์ชื่ออะไร
+        */}
+        <div
+          className={`relative flex flex-col justify-end ${
+            inStudio
+              ? "min-h-[clamp(180px,22vw,240px)]"
+              : "min-h-[clamp(260px,38vw,380px)]"
+          }`}
+        >
           {/* ชั้น 1 — ปกหรือฉากหลังพร้อมของหมุนจางๆ */}
           <div className="scene-base absolute inset-0 z-0 overflow-hidden">
             {cover && (
@@ -238,10 +296,10 @@ export default function TournamentDetail() {
           {/* ชั้น 3 — เนื้อหาโปสเตอร์ */}
           <div className="relative z-10 p-6 sm:p-8">
             <Link
-              href="/studio/tournaments/"
+              href={backHref}
               className="slug slug-2 inline-block transition-colors hover:text-iris"
             >
-              ← ทัวร์นาเมนต์ทั้งหมด
+              ← {backLabel}
             </Link>
 
             <p className="slug mt-4">Tournament</p>
@@ -280,7 +338,10 @@ export default function TournamentDetail() {
               <span className="num">{formatThaiDate(tournament.startAt)}</span>
               <span className="text-muted/40">·</span>
               <span className="num">
-                {tournament.teams.length} ทีม · ทีมละ {tournament.teamSize} คน
+                {entryCount} {entryWord}
+                {soloMode
+                  ? ` · แบ่งทีมละ ${tournament.teamSize} คน`
+                  : ` · ทีมละ ${tournament.teamSize} คน`}
               </span>
               {tournament.venue && (
                 <>
@@ -415,18 +476,18 @@ export default function TournamentDetail() {
         <StatRow className="grid-cols-2 sm:grid-cols-4">
           <div className="min-w-0">
             <p className="font-display text-eyebrow tracking-luxe text-muted uppercase">
-              ทีม
+              {soloMode ? "ผู้สมัคร" : "ทีม"}
             </p>
             <div className="mt-1 flex items-center gap-2.5">
               {tournament.maxTeams > 0 ? (
                 <CapacityRing
-                  value={tournament.teams.length}
+                  value={entryCount}
                   max={tournament.maxTeams}
                   size={40}
                 />
               ) : (
                 <span className="num font-display text-lg text-ice">
-                  {tournament.teams.length}
+                  {entryCount}
                 </span>
               )}
               <span className="num text-xs text-muted">
@@ -502,6 +563,12 @@ export default function TournamentDetail() {
                     {count}
                   </span>
                 )}
+                {item.key === "entries" && pendingRegs > 0 && (
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ background: "rgb(var(--st-next))" }}
+                  />
+                )}
                 {item.key === "teams" && pending > 0 && (
                   <span
                     className="h-1.5 w-1.5 rounded-full"
@@ -539,6 +606,9 @@ export default function TournamentDetail() {
             <Overview tournament={tournament} champName={champName} />
           )}
           {tab === "register" && <RegisterPanel tournament={tournament} />}
+          {tab === "entries" && CAN.manage(role) && (
+            <EntriesPanel tournament={tournament} isAdmin={isAdmin} />
+          )}
           {tab === "teams" && (
             /* สุ่มสายเสร็จคือโมเมนต์ใหญ่สุดของทัวร์ — พาไปดูสายให้เลย ไม่ต้องกดเอง */
             <TeamsPanel

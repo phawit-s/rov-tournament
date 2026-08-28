@@ -1,90 +1,66 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useHashParam } from "@/hooks/useClient";
-import { useAccess } from "@/hooks/useAdmin";
-import { useMyChannels } from "@/hooks/useMyChannel";
-import { watchAllChannels } from "@/lib/channel/store";
-import type { Channel } from "@/lib/channel/types";
-import { authStore } from "@/lib/backend/firebase";
-import {
-  cloudReady,
-  watchAllTournaments,
-  watchMyTournaments,
-  type CloudTournament,
-} from "@/lib/tournament/cloud";
+import { useManageableChannels } from "@/hooks/useChannels";
+import { useSiteRole } from "@/hooks/useRole";
+import { useTournamentScope, type ScopedTournament } from "@/hooks/useTournamentScope";
 import { emptyTournament, tournamentStore } from "@/lib/tournament/store";
 import { decodeTournament } from "@/lib/tournament/share";
-import type { Tournament } from "@/lib/tournament/types";
+import type { Tournament, TournamentStatus } from "@/lib/tournament/types";
 import Button from "../ui/Button";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import Panel from "../ui/Panel";
-import Reveal, { PageHeading } from "../ui/Reveal";
-import { IconMore } from "../ui/icons";
+import Reveal from "../ui/Reveal";
+import PageHead from "../studio/PageHead";
+import { IconMore, IconSearch } from "../ui/icons";
 import { toast } from "../ui/Toast";
 import TournamentCard from "./TournamentCard";
 import TournamentForm from "./TournamentForm";
-import { ArtShield, EmptyState } from "./ui";
+import { ArtShield, Badge, EmptyState, STATUS_META, Skeleton } from "./ui";
 
-/** อ้างอิงคงที่ ไม่งั้น setCloud([]) ตอน error จะทำให้รีเรนเดอร์ไม่จบ */
-const NO_CLOUD: CloudTournament[] = [];
-const NO_CHANNELS: Channel[] = [];
-
-/** ค่าตัวกรอง "ทุกช่อง" — แยกจากรหัสช่องจริงด้วยเครื่องหมายที่ใช้เป็น id ไม่ได้ */
+/** ค่าตัวกรอง "ทั้งหมด" — แยกจากรหัสจริงด้วยเครื่องหมายที่ใช้เป็น id ไม่ได้ */
 const ALL = "*";
 
+const STATUS_ORDER: TournamentStatus[] = [
+  "registration",
+  "running",
+  "ready",
+  "draft",
+  "finished",
+];
+
+/**
+ * รายการทัวร์ในหลังบ้าน — รายการเดียว ไม่ใช่สองกอง
+ *
+ * ★ นี่คือหน้าที่ทำให้รู้สึกว่า "เป็นแอดมินแล้วเห็นไม่ครบ" ★
+ * ของเดิมเอาทัวร์ที่อยู่ใน localStorage ของเครื่องนี้ขึ้นเป็นรายการหลัก
+ * แล้วผลักทัวร์บนคลาวด์ที่ไม่มีสำเนาในเครื่องไปกองท้ายหน้าในหัวข้อ
+ * "บนคลาวด์ · ทุกผู้จัด" ซึ่งกดได้แค่ "เปิดดู" — ผลคือ
+ *
+ *   · ตัวเลขนับบนหัวหน้านับแต่ของในเครื่อง
+ *   · ตัวกรองตามช่องกรองแต่ของในเครื่อง กองล่างไม่ถูกกรองเลย
+ *   · ผู้ดูแลที่เปิดจากอีกเครื่องเห็นทัวร์ของตัวเองไปอยู่กองล่างปนกับของคนอื่น
+ *
+ * ตอนนี้รวมเป็นรายการเดียว เรียงตามเวลาแก้ล่าสุด แล้วบอกด้วยป้ายว่าใบไหน
+ * อยู่ที่ไหนบ้าง (ดู hooks/useTournamentScope.ts)
+ */
 export default function TournamentsView() {
-  const all = useSyncExternalStore(
-    tournamentStore.subscribe,
-    tournamentStore.getSnapshot,
-    tournamentStore.getServerSnapshot,
-  );
+  const { admin, uid } = useSiteRole();
+  const { list, cloudLoaded } = useTournamentScope(admin, uid);
+  const { channels } = useManageableChannels(admin, uid);
+
   const [editing, setEditing] = useState<Tournament | null>(null);
   const [dismissed, setDismissed] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<Tournament | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ScopedTournament | null>(null);
 
-  /* ---- ทัวร์จากคลาวด์ ---- */
-  const access = useAccess();
-  useSyncExternalStore(
-    authStore.subscribe,
-    authStore.getSnapshot,
-    authStore.getServerSnapshot,
-  );
-  const user = authStore.user();
-  const [cloud, setCloud] = useState<CloudTournament[]>(NO_CLOUD);
-
-  const uid = user && !user.anonymous ? user.uid : null;
-  const seesAll = access === "verified";
-
-  /*
-    ช่องที่เอามาทำตัวกรอง — ผู้ดูแลเห็นทุกช่องในระบบ คนอื่นเห็นเฉพาะของตัวเอง
-    ตรงกับชุดทัวร์ที่แต่ละคนดึงมาได้จริง ไม่งั้นตัวกรองจะมีตัวเลือกที่กดแล้วว่างเปล่า
-  */
-  const { channels: myChannels } = useMyChannels();
-  const [allChannels, setAllChannels] = useState<Channel[]>(NO_CHANNELS);
-  useEffect(() => {
-    if (!seesAll) return;
-    return watchAllChannels(setAllChannels, () => setAllChannels(NO_CHANNELS));
-  }, [seesAll]);
-  const scopeChannels = seesAll ? allChannels : myChannels;
-
+  const [q, setQ] = useState("");
   const [channelFilter, setChannelFilter] = useState<string>(ALL);
-  const channelName = (id?: string) => {
-    if (!id) return null;
-    const hit = scopeChannels.find((c) => c.id === id);
-    return hit?.name || (hit?.handle ? `@${hit.handle}` : null);
-  };
-
-  useEffect(() => {
-    if (!cloudReady() || !uid) return;
-    // ผู้ดูแลเห็นทุกอัน คนอื่นเห็นเฉพาะของตัวเอง (กติกาก็อนุญาตแค่นั้น)
-    const stop = seesAll
-      ? watchAllTournaments(setCloud, () => setCloud(NO_CLOUD))
-      : watchMyTournaments(uid, setCloud, () => setCloud(NO_CLOUD));
-    return stop;
-  }, [uid, seesAll]);
+  const [statusFilter, setStatusFilter] = useState<TournamentStatus | typeof ALL>(ALL);
+  /** ผู้ดูแลเห็นของทุกคน จึงต้องมีปุ่มสลับกลับมาดูเฉพาะของตัวเองเร็วๆ */
+  const [mineOnly, setMineOnly] = useState(false);
 
   // เปิดมาจากลิงก์แชร์ -> ถามก่อนว่าจะบันทึกลงเครื่องไหม
   const sharedRaw = useHashParam("s");
@@ -94,101 +70,155 @@ export default function TournamentsView() {
   );
   const incoming = dismissed ? null : shared;
 
-  const sorted = all
-    .slice()
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const channelName = (id?: string) => {
+    if (!id) return null;
+    const hit = channels.find((c) => c.id === id);
+    return hit?.name || (hit?.handle ? `@${hit.handle}` : null);
+  };
 
-  /* "ยังไม่ผูกช่อง" ต้องเป็นตัวเลือกจริง ไม่ใช่ของที่หายไปเฉยๆ —
-     ทัวร์ที่สร้างก่อนมีระบบช่องทั้งหมดอยู่ในกองนี้ */
-  const unassigned = sorted.filter((t) => !t.channelId).length;
-  const list =
-    channelFilter === ALL
-      ? sorted
-      : channelFilter === ""
-        ? sorted.filter((t) => !t.channelId)
-        : sorted.filter((t) => t.channelId === channelFilter);
+  const unassigned = list.filter((t) => !t.data.channelId).length;
 
-  const running = list.filter((t) => t.status === "running").length;
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLocaleLowerCase("th");
+    return list.filter((row) => {
+      if (mineOnly && !row.mine) return false;
+      if (statusFilter !== ALL && row.data.status !== statusFilter) return false;
+      if (channelFilter === "" && row.data.channelId) return false;
+      if (channelFilter !== ALL && channelFilter !== "" && row.data.channelId !== channelFilter) {
+        return false;
+      }
+      if (!needle) return true;
+      return [row.data.name, row.data.tagline ?? "", row.ownerName ?? ""]
+        .join(" ")
+        .toLocaleLowerCase("th")
+        .includes(needle);
+    });
+  }, [list, q, mineOnly, statusFilter, channelFilter]);
 
-  /*
-    ทัวร์อยู่ใน localStorage ของเครื่องคนสร้าง หน้านี้เลยเห็นแต่ของเครื่องตัวเอง
-    ดึงจากคลาวด์มาเติมด้วย ไม่งั้นผู้ดูแลอีกคน (หรือคนเดิมแต่คนละเครื่อง)
-    จะไม่เห็นทัวร์ที่จัดไว้เลย ทั้งที่เผยแพร่ขึ้นคลาวด์แล้ว
-  */
-  const onlyOnCloud = cloud.filter((c) => !all.some((t) => t.id === c.id));
+  /** จำนวนต่อสถานะ ใช้ทำตัวเลขบนปุ่มกรอง — นับจากทุกใบที่เห็น ไม่ใช่หลังกรอง */
+  const statusCount = useMemo(() => {
+    const map = new Map<TournamentStatus, number>();
+    for (const row of list) {
+      map.set(row.data.status, (map.get(row.data.status) ?? 0) + 1);
+    }
+    return map;
+  }, [list]);
+
+  const running = list.filter((t) => t.data.status === "running").length;
+  const loading = !cloudLoaded && list.length === 0;
 
   if (editing) {
     return (
       <TournamentForm
         tournament={editing}
-        channels={scopeChannels}
+        channels={channels}
         onClose={() => setEditing(null)}
         onSaved={() => toast("บันทึกแล้ว", "success")}
       />
     );
   }
 
+  const startNew = () =>
+    setEditing({
+      ...emptyTournament(""),
+      /* กรองอยู่ที่ช่องไหน ก็สร้างทัวร์ให้ช่องนั้นเลย —
+         คนที่กำลังดูช่องหนึ่งอยู่แล้วกดสร้าง ตั้งใจสร้างให้ช่องนั้นแทบทุกครั้ง */
+      channelId:
+        channelFilter !== ALL && channelFilter !== "" ? channelFilter : undefined,
+    });
+
+  const anyFilter =
+    q.trim() !== "" || channelFilter !== ALL || statusFilter !== ALL || mineOnly;
+
   return (
     <div className="space-y-6">
-      <PageHeading
+      <PageHead
         eyebrow="Tournaments"
         title="ทัวร์นาเมนต์ทั้งหมด"
-        description="สร้างทัวร์ รับสมัครทีม จัดสายแข่ง กรอกผล และแชร์ให้คนอื่นดู"
+        description="สร้างทัวร์ รับสมัคร สุ่มทีม จัดสายแข่ง กรอกผล และแชร์ให้คนอื่นดู"
         meta={
           list.length > 0
             ? `${list.length} รายการ${running ? ` · กำลังแข่ง ${running}` : ""}`
             : undefined
         }
-        action={
-          <Button
-            onClick={() =>
-              setEditing({
-                ...emptyTournament(""),
-                /* กรองอยู่ที่ช่องไหน ก็สร้างทัวร์ให้ช่องนั้นเลย —
-                   คนที่กำลังดูช่องหนึ่งอยู่แล้วกดสร้าง ตั้งใจสร้างให้ช่องนั้นแทบทุกครั้ง */
-                channelId:
-                  channelFilter !== ALL && channelFilter !== ""
-                    ? channelFilter
-                    : undefined,
-              })
-            }
-          >
-            + สร้างทัวร์นาเมนต์
-          </Button>
-        }
+        action={<Button onClick={startNew}>+ สร้างทัวร์นาเมนต์</Button>}
       />
 
-      {/*
-        ตัวกรองตามช่อง — โผล่เมื่อมีอะไรให้แยกจริงเท่านั้น
+      {/* ---------- แถบค้นหา + ตัวกรอง ---------- */}
+      {(list.length > 3 || anyFilter) && (
+        <div className="space-y-3">
+          <div className="field flex min-h-11 items-center gap-2.5 rounded-xl px-3.5">
+            <IconSearch className="h-4 w-4 shrink-0 text-muted" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="ค้นชื่อทัวร์ คำโปรย หรือชื่อผู้จัด"
+              className="min-w-0 grow bg-transparent text-sm text-ice outline-none placeholder:text-muted/70"
+            />
+            {q && (
+              <button
+                type="button"
+                onClick={() => setQ("")}
+                className="cursor-pointer text-xs text-muted transition-colors hover:text-ice"
+              >
+                ล้าง
+              </button>
+            )}
+          </div>
 
-        ถ้ามีช่องเดียวและไม่มีทัวร์ที่ยังไม่ผูกช่อง แถบนี้จะมีปุ่มเดียว
-        ซึ่งไม่ได้ช่วยอะไรนอกจากกินที่ — ซ่อนไปเลยดีกว่า
-      */}
-      {scopeChannels.length + (unassigned > 0 ? 1 : 0) > 1 && (
-        <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-          <FilterChip
-            active={channelFilter === ALL}
-            onClick={() => setChannelFilter(ALL)}
-          >
-            ทุกช่อง
-          </FilterChip>
-          {scopeChannels.map((c) => (
-            <FilterChip
-              key={c.id}
-              active={channelFilter === c.id}
-              onClick={() => setChannelFilter(c.id)}
-            >
-              {c.name || (c.handle ? `@${c.handle}` : c.id.slice(0, 8))}
+          <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            <FilterChip active={statusFilter === ALL} onClick={() => setStatusFilter(ALL)}>
+              ทุกสถานะ
             </FilterChip>
-          ))}
-          {unassigned > 0 && (
-            <FilterChip
-              active={channelFilter === ""}
-              onClick={() => setChannelFilter("")}
-            >
-              ยังไม่ผูกช่อง
-              <span className="num ml-1.5 opacity-60">{unassigned}</span>
-            </FilterChip>
+            {STATUS_ORDER.filter((st) => statusCount.get(st)).map((st) => (
+              <FilterChip
+                key={st}
+                active={statusFilter === st}
+                onClick={() => setStatusFilter(st)}
+              >
+                {STATUS_META[st].label}
+                <span className="num ml-1.5 opacity-60">{statusCount.get(st)}</span>
+              </FilterChip>
+            ))}
+            {admin && (
+              <FilterChip active={mineOnly} onClick={() => setMineOnly((v) => !v)}>
+                เฉพาะของฉัน
+              </FilterChip>
+            )}
+          </div>
+
+          {/*
+            ตัวกรองตามช่อง — โผล่เมื่อมีอะไรให้แยกจริงเท่านั้น
+            ถ้ามีช่องเดียวและไม่มีทัวร์ที่ยังไม่ผูกช่อง แถบนี้จะมีปุ่มเดียว
+            ซึ่งไม่ได้ช่วยอะไรนอกจากกินที่
+          */}
+          {channels.length + (unassigned > 0 ? 1 : 0) > 1 && (
+            <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+              <FilterChip
+                active={channelFilter === ALL}
+                onClick={() => setChannelFilter(ALL)}
+              >
+                ทุกช่อง
+              </FilterChip>
+              {channels.map((c) => (
+                <FilterChip
+                  key={c.id}
+                  active={channelFilter === c.id}
+                  onClick={() => setChannelFilter(c.id)}
+                >
+                  {c.name || (c.handle ? `@${c.handle}` : c.id.slice(0, 8))}
+                </FilterChip>
+              ))}
+              {unassigned > 0 && (
+                <FilterChip
+                  active={channelFilter === ""}
+                  onClick={() => setChannelFilter("")}
+                >
+                  ยังไม่ผูกช่อง
+                  <span className="num ml-1.5 opacity-60">{unassigned}</span>
+                </FilterChip>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -221,39 +251,67 @@ export default function TournamentsView() {
         </Panel>
       )}
 
-      {list.length === 0 && onlyOnCloud.length === 0 ? (
-        <EmptyState
-          no="03"
-          art={<ArtShield />}
-          title="ยังไม่มีทัวร์นาเมนต์"
-          description="สร้างทัวร์แรกเพื่อเปิดรับสมัครทีม จัดสายแข่ง และแชร์ลิงก์ให้คนอื่นตามผล — ข้อมูลทั้งหมดเก็บอยู่ในเบราว์เซอร์เครื่องนี้"
-          action={
-            <Button onClick={() => setEditing(emptyTournament(""))}>
-              + สร้างทัวร์นาเมนต์
-            </Button>
-          }
-        />
+      {loading ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-72 w-full rounded-2xl" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        anyFilter ? (
+          <EmptyState
+            title="ไม่เจอทัวร์ที่ตรงกับตัวกรอง"
+            description="ลองล้างคำค้นหรือเลือกสถานะอื่นดู"
+            action={
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setQ("");
+                  setChannelFilter(ALL);
+                  setStatusFilter(ALL);
+                  setMineOnly(false);
+                }}
+              >
+                ล้างตัวกรองทั้งหมด
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            no="03"
+            art={<ArtShield />}
+            title="ยังไม่มีทัวร์นาเมนต์"
+            description="สร้างทัวร์แรกเพื่อเปิดรับสมัคร สุ่มแบ่งทีม จัดสายแข่ง และแชร์ลิงก์ให้คนอื่นตามผล"
+            action={<Button onClick={startNew}>+ สร้างทัวร์นาเมนต์</Button>}
+          />
+        )
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <AnimatePresence initial={false}>
-            {list.map((t, i) => (
-              <Reveal key={t.id} index={i} from="scale">
+            {filtered.map((row, i) => (
+              <Reveal key={row.id} index={Math.min(i, 6)} from="scale">
                 <TournamentCard
-                  tournament={t}
+                  tournament={row.data}
                   /* โชว์ชื่อช่องเฉพาะตอนที่มีหลายช่องปนกันจริง มีช่องเดียวก็รู้อยู่แล้ว */
                   channelName={
-                    scopeChannels.length > 1 ? channelName(t.channelId) : null
+                    channels.length > 1 ? channelName(row.data.channelId) : null
                   }
-                  href={`/tournament/#t=${t.id}`}
+                  tags={<SourceTags row={row} showOwner={admin} />}
+                  href={hrefFor(row)}
                   actions={
                     <CardActions
-                      href={`/tournament/#t=${t.id}`}
-                      onEdit={() => setEditing(t)}
+                      href={hrefFor(row)}
+                      row={row}
+                      onEdit={() => setEditing(row.data)}
                       onDuplicate={() => {
-                        tournamentStore.duplicate(t.id);
+                        tournamentStore.duplicate(row.id);
                         toast("ทำสำเนาแล้ว", "success");
                       }}
-                      onDelete={() => setPendingDelete(t)}
+                      onSaveLocal={() => {
+                        tournamentStore.adopt(row.data);
+                        toast("บันทึกลงเครื่องนี้แล้ว — แก้ได้เลย", "success");
+                      }}
+                      onDelete={() => setPendingDelete(row)}
                     />
                   }
                 />
@@ -263,45 +321,15 @@ export default function TournamentsView() {
         </div>
       )}
 
-      {/* ทัวร์ที่อยู่บนคลาวด์แต่ไม่มีในเครื่องนี้ — เปิดดูได้ แต่จะแก้ต้องบันทึกลงเครื่องก่อน */}
-      {onlyOnCloud.length > 0 && (
-        <section className="space-y-4 pt-2">
-          <div className="flex items-baseline justify-between gap-4 border-t border-hair pt-4">
-            <p className="slug">
-              {seesAll ? "บนคลาวด์ · ทุกผู้จัด" : "บนคลาวด์ · ของคุณ"}
-            </p>
-            <p className="slug slug-2 num">{onlyOnCloud.length} รายการ</p>
-          </div>
-          <p className="text-sm text-muted">
-            ทัวร์เหล่านี้ถูกเผยแพร่ไว้แต่ยังไม่มีสำเนาในเครื่องนี้ —
-            กดเปิดดูได้ ถ้าจะแก้ให้กด &ldquo;บันทึกลงเครื่อง&rdquo; ในหน้าทัวร์ก่อน
-          </p>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {onlyOnCloud.map((t, i) => (
-              <Reveal key={t.id} index={i} from="scale">
-                <TournamentCard
-                  tournament={t}
-                  href={`/tournament/#t=${t.id}`}
-                  actions={
-                    <Link
-                      href={`/tournament/#t=${t.id}`}
-                      className="font-display text-xs text-iris hover:underline"
-                    >
-                      เปิดดู →
-                    </Link>
-                  }
-                />
-              </Reveal>
-            ))}
-          </div>
-        </section>
-      )}
-
       <ConfirmDialog
         open={pendingDelete !== null}
         tone="danger"
-        title={`ลบ "${pendingDelete?.name ?? ""}" ทิ้ง?`}
-        description="ทีม สายแข่ง และผลที่กรอกไว้ทั้งหมดจะหายจากเครื่องนี้ กู้คืนไม่ได้"
+        title={`ลบ "${pendingDelete?.data.name ?? ""}" ออกจากเครื่องนี้?`}
+        description={
+          pendingDelete?.onCloud
+            ? "สำเนาในเครื่องนี้จะหาย แต่ใบบนคลาวด์ยังอยู่ — เปิดจากรายการนี้ได้เหมือนเดิม"
+            : "ทีม สายแข่ง และผลที่กรอกไว้ทั้งหมดจะหายจากเครื่องนี้ กู้คืนไม่ได้"
+        }
         confirmText="ลบทิ้ง"
         onConfirm={() => {
           if (!pendingDelete) return;
@@ -314,20 +342,61 @@ export default function TournamentsView() {
   );
 }
 
+/*
+  เปิดในสตูดิโอ ไม่ใช่เด้งออกไปหน้าสาธารณะ
+
+  ของเดิมลิงก์ไป /tournament/ ซึ่งใช้เปลือกของหน้าคนดู — แถบข้างหาย
+  เมนูบนกลายเป็นเมนูสาธารณะ แล้วทางกลับเหลือลิงก์เล็กๆ บนโปสเตอร์
+  ทั้งที่คนกดจากหลังบ้านกำลังจะทำงานกับทัวร์นั้นต่อ
+
+  ทัวร์ที่มีสำเนาในเครื่องเปิดด้วย #t= (แก้ได้ทันที)
+  ที่มีแต่บนคลาวด์เปิดด้วย #c= เพื่อให้หน้าทัวร์ไปฟังสดจากคลาวด์ให้
+*/
+function hrefFor(row: ScopedTournament): string {
+  return row.onDevice
+    ? `/studio/tournament/#t=${row.id}`
+    : `/studio/tournament/#c=${row.id}`;
+}
+
+/** ป้ายบอกว่าใบนี้อยู่ที่ไหน และของใคร */
+function SourceTags({
+  row,
+  showOwner,
+}: {
+  row: ScopedTournament;
+  showOwner: boolean;
+}) {
+  return (
+    <>
+      {!row.onCloud && <Badge rgb="138 142 168">ยังไม่เผยแพร่</Badge>}
+      {!row.onDevice && <Badge rgb="110 155 240">บนคลาวด์</Badge>}
+      {row.cloudNewer && <Badge rgb="255 91 122">คลาวด์ใหม่กว่าเครื่องนี้</Badge>}
+      {showOwner && !row.mine && row.ownerName && (
+        <Badge rgb="196 130 255">{row.ownerName}</Badge>
+      )}
+    </>
+  );
+}
+
 /**
  * แถวปุ่มท้ายการ์ด — "เปิดดู" เป็นตัวเอกเดียว
- * ที่เหลือยุบไว้หลัง ⋯ แล้วกางลงในตัวการ์ด (ไม่ใช่ dropdown ลอย
- * เพราะการ์ดอยู่ใน TiltCard ที่มี transform ป๊อปอัปตำแหน่ง fixed จะเพี้ยน)
+ * ที่เหลือยุบไว้หลัง ⋯ แล้วกางลงในตัวการ์ด ไม่ใช่ dropdown ลอย —
+ * เมนูลอยในกริดที่เลื่อนได้ต้องคอยคำนวณตำแหน่งใหม่ตอนเลื่อน ส่วนแบบกางลง
+ * ดันการ์ดใบล่างลงไปเองตามธรรมชาติของเลย์เอาต์
  */
 function CardActions({
   href,
+  row,
   onEdit,
   onDuplicate,
+  onSaveLocal,
   onDelete,
 }: {
   href: string;
+  row: ScopedTournament;
   onEdit: () => void;
   onDuplicate: () => void;
+  onSaveLocal: () => void;
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -371,9 +440,17 @@ function CardActions({
             className="overflow-hidden"
           >
             <div className="mt-2.5 grid grid-cols-3 gap-1 border-t border-hair pt-2.5">
-              <MoreItem onClick={onEdit}>แก้ไข</MoreItem>
-              <MoreItem onClick={onDuplicate}>ทำสำเนา</MoreItem>
-              <MoreItem onClick={onDelete} danger>
+              {/* ยังไม่มีสำเนาในเครื่อง = แก้ไม่ได้ ต้องดึงลงมาก่อน
+                  ของเดิมเขียนบอกไว้เป็นข้อความท้ายหน้า แต่ไม่มีปุ่มให้กดตรงนั้น */}
+              {row.onDevice ? (
+                <MoreItem onClick={onEdit}>แก้ไข</MoreItem>
+              ) : (
+                <MoreItem onClick={onSaveLocal}>ดึงลงเครื่อง</MoreItem>
+              )}
+              <MoreItem onClick={onDuplicate} disabled={!row.onDevice}>
+                ทำสำเนา
+              </MoreItem>
+              <MoreItem onClick={onDelete} danger disabled={!row.onDevice}>
                 ลบ
               </MoreItem>
             </div>
@@ -388,16 +465,19 @@ function MoreItem({
   children,
   onClick,
   danger,
+  disabled,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`min-h-10 cursor-pointer rounded-lg px-2 text-xs transition-colors ${
+      disabled={disabled}
+      className={`min-h-10 cursor-pointer rounded-lg px-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
         danger
           ? "text-muted hover:bg-danger/10 hover:text-danger"
           : "hover-tile text-ice/80 hover:text-ice"

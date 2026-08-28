@@ -7,7 +7,7 @@ import { buildPlayerRecords, winRate } from "@/lib/tournament/players";
 import { tournamentStore } from "@/lib/tournament/store";
 import type { PlayerRecord } from "@/lib/tournament/types";
 import Panel from "../ui/Panel";
-import { PageHeading } from "../ui/Reveal";
+import PageHead from "../studio/PageHead";
 import { CapacityRing, Meter } from "../ui/hud";
 import { ArtShield, EmptyState, Input, StatusBadge } from "./ui";
 
@@ -74,7 +74,7 @@ export default function PlayersView() {
 
   return (
     <div className="space-y-6">
-      <PageHeading
+      <PageHead
         eyebrow="Players"
         title="ผู้เล่นและประวัติการแข่ง"
         description="รวบจากทุกทัวร์ที่เก็บไว้ในเครื่องนี้ · ใช้ชื่อเป็นตัวระบุตัวตน"

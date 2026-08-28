@@ -47,9 +47,26 @@ function currentUid(): string | null {
   return u && !u.anonymous ? u.uid : null;
 }
 
-let draft: Channel | null = null;
-/** ร่างข้างบนเป็นของบัญชีไหน — สลับบัญชีเมื่อไหร่ถือว่าไม่มีร่าง */
-let draftUid: string | null = null;
+/**
+ * ร่างถูกผูกกับ "ช่องใบไหน" ไม่ใช่แค่ "บัญชีไหน"
+ *
+ * ★ นี่คือจุดที่เคยพาไปแก้ช่องผิดใบ ★
+ * ของเดิมเก็บร่างใบเดียวต่อบัญชี แล้วหน้าตั้งค่าช่องเดาว่าใบนั้นคือ
+ * "ช่องแรกของเรา" — ใครมีสองช่องขึ้นไป (หรือเป็นผู้ดูแลที่เข้าไปช่วยตั้งช่องคนอื่น)
+ * จะกดจากการ์ดช่อง B แล้วไปโผล่ในร่างของช่อง A โดยไม่มีอะไรบอก
+ *
+ * ตอนนี้เก็บเป็นตารางตามรหัสช่อง สลับไปดูช่องอื่นแล้วกลับมา งานที่ค้างไว้ยังอยู่
+ * และขอร่างของช่องไหน ก็ได้ของช่องนั้นเท่านั้น
+ */
+type Draft = { uid: string | null; data: Channel };
+
+const drafts = new Map<string, Draft>();
+/**
+ * ตัวนับรุ่น — ใช้เป็น snapshot ให้ useSyncExternalStore แทนตัวข้อมูลเอง
+ * เพราะข้อมูลจริงเป็น Map ที่ถูกแก้ในที่ ไม่ได้สร้างใหม่ทุกครั้ง
+ * คนที่เรียกใช้อ่านของจริงต่อด้วย channelStore.draftFor(id)
+ */
+let version = 0;
 const listeners = new Set<() => void>();
 
 /**
@@ -74,16 +91,8 @@ function purgeLegacy() {
   }
 }
 
-function read(): Channel | null {
-  if (typeof window === "undefined") return null;
-  purgeLegacy();
-  // สลับบัญชีในแท็บเดิม = ร่างของคนก่อนหน้าไม่นับ ห้ามคืนออกไปเด็ดขาด
-  return draftUid === currentUid() ? draft : null;
-}
-
-function commit(next: Channel | null) {
-  draft = next;
-  draftUid = currentUid();
+function bump() {
+  version += 1;
   listeners.forEach((l) => l());
 }
 
@@ -100,12 +109,18 @@ export function decideChannelSeed(input: {
   /** ล็อกอินอยู่ไหม */
   hasUser: boolean;
   /**
-   * มีร่างที่แก้ค้างไว้ในแท็บนี้ *ของบัญชีนี้* แล้วหรือยัง
+   * มีร่างที่แก้ค้างไว้ในแท็บนี้ *ของช่องใบนี้* แล้วหรือยัง
    * (ร่างอยู่ในหน่วยความจำล้วน ไม่ได้อยู่ในเครื่อง — ดูหัวไฟล์)
    */
   hasLocal: boolean;
-  /** ผู้ดูแลกำลังสลับไปแก้ช่องของคนอื่นอยู่ไหม (ช่องนั้นใช้สำเนาแยกของมันเอง) */
-  editingOther: boolean;
+  /**
+   * ถ้าคลาวด์ไม่มีช่องใบนี้ ให้ปั้นโครงว่างขึ้นมาได้ไหม
+   *
+   * ได้เฉพาะตอนที่ปลายทางคือ "ช่องแรกของตัวเอง" ซึ่งใช้ uid เป็นชื่อเอกสาร
+   * ถ้าเป็นรหัสช่องที่คลาวด์ไม่รู้จัก แปลว่าลิงก์ผิดหรือช่องถูกลบไปแล้ว —
+   * ปั้นโครงว่างตรงนั้นคือการเปิดฟอร์มที่กด "เผยแพร่" แล้วสร้างช่องผีขึ้นมาใหม่
+   */
+  canCreate: boolean;
   /** รู้ผลจากคลาวด์แล้วหรือยัง */
   cloudLoaded: boolean;
   /** บนคลาวด์มีช่องนี้อยู่จริงไหม */
@@ -114,9 +129,9 @@ export function decideChannelSeed(input: {
   if (!input.hasUser) return "wait";
   // ของที่แก้ค้างไว้ในแท็บนี้สำคัญกว่าเสมอ ห้ามเอาของคลาวด์มาทับงานที่ยังไม่ได้เผยแพร่
   if (input.hasLocal) return "keep-local";
-  if (input.editingOther) return "keep-local";
   if (!input.cloudLoaded) return "wait";
-  return input.cloudExists ? "use-cloud" : "create-empty";
+  if (input.cloudExists) return "use-cloud";
+  return input.canCreate ? "create-empty" : "wait";
 }
 
 /**
@@ -172,17 +187,45 @@ export const channelStore = {
       listeners.delete(onChange);
     };
   },
-  getSnapshot: () => read(),
-  getServerSnapshot: (): Channel | null => null,
+  getSnapshot: () => version,
+  getServerSnapshot: () => 0,
 
-  set(next: Channel | null) {
-    commit(next ? { ...next, updatedAt: new Date().toISOString() } : null);
+  /**
+   * ร่างของช่องใบที่ระบุ — ใบอื่นหรือของบัญชีอื่นถือว่าไม่มี
+   *
+   * เช็ค uid ทุกครั้งเพราะเครื่องเดียวมีคนใช้หลายบัญชีได้ (สตรีมเมอร์ยืมโน้ตบุ๊กกัน
+   * เป็นเรื่องปกติ) สลับบัญชีในแท็บเดิมแล้วร่างของคนก่อนหน้าต้องไม่โผล่มา
+   */
+  draftFor(channelId: string | null | undefined): Channel | null {
+    if (typeof window === "undefined" || !channelId) return null;
+    purgeLegacy();
+    const hit = drafts.get(channelId);
+    return hit && hit.uid === currentUid() ? hit.data : null;
   },
 
-  update(patch: Partial<Channel>) {
-    const current = read();
+  set(channelId: string, next: Channel | null) {
+    if (!next) {
+      drafts.delete(channelId);
+      bump();
+      return;
+    }
+    drafts.set(channelId, {
+      uid: currentUid(),
+      data: { ...next, updatedAt: new Date().toISOString() },
+    });
+    bump();
+  },
+
+  update(channelId: string, patch: Partial<Channel>) {
+    const current = channelStore.draftFor(channelId);
     if (!current) return;
-    commit({ ...current, ...patch, updatedAt: new Date().toISOString() });
+    channelStore.set(channelId, { ...current, ...patch });
+  },
+
+  /** ทิ้งร่างทั้งหมด — ใช้ตอนล็อกเอาต์ */
+  clear() {
+    drafts.clear();
+    bump();
   },
 };
 

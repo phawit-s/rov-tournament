@@ -6,7 +6,7 @@ import { recordActivity } from "@/lib/activity";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { profileStore, watchUsers, type UserProfile } from "@/lib/backend/users";
 import { compressImage } from "@/lib/image";
-import { rngFromSeed, shuffle, uid } from "@/lib/random";
+import { uid } from "@/lib/random";
 import { LANES as GAME_LANES, identityFor, laneByLabel } from "@/lib/game";
 import { safeImageSrc } from "@/lib/safe";
 import { createBracket, defaultRoundBestOf, roundCount } from "@/lib/tournament/bracket";
@@ -14,6 +14,7 @@ import { tournamentStore } from "@/lib/tournament/store";
 import { entryUid } from "@/lib/tournament/registration";
 import { formatThaiDate } from "@/lib/tournament/share";
 import type { SoloEntry, TeamEntry, Tournament } from "@/lib/tournament/types";
+import DrawStudio from "./DrawStudio";
 import Crest from "../team/Crest";
 import Button from "../ui/Button";
 import Panel from "../ui/Panel";
@@ -89,6 +90,15 @@ export default function TeamsPanel({
 
   /** ฟอร์มกรอกแทนพับเก็บไว้ก่อน ไม่ให้บังรายชื่อซึ่งเป็นของหลักในแท็บนี้ */
   const [adding, setAdding] = useState(false);
+
+  /*
+    โรงจับสลาก — เปิดทับทั้งแท็บ
+
+    ของเดิมปุ่ม "สุ่มแบ่งทีม" คำนวณเงียบๆ ครั้งเดียวจบแล้วเขียนทับทีมทันที
+    ไม่มีให้ตั้งค่า ไม่มีให้ดูก่อน ย้อนไม่ได้ และไม่มีพิธีอะไรเลย ทั้งที่หน้า /draw
+    ซึ่งเป็นเครื่องมือเดียวกันมีครบ — ตอนนี้ใช้ตัวเดียวกันแล้ว (ดู DrawStudio)
+  */
+  const [drawing, setDrawing] = useState(false);
 
   const [name, setName] = useState("");
   const [ign, setIgn] = useState("");
@@ -195,40 +205,6 @@ export default function TeamsPanel({
     setAdding(false);
   };
 
-  /** สุ่มแบ่งผู้สมัครเดี่ยวเป็นทีม */
-  const shuffleIntoTeams = () => {
-    const pool = tournament.soloPlayers.filter((p) => p.approved);
-    if (pool.length < 2) return;
-    const seed = tournamentStore.newSeed();
-    const order = shuffle(pool, rngFromSeed(`${seed}::solo`));
-    const size = Math.max(1, tournament.teamSize);
-    const teams: TeamEntry[] = [];
-
-    for (let i = 0; i < order.length; i += size) {
-      const chunk = order.slice(i, i + size);
-      const identity = identityFor(teams.length);
-      teams.push({
-        id: uid(),
-        name: identity.name,
-        members: chunk.map((p) => p.ign || p.name),
-        registeredAt: new Date().toISOString(),
-        approved: true,
-      });
-    }
-
-    tournamentStore.mutate(tournament.id, (t) => ({
-      ...t,
-      teams,
-      bracket: null,
-    }));
-    recordActivity(
-      "bracket.generate",
-      `สุ่มแบ่ง ${pool.length} คนเป็น ${teams.length} ทีม (seed ${seed})`,
-      { tournamentId: tournament.id, tournamentName: tournament.name },
-    );
-    toast(`แบ่งเป็น ${teams.length} ทีมแล้ว`, "success");
-  };
-
   const approvedTeams = tournament.teams.filter((t) => t.approved);
   const approvedSolo = tournament.soloPlayers.filter((p) => p.approved);
 
@@ -261,6 +237,19 @@ export default function TeamsPanel({
 
   const capacity =
     tournament.maxTeams > 0 ? tournament.teams.length / tournament.maxTeams : 0;
+
+  if (drawing) {
+    /*
+      ปิดโรงจับสลากแล้วกลับมาที่แท็บทีม ไม่ใช่กระโดดไปแท็บสายแข่ง
+
+      แท็บสายแข่งตอนนั้นยังว่าง (การแบ่งทีมล้างสายเก่าทิ้งไปแล้ว) คนจะเจอ
+      หน้า "ยังไม่ได้จัดสาย" ที่มีปุ่มพากลับมาแท็บทีม — วนอยู่สองหน้าโดยไม่ได้อะไร
+      ที่แท็บทีมมีทั้งรายชื่อที่เพิ่งได้และปุ่ม "สุ่มสายแข่ง" อยู่แล้ว
+    */
+    return (
+      <DrawStudio tournament={tournament} onClose={() => setDrawing(false)} />
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -433,7 +422,7 @@ export default function TeamsPanel({
                   <Button
                     size="sm"
                     variant={tournament.teams.length ? "outline" : "primary"}
-                    onClick={shuffleIntoTeams}
+                    onClick={() => setDrawing(true)}
                     disabled={approvedSolo.length < 2}
                   >
                     {tournament.teams.length ? "สุ่มแบ่งทีมใหม่" : "สุ่มแบ่งทีม"}
@@ -509,7 +498,7 @@ export default function TeamsPanel({
               title={solo ? "ยังไม่ได้สุ่มแบ่งทีม" : "ยังไม่มีทีมสมัคร"}
               description={
                 solo
-                  ? "รับสมัครรายบุคคลให้ครบก่อน แล้วกด “สุ่มแบ่งทีม” ระบบจะแบ่งให้ตามขนาดทีมที่ตั้งไว้"
+                  ? "รับสมัครรายบุคคลให้ครบก่อน แล้วกด “สุ่มแบ่งทีม” จะได้พิธีจับสลากทีละคนเหมือนหน้าสุ่มทีม — ตั้งค่าได้ ย้อนได้ และผลยังไม่ถูกบันทึกจนกว่าจะกดยืนยัน"
                   : "กรอกชื่อทีมและรายชื่อผู้เล่นจากฟอร์มด้านซ้ายเพื่อเริ่มรับสมัคร"
               }
             />

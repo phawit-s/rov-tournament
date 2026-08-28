@@ -15,17 +15,25 @@ import { safeImageSrc } from "@/lib/safe";
 import Button from "../ui/Button";
 import Panel from "../ui/Panel";
 import Figure, { FigureRow } from "../ui/Figure";
-import Reveal, { PageHeading } from "../ui/Reveal";
+import Reveal from "../ui/Reveal";
+import PageHead from "../studio/PageHead";
 import { toast } from "../ui/Toast";
 import { IconCopy } from "../ui/icons";
-import { Badge, EmptyState, Input, Skeleton } from "../tournament/ui";
+import {
+  Badge,
+  EmptyState,
+  Input,
+  STATUS_META,
+  Skeleton,
+  StatusBadge,
+} from "../tournament/ui";
 
 /* อ้างอิงคงที่ ไม่งั้น setState ตอน error จะสร้างอาร์เรย์ใหม่แล้วรีเรนเดอร์ไม่จบ */
 const NO_USERS: UserProfile[] = [];
 const NO_CHANNELS: Channel[] = [];
 const NO_TOURNAMENTS: CloudTournament[] = [];
 
-type Tab = "overview" | "users" | "channels";
+type Tab = "overview" | "users" | "channels" | "tournaments";
 
 /**
  * ภาพรวมทั้งระบบ — ผู้ใช้ ช่อง และทัวร์ทั้งหมดบนคลาวด์
@@ -107,16 +115,16 @@ export default function Backoffice() {
     { key: "overview", label: "ภาพรวม", count: 0 },
     { key: "users", label: "ผู้ใช้", count: users.length },
     { key: "channels", label: "ช่อง", count: channels.length },
+    { key: "tournaments", label: "ทัวร์", count: tournaments.length },
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeading
-        no="10"
+      <PageHead
         eyebrow="Backoffice"
         title="ทั้งระบบ"
         description="ผู้ใช้ทุกบัญชี ช่องที่เผยแพร่แล้ว และทัวร์ที่จัดอยู่บนคลาวด์"
-        meta={`${users.length} บัญชี`}
+        meta={`${users.length} บัญชี · ${channels.length} ช่อง · ${tournaments.length} ทัวร์`}
       />
 
       <div className="tile no-scrollbar flex gap-1 overflow-x-auto rounded-xl p-1">
@@ -163,6 +171,7 @@ export default function Backoffice() {
       )}
       {tab === "users" && <Users users={users} loading={loading} />}
       {tab === "channels" && <Channels channels={channels} />}
+      {tab === "tournaments" && <Tournaments tournaments={tournaments} />}
     </div>
   );
 }
@@ -471,6 +480,97 @@ function Channels({ channels }: { channels: Channel[] }) {
           </li>
         ))}
       </ul>
+    </Panel>
+  );
+}
+
+/* =========================================================================
+   ทัวร์บนคลาวด์
+
+   หน้า "ทั้งระบบ" เคยนับทัวร์เป็นตัวเลขในภาพรวมอย่างเดียว ไม่มีที่ให้กดดู
+   ผู้ดูแลที่อยากรู้ว่า "ตอนนี้ใครจัดอะไรอยู่บ้าง" จึงต้องไปเดาจากหน้ารายการ
+   ซึ่งเอาสำเนาในเครื่องขึ้นก่อน — เป็นอีกทางที่ทำให้รู้สึกว่าเห็นไม่ครบ
+   ========================================================================= */
+
+function Tournaments({ tournaments }: { tournaments: CloudTournament[] }) {
+  const [q, setQ] = useState("");
+
+  const found = useMemo(() => {
+    const text = q.trim().toLocaleLowerCase("th");
+    if (!text) return tournaments;
+    return tournaments.filter((t) =>
+      [t.name, t.tagline ?? "", t.ownerName ?? ""]
+        .join(" ")
+        .toLocaleLowerCase("th")
+        .includes(text),
+    );
+  }, [tournaments, q]);
+
+  if (tournaments.length === 0) {
+    return (
+      <EmptyState
+        title="ยังไม่มีทัวร์บนคลาวด์"
+        description="ทัวร์จะโผล่ที่นี่หลังผู้จัดกดเผยแพร่ครั้งแรก"
+      />
+    );
+  }
+
+  return (
+    <Panel className="p-6">
+      <Panel.Header
+        eyebrow="Tournaments"
+        title="ทัวร์ทั้งหมดบนคลาวด์"
+        count={`${found.length}/${tournaments.length}`}
+      />
+
+      <Input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="ค้นชื่อทัวร์หรือชื่อผู้จัด"
+        className="mb-4"
+      />
+
+      <ul className="space-y-2">
+        {found.map((t) => (
+          <li
+            key={t.id}
+            className="tile flex flex-wrap items-center gap-3 rounded-xl p-3"
+          >
+            <span
+              aria-hidden
+              className="h-9 w-0.75 shrink-0 rounded-full"
+              style={{ background: STATUS_META[t.status].hex }}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-ice">
+                {t.name || "ทัวร์นาเมนต์ไม่มีชื่อ"}
+              </p>
+              <p className="num mt-0.5 truncate text-xs text-muted">
+                {t.ownerName || "ไม่ทราบผู้จัด"} ·{" "}
+                {t.entryMode === "solo"
+                  ? `${t.soloPlayers?.length ?? 0} คน`
+                  : `${t.teams?.length ?? 0} ทีม`}{" "}
+                · แก้ล่าสุด {formatThaiDate(t.updatedAt)}
+              </p>
+            </div>
+
+            <StatusBadge status={t.status} />
+
+            <Link
+              href={`/tournament/#c=${t.id}`}
+              className="shrink-0 font-display text-xs text-iris hover:underline"
+            >
+              เปิดดู →
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      {found.length === 0 && (
+        <p className="py-8 text-center text-sm text-muted">
+          ไม่เจอทัวร์ที่ตรงกับคำค้น
+        </p>
+      )}
     </Panel>
   );
 }

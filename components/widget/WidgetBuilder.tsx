@@ -12,11 +12,11 @@ import {
 import { motion } from "motion/react";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { tournamentStore } from "@/lib/tournament/store";
-import { channelStore, watchMyChannels } from "@/lib/channel/store";
+import { watchMyChannels } from "@/lib/channel/store";
 import type { Channel } from "@/lib/channel/types";
 import Panel from "../ui/Panel";
 import Button from "../ui/Button";
-import { PageHeading } from "../ui/Reveal";
+import PageHead from "../studio/PageHead";
 import { toast } from "../ui/Toast";
 import { IconCopy, IconExternal } from "../ui/icons";
 import { ArtShield, EmptyState, Input, Label } from "../tournament/ui";
@@ -191,12 +191,6 @@ export default function WidgetBuilder() {
     authStore.getServerSnapshot,
   );
   const user = authStore.user();
-  const channel = useSyncExternalStore(
-    channelStore.subscribe,
-    channelStore.getSnapshot,
-    channelStore.getServerSnapshot,
-  );
-
   const [tournamentId, setTournamentId] = useState("");
   const [useCloud, setUseCloud] = useState(hasBackend);
   const [accent, setAccent] = useState("e6c894");
@@ -242,13 +236,10 @@ export default function WidgetBuilder() {
     () => myChannels.filter((c) => c.ownerUid && c.ownerUid === user?.uid),
     [myChannels, user?.uid],
   );
-  /* เรียงให้ช่องที่กำลังแก้อยู่ในหน้าช่องมาก่อน คนส่วนใหญ่ต่อ widget ให้ช่องนั้น */
-  const activeChannel =
-    owned.find((c) => c.id === pickedChannelId) ??
-    owned.find((c) => c.id === channel?.id) ??
-    owned[0] ??
-    channel ??
-    null;
+  /* ช่องที่เลือกไว้ในหน้านี้มาก่อน ไม่มีก็เอาช่องล่าสุดของเรา
+     ตั้งใจไม่ไปดูร่างที่ค้างอยู่ในหน้าตั้งค่าช่อง — ร่างนั้นเป็นของแท็บนั้น
+     ถ้ายังไม่เคยเปิดหน้านั้นในแท็บนี้มันจะว่างเปล่า แล้วลิงก์ widget จะขาดรหัสช่อง */
+  const activeChannel = owned.find((c) => c.id === pickedChannelId) ?? owned[0] ?? null;
 
   const makeUrl = useCallback(
     (widget: WidgetDef, accentValue: string, solid = false) => {
@@ -292,7 +283,7 @@ export default function WidgetBuilder() {
 
   return (
     <div className="space-y-8">
-      <PageHeading
+      <PageHead
         eyebrow="Stream widgets"
         title="Widget สำหรับ OBS / Streamlabs"
         description="ปรับสีกับขนาดแล้วเห็นผลทันทีในพรีวิว จากนั้นคัดลอกลิงก์ไปวางเป็น Browser Source พื้นหลังโปร่งใสพร้อมทับภาพเกม"

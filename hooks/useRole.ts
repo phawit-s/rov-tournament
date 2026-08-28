@@ -29,6 +29,18 @@ export type RoleInfo = {
   local: boolean;
   /** เปิดสตูดิโอได้ไหม */
   studio: boolean;
+
+  /**
+   * ผู้ดูแลระบบที่ Firestore ยืนยันแล้ว
+   *
+   * ★ ใช้ตัวนี้ตัดสิน "เห็นของทั้งระบบไหม / แก้ของคนอื่นได้ไหม" เสมอ ★
+   * ห้ามเทียบ useAccess() === "verified" กระจายตามหน้าอีก — ของเดิมทำแบบนั้น
+   * แล้วแต่ละหน้าตีความคำว่า "แอดมิน" ไม่ตรงกัน บางหน้านับรหัสในเครื่องด้วย
+   * บางหน้าไม่นับ ผลคือแอดมินคนเดียวกันเห็นเมนูครบแต่เห็นข้อมูลไม่ครบ
+   */
+  admin: boolean;
+  /** uid ของบัญชีที่ล็อกอินอยู่ — null เมื่อเข้าด้วยรหัสเครื่องหรือยังไม่ล็อกอิน */
+  uid: string | null;
 };
 
 export function useSiteRole(): RoleInfo {
@@ -56,6 +68,7 @@ export function useSiteRole(): RoleInfo {
   const user = authStore.user();
   const signedIn = !!user && !user.anonymous;
   const local = access === "local";
+  const uid = signedIn && user ? user.uid : null;
 
   // ไม่มีแบ็กเอนด์ = ข้อมูลอยู่ในเบราว์เซอร์เครื่องเดียว รหัสผู้จัดคือกุญแจดอกเดียวที่มี
   if (!hasBackend) {
@@ -65,6 +78,13 @@ export function useSiteRole(): RoleInfo {
       signedIn: false,
       local,
       studio: local,
+      /*
+        โหมดไม่มีคลาวด์ให้ถือว่าเป็นผู้ดูแล "ของเครื่องนี้" ได้
+        ไม่มีข้อมูลของคนอื่นให้รั่วอยู่แล้ว และถ้าไม่ให้ผ่าน เครื่องมือทั้งชุด
+        (สุ่มทีม วงล้อ widget) จะถูกล็อกทิ้งโดยไม่มีทางปลด
+      */
+      admin: local,
+      uid: null,
     };
   }
 
@@ -74,14 +94,14 @@ export function useSiteRole(): RoleInfo {
     authSnap === "loading" ||
     (signedIn && (adminState === "loading" || streamerState === "loading"));
 
-  const role: SiteRole =
-    adminState === "admin"
-      ? "admin"
-      : streamerState === "streamer"
-        ? "streamer"
-        : signedIn
-          ? "viewer"
-          : "guest";
+  const admin = adminState === "admin";
+  const role: SiteRole = admin
+    ? "admin"
+    : streamerState === "streamer"
+      ? "streamer"
+      : signedIn
+        ? "viewer"
+        : "guest";
 
   return {
     role,
@@ -89,6 +109,8 @@ export function useSiteRole(): RoleInfo {
     signedIn,
     local,
     studio: role === "admin" || role === "streamer" || local,
+    admin,
+    uid,
   };
 }
 

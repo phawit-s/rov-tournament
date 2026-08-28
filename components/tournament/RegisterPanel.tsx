@@ -407,6 +407,34 @@ function Wizard({
   const setSlot = (index: number, value: string) =>
     setSlotsRaw(slots.map((s, i) => (i === index ? value : s)));
 
+  /**
+   * วางรายชื่อทีเดียวได้เลย
+   *
+   * คนที่มาสมัครเกือบทุกคนมีรายชื่อทีมอยู่แล้วในแชท — ก๊อปมาทั้งก้อนแล้ววาง
+   * ช่องแรก ของเดิมจะยัดทั้งก้อนลงช่องเดียวแล้วโดนตัดที่ 30 ตัวอักษร
+   * ต้องมานั่งพิมพ์ทีละคนใหม่ห้ารอบ
+   *
+   * ตอนนี้ถ้าสิ่งที่วางมีหลายบรรทัด/คั่นด้วยจุลภาค จะกระจายลงช่องถัดๆ ไปให้เอง
+   * และเพิ่มช่องสำรองให้พอ (ไม่เกิน MAX_MEMBERS)
+   */
+  const pasteRoster = (index: number, text: string): boolean => {
+    const names = text
+      .split(/[\n\r,;\t]+/)
+      .map((n) => n.trim())
+      .filter(Boolean);
+    if (names.length < 2) return false;
+
+    const next = [...slots];
+    for (let i = 0; i < names.length; i++) {
+      const at = index + i;
+      if (at >= MAX_MEMBERS) break;
+      if (at >= next.length) next.push("");
+      next[at] = names[i].slice(0, 30);
+    }
+    setSlotsRaw(next);
+    return true;
+  };
+
   const [step, setStep] = useState(0);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -563,7 +591,7 @@ function Wizard({
             {steps[step].key === "roster" && (
               <>
                 <div className="flex items-baseline justify-between gap-3">
-                  <Label hint="ช่องแรกเติมชื่อในเกมของคุณไว้ให้แล้ว">
+                  <Label hint="ช่องแรกเติมชื่อในเกมของคุณไว้ให้แล้ว · ก๊อปรายชื่อทั้งก้อนมาวางได้เลย ระบบจะแยกให้เอง">
                     รายชื่อผู้เล่น
                   </Label>
                   <span
@@ -590,6 +618,10 @@ function Wizard({
                       <Input
                         value={value}
                         onChange={(e) => setSlot(i, e.target.value)}
+                        onPaste={(e) => {
+                          const text = e.clipboardData.getData("text");
+                          if (pasteRoster(i, text)) e.preventDefault();
+                        }}
                         placeholder={
                           i < teamSize ? `ผู้เล่นคนที่ ${i + 1}` : "ตัวสำรอง"
                         }

@@ -1436,3 +1436,63 @@ input[type="range"]::-moz-range-thumb {
   animation-fill-mode: forwards;
   will-change: transform;
 }
+
+/* ---------------------------------------------------------------
+   หลังบ้าน (สตูดิโอ)
+
+   ที่ทำงานคนละเรื่องกับหน้าสาธารณะ: ไม่มีฉากหลังเคลื่อนไหว ไม่มีปกใหญ่
+   แต่ก็ไม่ควรเป็นพื้นเรียบตันๆ ทั้งจอเหมือนฟอร์มราชการ — ใส่แสงนวลจางๆ
+   ที่ขอบบนพอให้แถบบนกับเนื้อหาแยกชั้นกันได้ด้วยตา ไม่ใช่ด้วยเส้นอย่างเดียว
+   --------------------------------------------------------------- */
+
+.studio-canvas {
+  position: relative;
+  isolation: isolate;
+}
+.studio-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 22rem;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      70% 100% at 18% 0%,
+      rgb(var(--accent) / 0.07) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      55% 100% at 92% 0%,
+      rgb(var(--accent) / 0.045) 0%,
+      transparent 68%
+    );
+}
+
+/*
+  แถบข้างของสตูดิโอ — ไล่เข้มลงล่างนิดเดียว
+
+  พื้นทึบสีเดียวทั้งแถบทำให้เมนูล่างๆ ลอยเท่ากับเมนูบนสุด ทั้งที่ของที่อยู่
+  ท้ายแถบ (บัญชี ออกจากระบบ) ควรถอยไปเป็นฉากหลัง
+*/
+.studio-rail {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-ink-2) 100%, transparent) 0%,
+      color-mix(in srgb, var(--color-ink-2) 94%, var(--color-ink)) 100%
+    );
+}
+
+/*
+  เส้นคั่นกลุ่มเมนู — จางลงเรื่อยๆ จากซ้ายไปขวา
+  เส้นทึบเต็มความกว้างในแถบแคบๆ อ่านเป็น "ขีดฆ่า" มากกว่า "คั่นกลุ่ม"
+*/
+.rail-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--hair) / calc(var(--hair-a) + 0.05)),
+    transparent
+  );
+}

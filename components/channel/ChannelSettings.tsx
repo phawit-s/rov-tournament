@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useHashParam } from "@/hooks/useClient";
-import { useAccess } from "@/hooks/useAdmin";
-import { useMyChannels } from "@/hooks/useMyChannel";
+import { setHashParams, useHashParam } from "@/hooks/useClient";
+import { useAllChannels, useChannel, useOwnChannels } from "@/hooks/useChannels";
+import { useSiteRole } from "@/hooks/useRole";
 import { recordActivity } from "@/lib/activity";
 import { recordAudit } from "@/lib/audit";
 import { authStore } from "@/lib/backend/firebase";
@@ -22,8 +22,6 @@ import {
   emptyChannel,
   markDonationAutoApproved,
   pushChannelAs,
-  watchAllChannels,
-  watchChannel,
 } from "@/lib/channel/store";
 import { normalizeHandle, type Channel } from "@/lib/channel/types";
 
@@ -69,12 +67,13 @@ import ImagePicker from "../ui/ImagePicker";
 import LinkRow from "../ui/LinkRow";
 import MiniBtn from "../ui/MiniBtn";
 import Panel, { PanelHeader } from "../ui/Panel";
-import Reveal, { PageHeading } from "../ui/Reveal";
+import Reveal from "../ui/Reveal";
+import PageHead from "../studio/PageHead";
 import Switch from "../ui/Switch";
 import Tabs from "../ui/Tabs";
 import SongQueuePanel from "../song/SongQueuePanel";
 import { toast } from "../ui/Toast";
-import { IconCheck } from "../ui/icons";
+import { IconCheck, IconChevronDown } from "../ui/icons";
 import {
   ArtShield,
   Badge,
@@ -160,7 +159,6 @@ const SLIP_META: Record<
 };
 
 /** อ้างอิงคงที่ ไม่งั้น setChannels([]) ตอน error จะทำให้รีเรนเดอร์ไม่จบ */
-const NO_CHANNELS: Channel[] = [];
 
 /**
  * อนุมัติใบที่ระบบยืนยันแล้วให้อัตโนมัติ
@@ -242,14 +240,16 @@ export default function ChannelSettings() {
   );
   const user = authStore.user();
 
-  const stored = useSyncExternalStore(
+  /* รุ่นของร่างในหน่วยความจำ — ตัวข้อมูลจริงอ่านด้วย channelStore.draftFor(id) */
+  useSyncExternalStore(
     channelStore.subscribe,
     channelStore.getSnapshot,
     channelStore.getServerSnapshot,
   );
 
-  const access = useAccess();
-  const { channels: myChannels, loaded: myLoaded } = useMyChannels();
+  const { admin: isAdmin, uid: myUid } = useSiteRole();
+  const { channels: ownChannels, loaded: myLoaded } = useOwnChannels(myUid);
+  const { channels: allChannels } = useAllChannels(isAdmin);
   const reduced = useReducedMotion();
   const [donations, setDonations] = useState<ChannelDonation[]>([]);
   const [stats, setStats] = useState<Stats>(NO_STATS);
@@ -259,66 +259,48 @@ export default function ChannelSettings() {
   // ใบที่เพิ่งอนุมัติ — วาบทองหนึ่งครั้งก่อนแถวจะย้ายกลุ่ม
   const [flash, setFlash] = useState<string[]>([]);
 
-  /**
-   * ผู้ดูแลระบบสลับไปแก้ช่องของคนอื่น — เก็บสำเนาแยกไว้ใน state
-   * ไม่ยัดลง channelStore เพราะนั่นคือ localStorage ของช่องตัวเอง เดี๋ยวงานที่ค้างอยู่หาย
-   * null = กำลังแก้ช่องตัวเองตามปกติ
-   */
-  const [remote, setRemote] = useState<{ id: string; draft: Channel } | null>(null);
-  const [channels, setChannels] = useState<Channel[]>(NO_CHANNELS);
-
-  /** ใบที่ยิงอนุมัติอัตโนมัติไปแล้ว — onSnapshot ยิงซ้ำได้เรื่อยๆ ต้องกันเอง */
-  const autoDone = useRef<Set<string>>(new Set());
-
-  /**
-   * สำเนาที่อยู่บนคลาวด์จริง ใช้ทั้งเทียบว่ามีอะไรค้างยังไม่ได้เผยแพร่
-   * และใช้เป็นต้นทางตอนเครื่องนี้ยังไม่มีสำเนาในเครื่อง
-   *
-   * เก็บ id ของช่องคู่กับข้อมูลเสมอ เพราะผู้ดูแลสลับช่องได้
-   * ถ้าเก็บแต่ข้อมูลเปล่าๆ จะแยกไม่ออกว่า "ยังโหลดไม่เสร็จ" กับ "ช่องนี้ไม่มีบนคลาวด์"
-   */
-  const [liveSnap, setLiveSnap] = useState<{ id: string; data: Channel | null } | null>(
-    null,
-  );
-
   /* ส่วนที่เปิดอยู่เก็บใน URL ไม่ใช่ใน state — รีเฟรชแล้วยังอยู่ที่เดิม
      และแปะลิงก์ตรงเข้าหน้าสลิปให้คนที่ช่วยดูแลได้ */
   const hashTab = useHashParam("tab");
   const section: Section = SECTIONS.some((s) => s.key === hashTab)
     ? (hashTab as Section)
     : "home";
-  const goSection = (key: Section) => {
-    window.location.hash = `tab=${key}`;
-  };
-
-  const isAdmin = access === "verified";
-  const channel = remote ? remote.draft : stored;
+  const goSection = (key: Section) => setHashParams({ tab: key });
 
   /*
-    รหัสช่องของตัวเอง — ถามคลาวด์ว่า "ช่องไหนที่ ownerUid เป็นเรา"
-    ไม่ใช่เดาว่า doc id เท่ากับ uid
+    ★ ช่องที่กำลังเปิดอยู่มาจาก URL ★
 
-    การเดาแบบเดิมถูกเฉพาะช่องแรกที่สร้างจากบัญชีนั้นเอง พอช่องถูกโอนให้คนอื่น
-    (หรือเป็นช่องที่สองซึ่งใช้รหัสสุ่ม) เจ้าของจะเปิดหน้านี้แล้วเจอช่องเปล่า
-    ทั้งที่ช่องจริงอยู่บนคลาวด์ครบ — และถ้าเผลอกดเผยแพร่ตอนนั้นจะได้ช่องซ้ำ
-    ขึ้นมาอีกใบแทนที่จะทับของเดิม
+    ของเดิมเก็บไว้ใน state ของคอมโพเนนต์ (ตัวแปร remote) แล้วเดาว่าค่าเริ่มต้น
+    คือ "ช่องแรกของเรา" ผลคือปัญหาที่รายงานเข้ามาสองข้อพร้อมกัน:
 
-    ★ ห้ามใส่ fallback เป็น user.uid กลับมา ★
-    ช่องที่โอนให้คนอื่นไปแล้วยังใช้ชื่อเอกสาร = uid ของเจ้าของ *เดิม* อยู่
-    เจ้าของเดิมที่ไม่เหลือช่องแล้วจะตกไป fallback แล้วไปเปิดเอกสารนั้นเจอพอดี
-    หน้าจะขึ้นว่า "ช่องของคุณ" ทั้งที่เป็นช่องของคนอื่น และถ้าคนนั้นเป็นผู้ดูแล
-    (ซึ่งเป็นกรณีที่เกิดจริง) การกดเผยแพร่จะทับช่องเขาได้เลย
+      · การ์ดช่องในหน้าภาพรวมทุกใบลิงก์มาที่ /studio/channel/ เฉยๆ ไม่มีรหัสช่อง
+        กดจากช่องไหนก็มาโผล่ช่องเดียวกันหมด — "เข้าช่องอื่นได้บ้างไม่ได้บ้าง"
+        จริงๆ คือ "ไปโผล่ช่องที่แก้ล่าสุด" เพราะรายการเรียงตาม updatedAt
+      · สลับหน้าในสตูดิโอแล้วกลับมา state หาย ผู้ดูแลที่กำลังช่วยตั้งค่าช่องคนอื่น
+        เด้งกลับมาช่องตัวเองเงียบๆ แล้วแก้ต่อทับผิดใบ
+
+    ตอนนี้รหัสช่องอยู่ใน #c= : รีเฟรชได้ แชร์ลิงก์ให้ทีมงานได้ ปุ่มย้อนกลับ
+    ของเบราว์เซอร์พาไปช่องก่อนหน้าตามที่คนคาด และ "ช่องไหน" ไม่มีทางเดาผิด
   */
-  const ownId = myChannels[0]?.id ?? null;
-  const activeId = remote?.id ?? ownId;
-  const liveLoaded = !!activeId && liveSnap?.id === activeId;
-  const live = liveLoaded ? (liveSnap?.data ?? null) : null;
+  const hashChannel = useHashParam("c");
+  const fallbackId = ownChannels[0]?.id ?? (user ? user.uid : null);
+  const activeId = hashChannel || (myLoaded ? fallbackId : null);
+
+  /* สำเนาบนคลาวด์ของช่องที่เปิดอยู่ — ทั้งใช้เป็นต้นทางและใช้เทียบว่ามีอะไรค้าง */
+  const { channel: live, loaded: liveLoaded } = useChannel(activeId);
+
+  const channel = channelStore.draftFor(activeId);
   const autoApprove = !!channel?.donate.autoApprove;
+
   /* แก้ช่องของตัวเองได้เสมอ ช่องคนอื่นต้องเป็นผู้ดูแลที่ Firestore ยืนยันแล้ว
      ดูจาก ownerUid ของช่อง ไม่ใช่จากชื่อเอกสาร เพราะช่องที่สองเป็นต้นไป
      ชื่อเอกสารเป็นรหัสสุ่ม ไม่ได้เท่ากับ uid ของเจ้าของแล้ว */
-  const canManage =
-    !!user && !!channel && (channel.ownerUid === user.uid || isAdmin);
+  const owned = !!channel && !!myUid && channel.ownerUid === myUid;
+  const canManage = owned || isAdmin;
+  const editingOther = !!channel && !owned;
+
+  /* ช่องทั้งหมดที่คนนี้หยิบมาแก้ได้ — ผู้ดูแลได้ทุกช่อง คนอื่นได้เฉพาะของตัวเอง */
+  const switchable = isAdmin ? allChannels : ownChannels;
 
   /*
     ยังไม่มีสำเนาในเครื่อง — ต้องดึงของจริงจากคลาวด์มาก่อน ห้ามสร้างโครงว่างทันที
@@ -329,45 +311,26 @@ export default function ChannelSettings() {
     ช่องจริงจะโดนทับด้วยของเปล่าทั้งใบ ทั้งพร้อมเพย์ แพ็กเกจ และเพลย์ลิสต์สำรอง
 
     รอจนรู้ผลจากคลาวด์ก่อน (liveLoaded) ค่อยตัดสินใจ
-    และทำเฉพาะช่องของตัวเอง ช่องที่ผู้ดูแลสลับไปดูใช้สำเนาแยกของมันเอง
   */
   useEffect(() => {
+    if (!user || !activeId) return;
     const choice = decideChannelSeed({
-      hasUser: !!user,
-      /*
-        "มีของค้างในเครื่อง" ต้องหมายถึงของ *ของคนนี้* เท่านั้น
-
-        เครื่องหนึ่งมีคนใช้หลายบัญชีได้ (สตรีมเมอร์ยืมโน้ตบุ๊กกันเป็นเรื่องปกติ)
-        ถ้าไม่เช็คเจ้าของ ร่างของคนก่อนหน้าจะถูกหยิบมาแสดงทั้งใบ — เลขพร้อมเพย์
-        ชื่อบัญชี ลิงก์ไลฟ์ ครบ ทั้งที่คนที่นั่งอยู่ตอนนี้เป็นคนละคน
-        (channelStore กรองให้อีกชั้นแล้ว ตรงนี้คือด่านที่มองเห็นได้จากที่เรียกใช้)
-      */
-      hasLocal: !!stored && stored.ownerUid === user?.uid,
-      editingOther: !!remote,
+      hasUser: true,
+      hasLocal: !!channelStore.draftFor(activeId),
+      /* ปั้นโครงว่างได้เฉพาะ "ช่องแรกของตัวเอง" ซึ่งใช้ uid เป็นชื่อเอกสาร
+         รหัสอื่นที่คลาวด์ไม่รู้จัก = ลิงก์ผิดหรือช่องถูกลบ ไม่ใช่ช่องใหม่ */
+      canCreate: activeId === user.uid,
       cloudLoaded: liveLoaded,
       cloudExists: !!live,
     });
-    if (choice === "use-cloud" && live) channelStore.set(live);
-    else if (choice === "create-empty" && user) {
-      channelStore.set(emptyChannel({ uid: user.uid, email: user.email }));
+    if (choice === "use-cloud" && live) channelStore.set(activeId, live);
+    else if (choice === "create-empty") {
+      channelStore.set(
+        activeId,
+        emptyChannel({ uid: user.uid, email: user.email }, activeId),
+      );
     }
-  }, [user, stored, remote, liveLoaded, live]);
-
-  // รายชื่อช่องทั้งหมดสำหรับแถบสลับช่อง — คนทั่วไปไม่ต้องดึง
-  useEffect(() => {
-    if (!isAdmin) return;
-    return watchAllChannels(setChannels, () => setChannels(NO_CHANNELS));
-  }, [isAdmin]);
-
-  // ฟังสำเนาบนคลาวด์ไว้เทียบ จะได้รู้ว่ามีอะไรค้างยังไม่ได้เผยแพร่
-  useEffect(() => {
-    if (!activeId) return;
-    return watchChannel(
-      activeId,
-      (c) => setLiveSnap({ id: activeId, data: c }),
-      () => setLiveSnap({ id: activeId, data: null }),
-    );
-  }, [activeId]);
+  }, [user, activeId, liveLoaded, live]);
 
   /**
    * สรุปยอด + อนุมัติอัตโนมัติ ทำใน callback ตอนข้อมูลมาถึง ไม่ใช่ตอนเรนเดอร์
@@ -376,75 +339,141 @@ export default function ChannelSettings() {
    */
   useEffect(() => {
     if (!activeId) return;
+    /* ใบที่ยิงอนุมัติอัตโนมัติไปแล้ว — onSnapshot ยิงซ้ำได้เรื่อยๆ ต้องกันเอง
+       ผูกกับรอบ subscribe นี้ สลับช่องเมื่อไหร่ก็เริ่มนับใหม่เองโดยไม่ต้องล้าง */
+    const autoDone = new Set<string>();
     return watchChannelDonations(activeId, (list) => {
       setDonations(list);
       setStats(computeStats(list));
       if (!autoApprove || !canManage) return;
       for (const d of list) {
         if (d.status !== "pending" || d.slipCheck !== "verified") continue;
-        if (autoDone.current.has(d.id)) continue;
-        autoDone.current.add(d.id);
+        if (autoDone.has(d.id)) continue;
+        autoDone.add(d.id);
         void autoApproveOne(activeId, d);
       }
     });
   }, [activeId, autoApprove, canManage]);
 
-  if (!user) return null;
+  /* ใบของช่องเดิมต้องไม่ค้างอยู่ระหว่างรอ snapshot ชุดใหม่
+     ปรับ state ระหว่างเรนเดอร์ตามที่ React แนะนำ ไม่ใช่ setState ใน effect */
+  const [seenId, setSeenId] = useState(activeId);
+  if (seenId !== activeId) {
+    setSeenId(activeId);
+    if (donations.length) setDonations([]);
+    if (stats !== NO_STATS) setStats(NO_STATS);
+    if (tab !== "all") setTab("all");
+  }
 
   /*
-    ยังไม่มีช่องเลย — ต้องมีทางออกให้กด ไม่ใช่หน้าว่าง
+    ไม่มีบัญชีผูกอยู่ — ต้องบอก ไม่ใช่คืนหน้าเปล่า
 
-    ของเดิม return null เฉยๆ เพราะสมมติว่าทุกคนมีช่องที่ชื่อเอกสาร = uid เสมอ
-    พอเลิกสมมติแบบนั้นแล้ว "ยังไม่มีช่อง" กลายเป็นสถานะที่เกิดได้จริง
-    (บัญชีใหม่ · เจ้าของที่เพิ่งโอนช่องสุดท้ายให้คนอื่น)
+    AuthGate กันไว้แล้วเฉพาะตอนที่เชื่อม Firebase อยู่ พอเป็นโหมดไม่มีคลาวด์
+    (หรือเข้ามาด้วยรหัสผู้จัดในเครื่อง) มันปล่อยผ่าน แล้วของเดิม return null
+    ตรงนี้ ผลคือหน้าขาวเปล่าซึ่งแยกไม่ออกจาก "เว็บพัง"
   */
-  if (!activeId || !channel) {
-    if (!myLoaded) return <ChannelSkeleton />;
+  if (!user) {
     return (
       <div className="space-y-6">
-        {/*
-          แถบสลับช่องต้องอยู่ "เหนือ" ทางออกนี้เสมอ
+        <PageHead
+          eyebrow="Channel"
+          title="ช่องของคุณ"
+          description="ตั้งพร้อมเพย์ แพ็กเกจสมาชิก และลิงก์สำหรับสตรีมที่เดียว ใช้ได้กับทุกทัวร์"
+        />
+        <EmptyState
+          art={<ArtShield />}
+          title="ช่องผูกกับบัญชี ไม่ใช่กับเครื่อง"
+          description="ล็อกอินด้วยบัญชีสตรีมเมอร์ก่อนถึงจะตั้งค่าช่องและรับโดเนทได้ — เครื่องมือที่ทำงานในเบราว์เซอร์ (สุ่มทีม วงล้อ จับเวลา widget) ใช้ได้เลยไม่ต้องล็อกอิน"
+        />
+      </div>
+    );
+  }
 
-          ผู้ดูแลระบบไม่จำเป็นต้องมีช่องของตัวเองเลยสักช่อง — หน้าที่ของเขาคือ
-          เข้าไปช่วยตั้งค่าช่องของคนอื่น ถ้าปล่อยให้หน้า "ยังไม่มีช่อง" คืนค่า
-          ก่อนถึงแถบนี้ ผู้ดูแลที่โอนช่องตัวเองออกไปหมดแล้วจะแตะช่องใครไม่ได้เลย
-        */}
-        {isAdmin && (
+  /** สลับช่อง = เปลี่ยน URL ไม่ใช่เปลี่ยน state — ดูเหตุผลที่ activeId */
+  function selectChannel(next: Channel | null) {
+    setHashParams({ c: next ? next.id : null, tab: null });
+  }
+
+  /** เปิดช่องใหม่ให้ตัวเอง แล้วสลับไปแก้ช่องนั้นเลย */
+  async function addChannel() {
+    if (!user) return;
+    setBusy(true);
+    try {
+      const made = await createChannel(
+        { uid: user.uid, email: user.email },
+        `ช่องใหม่ ${ownChannels.length + 1}`,
+      );
+      channelStore.set(made.id, made);
+      selectChannel(made);
+      toast("เปิดช่องใหม่แล้ว — ตั้งชื่อช่อง (handle) ก่อนถึงจะเผยแพร่ได้", "success");
+      void recordAudit("channel.publish", {
+        id: made.id,
+        name: made.name,
+        detail: "เปิดช่องใหม่",
+      });
+    } catch {
+      toast("เปิดช่องใหม่ไม่สำเร็จ", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /*
+    ยังหาช่องไม่เจอ — ต้องมีทางออกให้กด ไม่ใช่หน้าว่าง
+
+    ผู้ดูแลระบบไม่จำเป็นต้องมีช่องของตัวเองเลยสักช่อง หน้าที่ของเขาคือเข้าไป
+    ช่วยตั้งค่าช่องของคนอื่น แถบสลับช่องจึงต้องอยู่เหนือทางออกนี้เสมอ
+  */
+  if (!activeId || !channel) {
+    if (!myLoaded || (activeId && !liveLoaded)) return <ChannelSkeleton />;
+    return (
+      <div className="space-y-6">
+        {switchable.length > 0 && (
           <ChannelSwitcher
-            channels={channels}
+            channels={switchable}
             activeId=""
             ownUid={user.uid}
+            admin={isAdmin}
             onSelect={selectChannel}
             onCreate={() => void addChannel()}
             busy={busy}
           />
         )}
 
-        <PageHeading
+        <PageHead
           eyebrow="Channel"
           title="ช่องของคุณ"
           description="ตั้งพร้อมเพย์ แพ็กเกจสมาชิก และลิงก์สำหรับสตรีมที่เดียว ใช้ได้กับทุกทัวร์"
         />
         <Panel variant="feature" className="p-6 sm:p-7">
-          <PanelHeader eyebrow="Channel" title="ยังไม่มีช่องของตัวเอง" />
+          <PanelHeader
+            eyebrow="Channel"
+            title={hashChannel ? "ไม่พบช่องนี้" : "ยังไม่มีช่องของตัวเอง"}
+          />
           <p className="text-sm leading-relaxed text-muted">
-            ช่องคือที่รวมทุกอย่างของคุณ — พร้อมเพย์สำหรับรับโดเนท แพ็กเกจสมาชิก
-            คิวขอเพลง และลิงก์ widget ที่ใช้ได้ตลอดโดยไม่ต้องเปลี่ยนทุกครั้งที่จัดทัวร์ใหม่
-            {isAdmin
+            {hashChannel
+              ? "ลิงก์นี้ชี้ไปที่ช่องที่ไม่มีอยู่บนคลาวด์แล้ว — อาจถูกลบไปหรือคัดลอกรหัสมาไม่ครบ"
+              : "ช่องคือที่รวมทุกอย่างของคุณ — พร้อมเพย์สำหรับรับโดเนท แพ็กเกจสมาชิก คิวขอเพลง และลิงก์ widget ที่ใช้ได้ตลอดโดยไม่ต้องเปลี่ยนทุกครั้งที่จัดทัวร์ใหม่"}
+            {isAdmin && switchable.length > 0
               ? " · ถ้าจะเข้าไปช่วยตั้งค่าช่องของคนอื่น เลือกจากแถบด้านบนได้เลย"
               : ""}
           </p>
-          <Button className="mt-5" loading={busy} onClick={() => void addChannel()}>
-            เปิดช่องของคุณ
-          </Button>
+          <div className="mt-5 flex flex-wrap gap-2.5">
+            <Button loading={busy} onClick={() => void addChannel()}>
+              เปิดช่องของคุณ
+            </Button>
+            {hashChannel && (
+              <Button variant="ghost" onClick={() => selectChannel(null)}>
+                กลับไปช่องของคุณ
+              </Button>
+            )}
+          </div>
         </Panel>
       </div>
     );
   }
 
-  const editingOther = !!remote;
   const otherName = channel.name || channel.handle || "ช่องนี้";
-
   /*
     มีอะไรแก้ค้างไว้ไหม — เทียบของในหน้ากับสำเนาบนคลาวด์
     หน้านี้ยาวมาก ปุ่มเผยแพร่อยู่บนสุดที่เดียว คนแก้ค่าท้ายหน้าแล้วปิดไปเลยก็มี
@@ -453,65 +482,12 @@ export default function ChannelSettings() {
   const neverPublished = !live;
   const dirty = !live || !matchesCloud(channel, live);
 
+  /* แก้ค่าลงร่างของ "ช่องที่เปิดอยู่" เท่านั้น — ร่างมีรหัสช่องกำกับอยู่แล้ว
+     จึงไม่ต้องมีทางแยกระหว่างช่องตัวเองกับช่องคนอื่นอีก */
   const set = <K extends keyof Channel>(key: K, value: Channel[K]) => {
-    if (remote) {
-      setRemote((prev) =>
-        prev
-          ? {
-              ...prev,
-              draft: {
-                ...prev.draft,
-                ...({ [key]: value } as Partial<Channel>),
-                updatedAt: new Date().toISOString(),
-              },
-            }
-          : prev,
-      );
-      return;
-    }
-    channelStore.update({ [key]: value } as Partial<Channel>);
+    if (!activeId) return;
+    channelStore.update(activeId, { [key]: value } as Partial<Channel>);
   };
-
-  /**
-   * สลับช่องที่กำลังแก้ — ส่ง null = กลับมาช่องแรกของตัวเอง
-   *
-   * ช่องแรกของแต่ละคนใช้ uid เป็นชื่อเอกสาร และมีสำเนาอยู่ใน localStorage
-   * ช่องที่สร้างทีหลังมีรหัสของตัวเอง จึงแก้ผ่านสำเนาชั่วคราวใน state แทน
-   */
-  /* ประกาศแบบ function ไม่ใช่ const — ทางออก "ยังไม่มีช่อง" อยู่เหนือบรรทัดนี้
-     และต้องส่งฟังก์ชันนี้ให้แถบสลับช่องใช้ (const จะติด TDZ) */
-  function selectChannel(next: Channel | null) {
-    // เทียบกับรหัสช่องของเราจริงๆ ไม่ใช่ uid — ช่องที่โอนมามีรหัสคนละตัวกับ uid
-    if (next && next.id === ownId) {
-      setRemote(null);
-    } else {
-      setRemote(next ? { id: next.id, draft: next } : null);
-    }
-    // ใบของช่องเดิมต้องไม่ค้างอยู่ระหว่างรอ snapshot ชุดใหม่
-    setDonations([]);
-    setStats(NO_STATS);
-    setTab("all");
-  }
-
-  /** เปิดช่องใหม่ให้ตัวเอง แล้วสลับไปแก้ช่องนั้นเลย */
-  async function addChannel() {
-    // ประกาศแบบ function จึงไม่ได้รับผลจากการเช็ค !user ด้านบน ต้องกันเองตรงนี้
-    if (!user) return;
-    setBusy(true);
-    try {
-      const made = await createChannel(
-        { uid: user.uid, email: user.email },
-        `ช่องใหม่ ${channels.length + 1}`,
-      );
-      selectChannel(made);
-      toast("เปิดช่องใหม่แล้ว — ตั้งชื่อช่อง (handle) ก่อนถึงจะเผยแพร่ได้", "success");
-      void recordAudit("channel.publish", { id: made.id, name: made.name, detail: "เปิดช่องใหม่" });
-    } catch {
-      toast("เปิดช่องใหม่ไม่สำเร็จ", "error");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   const publish = async () => {
     if (!channel.handle) {
@@ -530,9 +506,10 @@ export default function ChannelSettings() {
 
         แก้ช่องคนอื่นห้ามทับ ownerEmail ของเจ้าของด้วยอีเมลผู้ดูแล
       */
-      if (remote) await pushChannelAs(channel, remote.id);
-      else if (activeId)
-        await pushChannelAs({ ...channel, ownerEmail: user.email ?? undefined }, activeId);
+      await pushChannelAs(
+        editingOther ? channel : { ...channel, ownerEmail: user.email ?? undefined },
+        activeId,
+      );
       toast(editingOther ? `เผยแพร่ช่อง ${otherName} แล้ว` : "เผยแพร่ช่องแล้ว", "success");
       recordActivity("tournament.publish", `เผยแพร่ช่อง "${channel.name || channel.handle}"`, {
         actor: user.name,
@@ -618,17 +595,17 @@ export default function ChannelSettings() {
   return (
     /* เว้นที่ท้ายหน้าไว้ให้แถบบันทึกลอย ไม่ให้มันทับเนื้อหาบรรทัดสุดท้าย */
     <div className="space-y-6 pb-28">
-      {/* แถบสลับช่อง — เห็นเฉพาะผู้ดูแลที่ Firestore ยืนยันสิทธิ์แล้ว */}
-      {isAdmin && (
-        <ChannelSwitcher
-          channels={channels}
-          activeId={activeId}
-          ownUid={user.uid}
-          onSelect={selectChannel}
-          onCreate={() => void addChannel()}
-          busy={busy}
-        />
-      )}
+      {/* แถบสลับช่อง — ผู้ดูแลได้ทุกช่องในระบบ สตรีมเมอร์ได้เฉพาะช่องของตัวเอง
+          (โผล่ก็ต่อเมื่อมีมากกว่าหนึ่งช่องให้สลับจริงๆ) */}
+      <ChannelSwitcher
+        channels={switchable}
+        activeId={activeId}
+        ownUid={user.uid}
+        admin={isAdmin}
+        onSelect={selectChannel}
+        onCreate={() => void addChannel()}
+        busy={busy}
+      />
 
       {editingOther && (
         <div
@@ -646,7 +623,7 @@ export default function ChannelSettings() {
         </div>
       )}
 
-      <PageHeading
+      <PageHead
         eyebrow="Channel"
         title={editingOther ? otherName : "ช่องของคุณ"}
         description="ตั้งพร้อมเพย์ แพ็กเกจสมาชิก และลิงก์สำหรับสตรีมที่เดียว ใช้ได้กับทุกทัวร์"
@@ -1413,10 +1390,18 @@ function SlipBadge({
  * ช่องตัวเองอยู่หัวแถวเสมอ แม้ยังไม่เคยเผยแพร่ขึ้นคลาวด์ (จะยังไม่มีใน channels)
  * แถวเลื่อนแนวนอนแทน dropdown เพราะบนมือถือกดง่ายกว่าและเห็นรูปช่องไปด้วย
  */
+/**
+ * แถบสลับช่อง — เมนูดึงลงพร้อมช่องค้นหา ไม่ใช่แถวชิปที่ต้องเลื่อนหา
+ *
+ * ผู้ดูแลระบบมีช่องทั้งระบบให้เลือก ซึ่งโตขึ้นเรื่อยๆ ตามจำนวนสตรีมเมอร์
+ * แถวชิปแนวนอนของเดิมอ่านได้แค่สามสี่ใบแรก ที่เหลือซ่อนอยู่หลังขอบจอ
+ * โดยไม่มีอะไรบอกว่ายังมีต่อ — เป็นสาเหตุตรงๆ ที่รู้สึกว่า "เข้าช่องคนอื่นไม่ได้"
+ */
 function ChannelSwitcher({
   channels,
   activeId,
   ownUid,
+  admin,
   onSelect,
   onCreate,
   busy,
@@ -1424,138 +1409,200 @@ function ChannelSwitcher({
   channels: Channel[];
   activeId: string;
   ownUid: string;
+  admin: boolean;
   onSelect: (c: Channel | null) => void;
   onCreate: () => void;
   busy: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+
   /*
     แยกด้วย ownerUid อย่างเดียว ไม่แตะชื่อเอกสารเลย
 
-    ของเดิมยกช่องที่ "ชื่อเอกสาร = uid ของเรา" ออกมาเป็นชิปแรกเสมอ ซึ่งพังสองทาง
-    หลังเริ่มมีการโอนช่อง: ช่องที่โอนให้คนอื่นไปแล้วยังใช้ชื่อเอกสารเดิม
-    (= uid ของเรา) มันเลยถูกป้ายว่า "ของคุณ" ทั้งที่ไม่ใช่แล้ว
-    และตัวเลขนับก็บวกหนึ่งตายตัวราวกับทุกคนต้องมีช่องอย่างน้อยหนึ่งช่องเสมอ
+    ช่องที่โอนให้คนอื่นไปแล้วยังใช้ชื่อเอกสารเดิม (= uid ของเจ้าของเดิม)
+    ถ้าใช้ชื่อเอกสารตัดสิน มันจะถูกป้ายว่า "ของคุณ" ทั้งที่ไม่ใช่แล้ว
   */
   const mine = channels.filter((c) => c.ownerUid === ownUid);
   const others = channels.filter((c) => c.ownerUid !== ownUid);
+  const active = channels.find((c) => c.id === activeId) ?? null;
+
+  const needle = q.trim().toLocaleLowerCase("th");
+  const match = (c: Channel) =>
+    !needle ||
+    (c.name ?? "").toLocaleLowerCase("th").includes(needle) ||
+    (c.handle ?? "").toLocaleLowerCase("th").includes(needle) ||
+    c.id.toLowerCase().includes(needle);
+
+  const groups = [
+    { key: "mine", title: "ช่องของคุณ", items: mine.filter(match) },
+    { key: "others", title: "ช่องของคนอื่น", items: others.filter(match) },
+  ].filter((g) => g.items.length > 0);
+
+  /* มีช่องเดียวและไม่ใช่ผู้ดูแล = ไม่มีอะไรให้สลับ ซ่อนไปเลยดีกว่ากินที่ */
+  if (!admin && channels.length <= 1) return null;
 
   return (
-    <Panel variant="quiet" className="p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="slug slug-2">Admin · สลับช่อง</span>
-        <span className="num text-eyebrow text-muted">
-          ของคุณ {mine.length} · ของคนอื่น {others.length}
-        </span>
-      </div>
-
-      <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
-        {mine.length === 0 && (
-          <span className="flex min-h-11 shrink-0 items-center rounded-xl px-1 text-xs text-muted">
-            คุณยังไม่มีช่องของตัวเอง
+    <div className="relative">
+      <div className="tile flex flex-wrap items-center gap-2 rounded-xl p-2">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="hover-tile flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-3 py-1.5 text-left transition-colors"
+        >
+          <ChannelAvatar
+            name={active?.name || active?.handle || "?"}
+            avatar={active?.avatar}
+          />
+          <span className="min-w-0 flex-1">
+            <span className="slug slug-2 block leading-none">
+              {admin ? "กำลังแก้ช่อง" : "ช่องของคุณ"}
+            </span>
+            <span className="mt-1 block truncate font-display text-sm text-ice">
+              {active
+                ? active.name || (active.handle ? `@${active.handle}` : active.id.slice(0, 10))
+                : "เลือกช่อง"}
+            </span>
           </span>
-        )}
-        {mine.map((c) => (
-          <ChannelChip
-            key={c.id}
-            name={c.name || c.handle || c.id.slice(0, 8)}
-            handle={c.handle}
-            avatar={c.avatar}
-            mine
-            active={activeId === c.id}
-            onClick={() => onSelect(c)}
+          <span className="num shrink-0 text-eyebrow text-muted">
+            {channels.length} ช่อง
+          </span>
+          <IconChevronDown
+            className={`h-4 w-4 shrink-0 text-muted transition-transform ${
+              open ? "rotate-180" : ""
+            }`}
           />
-        ))}
-        {others.map((c) => (
-          <ChannelChip
-            key={c.id}
-            name={c.name || c.handle || c.id.slice(0, 8)}
-            handle={c.handle}
-            avatar={c.avatar}
-            active={activeId === c.id}
-            onClick={() => onSelect(c)}
-          />
-        ))}
+        </button>
 
         <button
           type="button"
           onClick={onCreate}
           disabled={busy}
-          className="hover-tile flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-dashed border-hair px-4 py-2 font-display text-xs text-muted transition-colors hover:text-iris disabled:cursor-not-allowed disabled:opacity-50"
+          className="hover-tile flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-hair px-3.5 font-display text-xs text-muted transition-colors hover:text-iris disabled:cursor-not-allowed disabled:opacity-50"
         >
           + เปิดช่องใหม่
         </button>
       </div>
 
-      <p className="mt-2.5 text-xs leading-relaxed text-muted">
-        {others.length === 0
-          ? "ช่องของคนอื่นจะโผล่ที่นี่ก็ต่อเมื่อเจ้าของช่องนั้นเข้ามาตั้งค่าแล้วกดเผยแพร่เองอย่างน้อยหนึ่งครั้ง"
-          : "กดที่ช่องไหนก็สลับไปแก้ช่องนั้น — ของที่แก้ค้างไว้ในช่องเดิมจะหายถ้ายังไม่ได้กดเผยแพร่"}
-      </p>
-    </Panel>
+      <AnimatePresence>
+        {open && (
+          <>
+            {/* คลิกนอกเมนูแล้วปิด — ปุ่มเต็มจอชั้นล่างสุด ไม่ใช่ effect ที่ผูก
+                listener ทั้งเอกสารไว้ตลอดเวลาที่หน้านี้เปิดอยู่ */}
+            <button
+              type="button"
+              aria-label="ปิดรายการช่อง"
+              onClick={() => setOpen(false)}
+              className="fixed inset-0 z-40 cursor-default"
+            />
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              className="surface absolute top-full right-0 left-0 z-50 mt-2 overflow-hidden rounded-2xl shadow-lift-3"
+            >
+              {channels.length > 6 && (
+                <div className="border-b border-hair p-2.5">
+                  <Input
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    placeholder="ค้นหาชื่อช่องหรือ handle"
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              <div className="max-h-80 overflow-y-auto p-1.5">
+                {groups.length === 0 && (
+                  <p className="p-4 text-center text-xs text-muted">
+                    ไม่เจอช่องที่ตรงกับคำค้น
+                  </p>
+                )}
+                {groups.map((g) => (
+                  <div key={g.key} className="mb-1 last:mb-0">
+                    <p className="slug px-3 pt-2 pb-1.5">
+                      {g.title}
+                      <span className="num ml-1.5 opacity-60">{g.items.length}</span>
+                    </p>
+                    {g.items.map((c) => (
+                      <ChannelRow
+                        key={c.id}
+                        channel={c}
+                        active={c.id === activeId}
+                        onClick={() => {
+                          setOpen(false);
+                          setQ("");
+                          onSelect(c);
+                        }}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+
+              {admin && others.length === 0 && (
+                <p className="border-t border-hair px-4 py-3 text-xs leading-relaxed text-muted">
+                  ช่องของคนอื่นจะโผล่ที่นี่ก็ต่อเมื่อเจ้าของช่องนั้นกดเผยแพร่เองอย่างน้อยหนึ่งครั้ง
+                </p>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
-function ChannelChip({
-  name,
-  handle,
-  avatar,
-  mine,
+function ChannelAvatar({ name, avatar }: { name: string; avatar?: string }) {
+  const src = avatar ? safeImageSrc(avatar) : null;
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt=""
+        className="h-9 w-9 shrink-0 rounded-full object-cover"
+      />
+    );
+  }
+  return (
+    <span className="tile grid h-9 w-9 shrink-0 place-items-center rounded-full font-display text-xs text-iris">
+      {(name || "?").slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
+function ChannelRow({
+  channel,
   active,
   onClick,
 }: {
-  name: string;
-  handle?: string;
-  avatar?: string;
-  mine?: boolean;
+  channel: Channel;
   active: boolean;
   onClick: () => void;
 }) {
-  /* ช่องที่กำลังแก้อยู่ต้องกดไม่ได้ ไม่งั้นกดแล้วไม่มีอะไรเกิดขึ้น
-     ซึ่งแยกไม่ออกจาก "ปุ่มเสีย" โดยเฉพาะตอนที่มีช่องเดียวทั้งระบบ */
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={active}
-      aria-pressed={active}
-      title={active ? "กำลังแก้ช่องนี้อยู่" : "สลับไปแก้ช่องนี้"}
-      className={`flex min-h-11 shrink-0 items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors ${
-        active
-          ? "cursor-default border-iris/45 bg-[rgb(221_175_100/0.12)]"
-          : "cursor-pointer border-hair hover-tile"
-      }`}
+      aria-current={active ? "true" : undefined}
+      className={`flex w-full min-h-12 items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors ${
+        active ? "bg-iris/12 text-iris" : "hover-tile text-ice/85"
+      } ${active ? "cursor-default" : "cursor-pointer"}`}
     >
-      {avatar ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={safeImageSrc(avatar) ?? ""}
-          alt=""
-          className="h-8 w-8 shrink-0 rounded-full object-cover"
-        />
-      ) : (
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full tile font-display text-eyebrow text-muted">
-          {(name || "?").slice(0, 1).toUpperCase()}
+      <ChannelAvatar name={channel.name || channel.handle || "?"} avatar={channel.avatar} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm">
+          {channel.name || "ยังไม่ตั้งชื่อ"}
         </span>
-      )}
-
-      <span className="min-w-0">
-        <span
-          className={`block max-w-40 truncate text-sm ${
-            active ? "text-iris" : "text-ice/85"
-          }`}
-        >
-          {name || "ยังไม่ตั้งชื่อ"}
-        </span>
-        <span className="num block text-eyebrow text-muted">
-          {handle ? `@${handle}` : "ยังไม่ตั้ง handle"}
+        <span className="num block truncate text-eyebrow text-muted">
+          {channel.handle ? `@${channel.handle}` : "ยังไม่ตั้ง handle"}
         </span>
       </span>
-
-      {mine && (
-        <span className="shrink-0 rounded-full bg-[rgb(77_181_145/0.14)] px-2 py-0.5 font-display text-eyebrow text-win">
-          ช่องของคุณ
-        </span>
-      )}
+      {active && <IconCheck className="h-4 w-4 shrink-0" strokeWidth={2} />}
     </button>
   );
 }

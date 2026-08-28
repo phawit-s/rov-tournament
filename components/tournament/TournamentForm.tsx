@@ -11,7 +11,6 @@ import { tournamentStore } from "@/lib/tournament/store";
 import type { Tournament, TournamentStatus } from "@/lib/tournament/types";
 import Button from "../ui/Button";
 import Panel from "../ui/Panel";
-import SectionHead from "../ui/SectionHead";
 import { IconCheck } from "../ui/icons";
 import TournamentCard from "./TournamentCard";
 import {
@@ -41,6 +40,23 @@ type Props = {
 
 const MAX_COVER_KB = 400;
 
+/**
+ * ฟอร์มถูกหั่นเป็นสามขั้น ไม่ใช่หน้ายาวหน้าเดียว
+ *
+ * ของเดิมกางทุกอย่างพร้อมกัน — ชื่อทัวร์ รูปปก โหมดรับสมัคร วันเปิด/ปิด สถานะ
+ * PIN เงินรางวัล ลิงก์ไลฟ์ — รวมสิบเจ็ดช่องเรียงลงมาสามจอครึ่ง
+ * คนสร้างทัวร์ครั้งแรกไม่รู้ว่าต้องกรอกอะไรบ้างถึงจะพอ เลยกรอกทุกช่องหรือไม่ก็ยอมแพ้
+ *
+ * ★ ปุ่ม "บันทึก" ยังกดได้ทุกขั้น ★ ขั้นที่ 2 กับ 3 มีค่าเริ่มต้นที่ใช้ได้จริงอยู่แล้ว
+ * (ทีมละ 5 · รับ 8 ทีม · แบ่งรางวัล 50/30/20) การหั่นขั้นจึงเป็นการ "จัดกลุ่ม"
+ * ไม่ใช่การบังคับให้เดินครบทาง
+ */
+const STEPS = [
+  { key: "basic", label: "ข้อมูลทัวร์", hint: "ชื่อ ปก และช่องที่สังกัด" },
+  { key: "reg", label: "การรับสมัคร", hint: "โหมด ขนาดทีม และกำหนดเวลา" },
+  { key: "extra", label: "รางวัลกับไลฟ์", hint: "เงินรางวัล ลิงก์ไลฟ์ และกติกา" },
+] as const;
+
 /** ฟอร์มสร้าง/แก้ข้อมูลทัวร์ — เก็บลง localStorage ทันทีที่กดบันทึก */
 export default function TournamentForm({
   tournament,
@@ -50,6 +66,7 @@ export default function TournamentForm({
 }: Props) {
   const [draft, setDraft] = useState<Tournament>(tournament);
   const [coverError, setCoverError] = useState<string | null>(null);
+  const [step, setStep] = useState(0);
   const reduced = useReducedMotion();
 
   const set = <K extends keyof Tournament>(key: K, value: Tournament[K]) =>
@@ -115,14 +132,62 @@ export default function TournamentForm({
         </button>
       </div>
 
+      {/* กดข้ามไปขั้นไหนก็ได้ ไม่ต้องเดินตามลำดับ — คนที่มาแก้ทัวร์เดิม
+          มักมาแก้เรื่องเดียว (เลื่อนวันแข่ง / เพิ่มเงินรางวัล) ไม่ได้มากรอกใหม่ทั้งใบ */}
+      <div className="tile no-scrollbar flex gap-1 overflow-x-auto rounded-xl p-1">
+        {STEPS.map((s, i) => {
+          const on = step === i;
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setStep(i)}
+              aria-current={on ? "step" : undefined}
+              className={`relative shrink-0 grow cursor-pointer rounded-lg px-3 py-2.5 text-left transition-colors ${
+                on ? "text-onaccent" : "text-muted hover:text-ice"
+              }`}
+            >
+              {on && (
+                <motion.span
+                  layoutId="form-step"
+                  className="accent-fill absolute inset-0 rounded-lg"
+                  transition={{ type: "spring", stiffness: 340, damping: 32 }}
+                />
+              )}
+              <span className="relative z-10 block">
+                <span className="num font-display text-eyebrow opacity-70">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span className="ml-2 font-display text-xs sm:text-sm">{s.label}</span>
+                <span
+                  className={`mt-0.5 hidden truncate text-xs sm:block ${
+                    on ? "text-onaccent/70" : "text-muted/70"
+                  }`}
+                >
+                  {s.hint}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/*
+        ขั้นที่ไม่ได้เปิดใช้ hidden ไม่ใช่ถอดออกจาก DOM
+        เพราะ Choice ใช้ layoutId ร่วมกัน ถ้าถอดออกแล้วใส่กลับ motion จะวิ่งจาก
+        ตำแหน่งเดิมข้ามจอ และค่าที่พิมพ์ค้างไว้จะถูก React ทิ้งพร้อม subtree
+      */}
       <div className="grid gap-5 lg:grid-cols-[1fr_minmax(280px,21rem)] lg:items-start">
         <Panel className="p-6 sm:p-7">
-          <div className="space-y-10">
+          {/* ไม่ต้องมี space-y ระหว่างขั้นแล้ว เพราะเห็นทีละขั้น —
+              ถ้าปล่อยไว้ ขั้นที่ 2 กับ 3 จะได้ margin-top ติดมาเป็นช่องว่างลอยๆ ด้านบน */}
+          <div>
             {/* ---------- 01 ข้อมูลทั่วไป ---------- */}
-            <section>
-              <SectionHead no="01" eyebrow="Identity" title="ข้อมูลทั่วไป" />
-
-              <div className="mt-6 space-y-5">
+            {/* ไม่มี SectionHead ในนี้แล้ว — แถบขั้นด้านบนบอกชื่อกับคำอธิบายของ
+                ขั้นนี้อยู่แล้ว หัวข้อซ้ำอีกรอบขนาดพาดหัวกินไปเกือบร้อยพิกเซล
+                ก่อนถึงช่องแรกที่ต้องกรอกจริง */}
+            <section className={step === 0 ? "" : "hidden"}>
+              <div className="space-y-5">
                 {/*
                   ทัวร์สังกัดช่องไหน — ถามตั้งแต่ตอนสร้าง ไม่ใช่เดาตอนเผยแพร่
 
@@ -234,10 +299,8 @@ export default function TournamentForm({
             </section>
 
             {/* ---------- 02 การรับสมัคร ---------- */}
-            <section>
-              <SectionHead no="02" eyebrow="Registration" title="การรับสมัคร" />
-
-              <div className="mt-6 space-y-5">
+            <section className={step === 1 ? "" : "hidden"}>
+              <div className="space-y-5">
                 <div>
                   <Label hint="เปลี่ยนภายหลังได้ แต่ต้องรับสมัครใหม่">วิธีรับสมัคร</Label>
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -389,10 +452,8 @@ export default function TournamentForm({
             </section>
 
             {/* ---------- 03 รางวัลกับไลฟ์ ---------- */}
-            <section>
-              <SectionHead no="03" eyebrow="Prize & Live" title="รางวัลกับไลฟ์" />
-
-              <div className="mt-6 space-y-5">
+            <section className={step === 2 ? "" : "hidden"}>
+              <div className="space-y-5">
                 <div>
                   <Label>เงินรางวัลรวม</Label>
                   <div className="flex gap-2">
@@ -538,13 +599,31 @@ export default function TournamentForm({
             />
           </div>
 
-          <div className="flex shrink-0 gap-2">
-            <Button variant="ghost" onClick={onClose}>
-              ยกเลิก
-            </Button>
-            <Button onClick={save} className="rounded-2xl">
-              บันทึก
-            </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            {step > 0 && (
+              <Button variant="ghost" onClick={() => setStep(step - 1)}>
+                ย้อน
+              </Button>
+            )}
+            {step < STEPS.length - 1 ? (
+              <>
+                <Button variant="outline" onClick={save} className="rounded-2xl">
+                  บันทึก
+                </Button>
+                <Button onClick={() => setStep(step + 1)} className="rounded-2xl">
+                  ต่อไป
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={onClose}>
+                  ยกเลิก
+                </Button>
+                <Button onClick={save} className="rounded-2xl">
+                  บันทึก
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -64,6 +64,37 @@ export function useHashParam(name: string): string | null {
 }
 
 /**
+ * แก้พารามิเตอร์ใน #hash โดยไม่ทับตัวอื่นที่อยู่ในนั้น
+ *
+ * หน้าเดียวใช้ hash หลายตัวพร้อมกันได้ — หน้าตั้งค่าช่องใช้ทั้ง #c= (ช่องไหน)
+ * และ #tab= (ส่วนไหนของหน้า) ของเดิมเขียนทับทั้งก้อนด้วย
+ * `window.location.hash = "tab=..."` ซึ่งลบรหัสช่องทิ้งทุกครั้งที่กดสลับส่วน
+ * แล้วหน้าก็เด้งกลับไปช่องเริ่มต้นเงียบๆ
+ *
+ * ส่งค่า null หรือสตริงว่างเพื่อลบตัวนั้นออก
+ * ตั้งใจไม่ใช้ URLSearchParams เพราะมันเข้ารหัสค่าใหม่ทั้งหมด — ลิงก์แชร์
+ * (#s=<base64>) มีทั้ง + / = ซึ่งจะถูกแปลงจนอ่านกลับไม่ได้
+ */
+export function setHashParams(patch: Record<string, string | null>): void {
+  if (typeof window === "undefined") return;
+  const raw = window.location.hash.replace(/^#/, "");
+  const map = new Map<string, string>();
+  for (const part of raw.split("&")) {
+    if (!part) continue;
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    map.set(part.slice(0, eq), part.slice(eq + 1));
+  }
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null || value === "") map.delete(key);
+    else map.set(key, value);
+  }
+  const next = [...map].map(([k, v]) => `${k}=${v}`).join("&");
+  // ปล่อยให้เบราว์เซอร์ยิง hashchange เอง ปุ่มย้อนกลับจะได้ยังทำงานตามปกติ
+  window.location.hash = next;
+}
+
+/**
  * ธงเปิด/ปิดที่ติดมากับ URL เช่น ?replay=1
  *
  * รับทั้งใน query และใน hash เหมือน useHashParam เพราะ Browser Source

@@ -21,7 +21,8 @@ import UserPicker, { displayName } from "@/components/auth/UserPicker";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Panel, { PanelHeader } from "@/components/ui/Panel";
-import Reveal, { PageHeading } from "@/components/ui/Reveal";
+import Reveal from "@/components/ui/Reveal";
+import PageHead from "./PageHead";
 import { toast } from "@/components/ui/Toast";
 import { IconExternal } from "@/components/ui/icons";
 import { Badge, EmptyState, Input, Skeleton } from "@/components/tournament/ui";
@@ -80,8 +81,7 @@ export default function RolesPanel() {
 
   return (
     <div className="space-y-7">
-      <PageHeading
-        no="11"
+      <PageHead
         eyebrow="Access"
         title="สิทธิ์และคำขอ"
         description="อนุมัติคนที่ขอเปิดช่อง ดูว่าใครเป็นสตรีมเมอร์อยู่บ้าง และจัดการผู้ดูแลระบบ"

@@ -16,7 +16,7 @@ import Panel from "./ui/Panel";
 import Button from "./ui/Button";
 import ConfirmDialog from "./ui/ConfirmDialog";
 import { toast } from "./ui/Toast";
-import { PageHeading } from "./ui/Reveal";
+import PageHead from "./studio/PageHead";
 import { ArtCalendar, Badge, EmptyState, Skeleton } from "./tournament/ui";
 
 const GROUPS: { key: string; label: string; types: ActivityType[] }[] = [
@@ -130,7 +130,7 @@ export default function ActivityView() {
 
   return (
     <div className="space-y-6">
-      <PageHeading
+      <PageHead
         eyebrow="Activity log"
         title="ประวัติการทำงาน"
         description={

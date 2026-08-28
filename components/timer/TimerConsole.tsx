@@ -55,7 +55,8 @@ import Button from "@/components/ui/Button";
 import LinkRow from "@/components/ui/LinkRow";
 import MiniBtn from "@/components/ui/MiniBtn";
 import Panel from "@/components/ui/Panel";
-import Reveal, { PageHeading } from "@/components/ui/Reveal";
+import Reveal from "@/components/ui/Reveal";
+import PageHead from "@/components/studio/PageHead";
 import Switch from "@/components/ui/Switch";
 import { toast } from "@/components/ui/Toast";
 import { IconPause, IconPlay } from "@/components/ui/icons";
@@ -156,8 +157,7 @@ export default function TimerConsole() {
 
   return (
     <div className="space-y-6">
-      <PageHeading
-        no="10"
+      <PageHead
         eyebrow="Live timer"
         title="จับเวลาสด"
         description="นาฬิกาถอยหลังบนสตรีม หมุนวงล้อแล้วเวลาบวก/ลบให้อัตโนมัติ"
