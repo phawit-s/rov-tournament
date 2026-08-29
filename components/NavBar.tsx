@@ -21,6 +21,7 @@ import {
   IconDice,
   IconGauge,
   IconLogout,
+  IconMusic,
   IconUsers,
   IconWheel,
 } from "@/components/ui/icons";
@@ -33,6 +34,14 @@ export type NavItem = {
   /** เลขบทชุดเดียวกับหัวหน้าเพจ เพื่อให้สารบัญท้ายเล่มอ้างเลขเดียวกัน */
   no: string;
   Icon: ComponentType<IconProps>;
+  /**
+   * เส้นทางอื่นที่ยังนับว่าอยู่ในเมนูนี้
+   *
+   * "ขอเพลง" มีสองหน้า: /songs/ คือสารบัญช่อง ส่วน /song/#h=... คือหน้าของช่องนั้น
+   * ซึ่งไม่ใช่ลูกของ /songs/ ตามตัวอักษร ถ้าไม่บอกไว้ พอเข้าไปขอเพลงจริงแล้ว
+   * เมนูจะดับหมดทั้งแถบ เหมือนหลุดออกไปนอกเว็บ
+   */
+  also?: string[];
 };
 
 /**
@@ -48,6 +57,13 @@ export type NavItem = {
 export const NAV: NavItem[] = [
   { href: "/draw/", label: "สุ่มทีม", no: "01", Icon: IconDice },
   { href: "/wheel/", label: "วงล้อ", no: "02", Icon: IconWheel },
+  {
+    href: "/songs/",
+    label: "ขอเพลง",
+    no: "06",
+    Icon: IconMusic,
+    also: ["/song/"],
+  },
 ];
 
 /** หน้าที่ไม่มีในเมนูแต่ต้องมีชื่อเวลาพลิกหน้า */
@@ -68,14 +84,17 @@ function cleanPath(path: string | null): string {
 export function navTitle(path: string | null): string {
   const current = cleanPath(path);
   if (EXTRA_TITLE[current]) return EXTRA_TITLE[current];
-  const hit = NAV.find((item) => current.startsWith(cleanPath(item.href)));
+  const hit = NAV.find((item) => isActive(item.href, current, item.also));
   return hit?.label ?? BRAND;
 }
 
-function isActive(href: string, path: string | null) {
-  const clean = cleanPath(href);
+function isActive(href: string, path: string | null, also: string[] = []) {
   const current = cleanPath(path);
-  return clean === "/" ? current === "/" : current.startsWith(clean);
+  const hit = (raw: string) => {
+    const clean = cleanPath(raw);
+    return clean === "/" ? current === "/" : current.startsWith(clean);
+  };
+  return hit(href) || also.some(hit);
 }
 
 export default function NavBar({ wide = false }: { wide?: boolean }) {
@@ -136,10 +155,10 @@ export default function NavBar({ wide = false }: { wide?: boolean }) {
 
           <span className="hidden h-6 w-px shrink-0 bg-[rgb(var(--hair)/var(--hair-a))] sm:block" />
 
-          {/* เมนู — สองบทที่เปิดใช้ได้ทันทีโดยไม่ต้องสมัคร */}
+          {/* เมนู — บทที่เปิดใช้ได้ทันทีโดยไม่ต้องสมัคร */}
           <nav className="flex min-w-0 flex-1 items-center gap-0.5">
             {NAV.map((item) => {
-              const active = isActive(item.href, pathname);
+              const active = isActive(item.href, pathname, item.also);
               const Icon = item.Icon;
               return (
                 <Link
@@ -160,7 +179,18 @@ export default function NavBar({ wide = false }: { wide?: boolean }) {
                   <span className="relative z-10 grid h-4 w-4 place-items-center opacity-90">
                     <Icon className="h-4 w-4" />
                   </span>
-                  <span className="relative z-10">{item.label}</span>
+                  {/*
+                    จอแคบเหลือแค่ไอคอน ยกเว้นเมนูที่กำลังเปิดอยู่ซึ่งยังโชว์ชื่อ
+
+                    พอเมนูมีสามบท ป้ายครบทุกอันกินกว้างเกินแถบที่ 390px แล้วดัน
+                    ปุ่มธีม/เสียง/บัญชีหลุดออกนอกกรอบไปเงียบๆ — เก็บป้ายของอันที่
+                    เปิดอยู่ไว้ จะได้ยังรู้ว่าอยู่หน้าไหนโดยไม่ต้องเดาจากไอคอน
+                  */}
+                  <span
+                    className={`relative z-10 ${active ? "inline" : "hidden sm:inline"}`}
+                  >
+                    {item.label}
+                  </span>
                 </Link>
               );
             })}

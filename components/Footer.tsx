@@ -18,8 +18,7 @@ const COLOPHON = [
 /** หน้าสาธารณะที่ไม่ได้อยู่ในแถบเมนู แต่ควรหาเจอจากท้ายเล่ม */
 const PUBLIC_EXTRA = [
   { href: "/c/", label: "สนับสนุนช่อง", no: "03" },
-  { href: "/song/", label: "ขอเพลง", no: "04" },
-  { href: "/account/", label: "โปรไฟล์ของฉัน", no: "05" },
+  { href: "/account/", label: "โปรไฟล์ของฉัน", no: "04" },
 ];
 
 /**

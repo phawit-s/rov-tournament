@@ -130,7 +130,14 @@ export default function SongRequestView() {
             )}
 
             <div className="min-w-0 flex-1">
-              <p className="slug">ขอเพลงกับ</p>
+              {/* ทางกลับไปสารบัญ — คนที่มาจาก /songs/ ต้องเปลี่ยนช่องได้โดยไม่ต้อง
+                  กดย้อนของเบราว์เซอร์ ส่วนคนที่สแกน QR มาตรงๆ ก็ได้รู้ว่ามีช่องอื่นอยู่ */}
+              <Link
+                href="/songs/"
+                className="slug inline-block transition-colors hover:text-iris"
+              >
+                ขอเพลงกับ · เลือกช่องอื่น
+              </Link>
               <h2 className="mt-0.5 truncate font-display text-2xl leading-tight font-light text-ice sm:text-3xl">
                 {channel.name || channel.handle}
               </h2>

@@ -140,6 +140,7 @@ export const PUBLIC_PATHS = [
   "/tournament",
   "/c",
   "/song",
+  "/songs",
   "/account",
 ];
 
