@@ -1,5 +1,6 @@
 "use client";
 
+import { readLiveHashParam } from "@/lib/hash";
 import { stripContacts } from "@/lib/safe";
 import type { Tournament } from "./types";
 
@@ -54,10 +55,7 @@ export function tournamentLocalUrl(id: string): string {
 
 export function readHashParam(name: string): string | null {
   if (typeof window === "undefined") return null;
-  const match = window.location.hash.match(
-    new RegExp(`[#&]${name}=([^&]+)`),
-  );
-  return match ? match[1] : null;
+  return readLiveHashParam(name);
 }
 
 export function setHashParam(name: string, value: string | null) {

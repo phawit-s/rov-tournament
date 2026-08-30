@@ -1,3 +1,4 @@
+import { readLiveHashParam } from "@/lib/hash";
 import type { Config } from "./types";
 
 export type SharePayload = {
@@ -46,8 +47,8 @@ export function shareUrl(payload: SharePayload): string {
 
 export function readShareFromHash(): SharePayload | null {
   if (typeof window === "undefined") return null;
-  const match = window.location.hash.match(/[#&]r=([^&]+)/);
-  return match ? decodeShare(match[1]) : null;
+  const raw = readLiveHashParam("r");
+  return raw ? decodeShare(raw) : null;
 }
 
 export function clearShareHash() {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import { liveHash, readLiveHashParam } from "@/lib/hash";
 
 const noopSubscribe = () => () => {};
 
@@ -54,11 +55,8 @@ export function useHashParam(name: string): string | null {
 
   return useSyncExternalStore(
     subscribe,
-    () => {
-      const inHash = window.location.hash.match(new RegExp(`[#&]${name}=([^&]+)`));
-      if (inHash) return inHash[1];
-      return new URLSearchParams(window.location.search).get(name);
-    },
+    () =>
+      readLiveHashParam(name) ?? new URLSearchParams(window.location.search).get(name),
     () => null,
   );
 }
@@ -77,7 +75,7 @@ export function useHashParam(name: string): string | null {
  */
 export function setHashParams(patch: Record<string, string | null>): void {
   if (typeof window === "undefined") return;
-  const raw = window.location.hash.replace(/^#/, "");
+  const raw = liveHash();
   const map = new Map<string, string>();
   for (const part of raw.split("&")) {
     if (!part) continue;
@@ -110,7 +108,7 @@ export function useQueryFlag(name: string): boolean {
     subscribe,
     () => {
       if (new URLSearchParams(window.location.search).get(name) === "1") return true;
-      return new RegExp(`[#&]${name}=1(&|$)`).test(window.location.hash);
+      return readLiveHashParam(name) === "1";
     },
     () => false,
   );

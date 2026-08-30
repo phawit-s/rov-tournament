@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMediaQuery } from "@/hooks/useClient";
+import { repairDuplicatedHash } from "@/lib/hash";
 import BackgroundFX from "./fx/BackgroundFX";
 import IntroLoader from "./fx/IntroLoader";
 import Footer from "./Footer";
@@ -23,6 +24,19 @@ export default function AppShell({
   const mobile = useMediaQuery("(max-width: 640px)");
   const wrapRef = useRef<HTMLDivElement>(null);
   const isHome = pathname.replace(/\/+$/, "") === "";
+
+  /*
+    ล้าง hash ที่ซ้อนกันหลังพลิกหน้าเสร็จ — ดู lib/hash.ts ว่ามันซ้อนได้ยังไง
+    ตัวอ่านค่ายึดก้อนท้ายอยู่แล้ว หน้าจึงถูกช่องตั้งแต่แรก ตรงนี้คือทำที่อยู่
+    ให้สะอาดพอจะก๊อปไปแปะต่อได้ ไม่ใช่กู้หน้าที่พัง
+  */
+  useEffect(() => {
+    repairDuplicatedHash();
+    // ต้องดัก hashchange ด้วย เพราะการกดลิงก์ที่เปลี่ยนแค่ hash ของหน้าเดิม
+    // ไม่ได้เปลี่ยน pathname เอฟเฟกต์นี้จึงไม่ถูกเรียกซ้ำเอง
+    window.addEventListener("hashchange", repairDuplicatedHash);
+    return () => window.removeEventListener("hashchange", repairDuplicatedHash);
+  }, [pathname]);
 
   const enter = mobile
     ? { opacity: 1, y: 0 }
