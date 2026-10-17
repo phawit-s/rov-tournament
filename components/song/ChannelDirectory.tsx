@@ -3,11 +3,10 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useAllChannels } from "@/hooks/useChannels";
-import { useOpenQueue } from "@/hooks/useSong";
+import { useNowPlaying } from "@/hooks/useSong";
 import { hasBackend } from "@/lib/backend/firebase";
 import type { Channel } from "@/lib/channel/types";
 import { safeImageSrc } from "@/lib/safe";
-import { splitQueue } from "@/lib/song/store";
 import Cover from "../ui/Cover";
 import { IconSearch } from "../ui/icons";
 import { Badge, EmptyState, Skeleton } from "../ui/kit";
@@ -146,10 +145,15 @@ function Grid({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** ช่องหนึ่งช่อง — ปกเพลงที่กำลังเล่น ชื่อช่อง และชื่อเพลง */
+/**
+ * ช่องหนึ่งช่อง — ปกเพลงที่กำลังเล่น ชื่อช่อง และชื่อเพลง
+ *
+ * ฟังแค่เพลงที่กำลังเล่นใบเดียว ไม่ฟังทั้งคิว — หน้านี้คือหน้าแรกที่ทุกคนเปิด
+ * ฟังทั้งคิวของทุกช่องเท่ากับจ่ายโควตาอ่านเท่าจำนวนเพลงทุกช่องรวมกันต่อการเปิดหน้าหนึ่งครั้ง
+ * และจ่ายซ้ำทุกครั้งที่ใครขอเพลงช่องไหนก็ตาม (เดิมโชว์ "รอเล่น N เพลง" ด้วย ตัดออกเพราะเหตุนี้)
+ */
 function ChannelTile({ channel }: { channel: Channel }) {
-  const { queue } = useOpenQueue(channel.id);
-  const { playing, queued } = splitQueue(queue);
+  const playing = useNowPlaying(channel.id);
   const avatar = channel.avatar ? safeImageSrc(channel.avatar) : null;
 
   return (
@@ -182,11 +186,7 @@ function ChannelTile({ channel }: { channel: Channel }) {
         {channel.name || channel.handle}
       </p>
       <p className="truncate text-sm text-muted">
-        {playing
-          ? playing.title
-          : queued.length > 0
-            ? `รอเล่น ${queued.length} เพลง`
-            : `@${channel.handle}`}
+        {playing ? playing.title : `@${channel.handle}`}
       </p>
     </Link>
   );

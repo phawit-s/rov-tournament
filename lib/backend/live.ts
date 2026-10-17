@@ -20,9 +20,56 @@ type Feed<T> = {
   loaded: boolean;
   listeners: Set<(value: T, loaded: boolean) => void>;
   stop: (() => void) | null;
+  /** เปิดท่อ (หรือเปิดใหม่หลังพัก) */
+  start: () => void;
 };
 
 const feeds = new Map<string, Feed<unknown>>();
+
+/* ------------------------------------------------------------------ *
+ * พักท่อตอนแท็บถูกซ่อนนาน
+ *
+ * Firestore คิดโควตาอ่านทุกครั้งที่ข้อมูลที่ฟังอยู่เปลี่ยน — คนดูเปิดหน้าขอเพลงไว้
+ * แล้วสลับไปดูไลฟ์ในแอป TikTok ทิ้งแท็บค้างไว้ทั้งคืน ทุกเพลงที่ใครขอหรือเปลี่ยน
+ * ก็คิดโควตากับแท็บที่ไม่มีใครมองอยู่ คูณด้วยจำนวนคนดูที่ทำแบบเดียวกัน
+ *
+ * ซ่อนเกิน PAUSE_AFTER_MS ก็ปิดทุกท่อไว้ (ค่าเดิมยังค้างบนจอ) กลับมาค่อยเปิดใหม่
+ * เว็บใช้แคชถาวร กลับมาภายในครึ่งชั่วโมง Firestore จะส่ง (และคิด) แค่ส่วนที่เปลี่ยน
+ *
+ * ตัวเล่นในสตูดิโอกับ widget ไม่ผ่านท่อนี้ (ฟัง Firestore ตรง) จึงไม่โดนพัก —
+ * สองตัวนั้นต้องเดินต่อแม้หน้าต่างถูกย่ออยู่ระหว่างไลฟ์
+ * ------------------------------------------------------------------ */
+
+const PAUSE_AFTER_MS = 60_000;
+let pausedAll = false;
+let pauseTimer: number | null = null;
+let watchingVisibility = false;
+
+function pauseAll() {
+  pausedAll = true;
+  feeds.forEach((feed) => {
+    feed.stop?.();
+    feed.stop = null;
+  });
+}
+
+function resumeAll() {
+  pausedAll = false;
+  feeds.forEach((feed) => {
+    if (!feed.stop && feed.listeners.size > 0) feed.start();
+  });
+}
+
+function watchVisibility() {
+  if (watchingVisibility || typeof document === "undefined") return;
+  watchingVisibility = true;
+  document.addEventListener("visibilitychange", () => {
+    if (pauseTimer != null) window.clearTimeout(pauseTimer);
+    pauseTimer = null;
+    if (document.hidden) pauseTimer = window.setTimeout(pauseAll, PAUSE_AFTER_MS);
+    else if (pausedAll) resumeAll();
+  });
+}
 
 export type LiveSource<T> = (
   onChange: (value: T) => void,
@@ -41,9 +88,30 @@ export function subscribeLive<T>(
   source: LiveSource<T>,
   onChange: (value: T, loaded: boolean) => void,
 ): () => void {
+  watchVisibility();
   let feed = feeds.get(key) as Feed<T> | undefined;
   if (!feed) {
-    feed = { value: empty, loaded: false, listeners: new Set(), stop: null };
+    const created: Feed<T> = {
+      value: empty,
+      loaded: false,
+      listeners: new Set(),
+      stop: null,
+      start: () => {
+        created.stop = source(
+          (value) => {
+            created.value = value;
+            created.loaded = true;
+            created.listeners.forEach((l) => l(value, true));
+          },
+          () => {
+            created.value = empty;
+            created.loaded = true;
+            created.listeners.forEach((l) => l(empty, true));
+          },
+        );
+      },
+    };
+    feed = created;
     feeds.set(key, feed as Feed<unknown>);
   }
   const live = feed;
@@ -52,20 +120,8 @@ export function subscribeLive<T>(
   // คนมาใหม่ได้ค่าล่าสุดทันที ไม่ต้องรอ snapshot รอบถัดไป
   if (live.loaded) onChange(live.value, true);
 
-  if (!live.stop) {
-    live.stop = source(
-      (value) => {
-        live.value = value;
-        live.loaded = true;
-        live.listeners.forEach((l) => l(value, true));
-      },
-      () => {
-        live.value = empty;
-        live.loaded = true;
-        live.listeners.forEach((l) => l(empty, true));
-      },
-    );
-  }
+  // ช่วงพักอยู่ไม่เปิด — resumeAll เปิดให้ตอนแท็บกลับมา
+  if (!live.stop && !pausedAll) live.start();
 
   return () => {
     live.listeners.delete(onChange);

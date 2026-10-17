@@ -145,6 +145,33 @@ export async function fetchPlayingSong(channelId: string): Promise<SongRequest |
 }
 
 /**
+ * เพลงที่กำลังเล่นอยู่ใบเดียวแบบสด — หน้าแรกใช้โชว์ปกของทุกช่อง
+ *
+ * กินโควตาอ่าน 1 ครั้งตอนเริ่ม แล้วอีกไม่กี่ครั้งต่อการเปลี่ยนเพลง
+ * แทนการฟังทั้งคิว (watchSongQueue) ที่กินเท่าจำนวนเพลงตอนเริ่ม และทุกครั้งที่ใครขอเพลง
+ * หน้าแรกมีหลายช่อง และใครแวะเข้าเว็บก็เปิด — ต่างกันเป็นสิบเท่าต่อการเปิดหน้าหนึ่งครั้ง
+ */
+export function watchNowPlaying(
+  channelId: string,
+  onChange: (song: SongRequest | null) => void,
+  onError?: (e: Error) => void,
+): () => void {
+  const db = getDb();
+  if (!db || !channelId) {
+    onChange(null);
+    return () => {};
+  }
+  return onSnapshot(
+    query(collection(db, COL, channelId, SONGS), where("status", "==", "playing"), limit(1)),
+    (snap) => {
+      const d = snap.docs[0];
+      onChange(d ? ({ id: d.id, ...d.data() } as SongRequest) : null);
+    },
+    (err) => onError?.(err),
+  );
+}
+
+/**
  * เปลี่ยนสถานะเพลง
  * กดเล่นแล้วเพลงที่เคยเล่นค้างอยู่ต้องถูกปิดก่อน ไม่งั้น "กำลังเล่น" จะมีหลายเพลง
  */

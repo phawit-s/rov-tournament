@@ -3,11 +3,24 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useLive } from "@/lib/backend/live";
 import { NEUTRAL_PALETTE, loadArtPalette, type ArtPalette } from "@/lib/song/artwork";
-import { watchSongQueue } from "@/lib/song/store";
+import { watchNowPlaying, watchSongQueue } from "@/lib/song/store";
 import type { SongRequest } from "@/lib/song/types";
 import { thumbUrl } from "@/lib/song/youtube";
 
 const NONE: SongRequest[] = [];
+
+/**
+ * เพลงที่กำลังเล่นของช่องแบบสด — ถูกกว่า useOpenQueue มาก (ดู watchNowPlaying)
+ * ใช้ตรงที่ต้องการแค่ "ตอนนี้เล่นอะไร" ไม่ต้องรู้คิวทั้งก้อน เช่นการ์ดช่องในหน้าแรก
+ */
+export function useNowPlaying(channelId: string | null | undefined): SongRequest | null {
+  const { data } = useLive<SongRequest | null>(
+    channelId ? `songs:playing:${channelId}` : null,
+    null,
+    (onChange, onError) => watchNowPlaying(channelId ?? "", onChange, () => onError()),
+  );
+  return data;
+}
 
 /**
  * คิวที่ยังไม่จบของช่อง (กำลังเล่น + รอคิว) แบบสด
