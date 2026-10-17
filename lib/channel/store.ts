@@ -15,6 +15,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { authStore, getDb, hasBackend } from "@/lib/backend/firebase";
+import { restGetDoc } from "@/lib/backend/firestore-rest";
 import { DEFAULT_CHANNEL, type Channel } from "./types";
 
 const COL = "channels";
@@ -296,6 +297,14 @@ export function watchChannel(
     },
     (err) => onError?.(err),
   );
+}
+
+/**
+ * อ่านช่องผ่าน REST ครั้งเดียว — ทางสำรองของ widget ตอนสายสดของ SDK ใช้ไม่ได้
+ * (เหตุผลอยู่ใน lib/backend/firestore-rest.ts) ไม่มีช่องนี้ = null
+ */
+export function fetchChannelOnce(id: string): Promise<Channel | null> {
+  return restGetDoc<Channel>(`${COL}/${id}`);
 }
 
 /**

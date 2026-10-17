@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useHashParam } from "@/hooks/useClient";
 import { useWidgetOptions } from "@/hooks/useWidgetOptions";
 import { hasBackend } from "@/lib/backend/firebase";
-import { watchChannel } from "@/lib/channel/store";
-import { splitQueue, watchSongQueue } from "@/lib/song/store";
+import { fetchChannelOnce, watchChannel } from "@/lib/channel/store";
+import { fetchOpenSongQueue, splitQueue, watchSongQueue } from "@/lib/song/store";
 import type { SongRequest } from "@/lib/song/types";
 import NowPlayingCard, {
   BAR_NEXT_LIMIT,
@@ -17,8 +17,38 @@ import WidgetShell, { WidgetHint } from "@/components/widget/WidgetShell";
 /** รอเซิร์ฟเวอร์นานเท่านี้แล้วยังเงียบ ถือว่าต่อไม่ติด — เน็ตช้าปกติตอบไม่เกินไม่กี่วินาที */
 const STALL_MS = 15_000;
 
+/**
+ * สายสดของ SDK เงียบนานเท่านี้ เริ่มถามผ่าน REST เป็นระยะแทน (เหตุผลใน lib/backend/firestore-rest.ts)
+ * สั้นกว่า STALL_MS พอให้ทางสำรองตอบทันก่อนป้าย "ต่อไม่ได้" จะโผล่
+ */
+const FALLBACK_MS = 6_000;
+
+/**
+ * ทางสำรองถามคิวทุกเท่านี้ — เพลงเปลี่ยนแล้วป้ายตามทันในไม่กี่วินาที
+ * ทุกครั้งกินโควตาอ่านเท่าจำนวนเพลงในคิว (อย่างน้อย 1) ไลฟ์ 3 ชม. คิว 5 เพลง ≈ 11,000 ครั้ง
+ * จ่ายเฉพาะเครื่องที่สายสดใช้ไม่ได้ สายสดกลับมาเมื่อไหร่ก็เลิกถาม
+ */
+const POLL_MS = 5_000;
+
 /** อ้างอิงคงที่ ไม่งั้นคิวว่างจะเป็นอาร์เรย์ใหม่ทุกเรนเดอร์แล้ววนไม่จบ */
 const EMPTY: SongRequest[] = [];
+
+/** ของที่ได้จากทางสำรอง (REST) */
+type RestFeed = {
+  channelId: string;
+  /** มีช่องนี้ไหม — null = ยังถามไม่สำเร็จสักครั้ง */
+  found: boolean | null;
+  queue: SongRequest[];
+  /** ครั้งล่าสุดล้มเพราะอะไร — โชว์บนป้าย "ต่อไม่ได้" ไว้ไล่สาเหตุ */
+  error: string | null;
+};
+
+/** ชื่อกับรุ่นของเบราว์เซอร์แบบสั้น — แอปที่ฝังเบราว์เซอร์ไว้มักใช้รุ่นเก่า บอกไว้ช่วยไล่สาเหตุ */
+function browserTag(): string {
+  if (typeof navigator === "undefined") return "";
+  const m = navigator.userAgent.match(/(Chrome|Firefox|Version)\/(\d+)/);
+  return m ? `${m[1] === "Version" ? "Safari" : m[1]} ${m[2]}` : "";
+}
 
 /**
  * เพลงที่กำลังเล่นกับคิวถัดไป สำหรับวางค้างไว้บนสตรีม
@@ -73,16 +103,37 @@ export default function SongWidget() {
    * widget จะเป็นการ์ดเทาว่างๆ ไปตลอดโดยไม่มีอะไรบอกว่าต่อไม่ติด
    */
   const [stalledFor, setStalledFor] = useState<string | null>(null);
+  /**
+   * ของจากทางสำรอง — null = ไม่ได้ใช้ (สายสดตอบเองได้ หรือยังไม่ถึงเวลา)
+   * แยกจาก queue ของ SDK เพราะตอนต่อไม่ติด SDK ยังส่งคิวว่างจากแคชมาเรื่อยๆ จะทับของจริง
+   */
+  const [rest, setRest] = useState<RestFeed | null>(null);
 
   useEffect(() => {
     if (!channelId) return;
-    const stopQueue = watchSongQueue(channelId, setQueue, {
-      onlyOpen: true,
-      onError: (e) => {
-        setQueue(EMPTY);
-        setQueueError(e.message || "อ่านคิวไม่ได้");
+    /** SDK ได้คำตอบจากเซิร์ฟเวอร์แล้ว = สายสดใช้ได้ เลิกถามทางสำรอง */
+    let live = false;
+    let stopped = false;
+    let poll = 0;
+
+    const stopQueue = watchSongQueue(
+      channelId,
+      (list, fromCache) => {
+        setQueue(list);
+        if (!fromCache && !live) {
+          live = true;
+          window.clearTimeout(poll);
+          setRest(null);
+        }
       },
-    });
+      {
+        onlyOpen: true,
+        onError: (e) => {
+          setQueue(EMPTY);
+          setQueueError(e.message || "อ่านคิวไม่ได้");
+        },
+      },
+    );
     const stopChannel = watchChannel(
       channelId,
       (c) => setChannelFound(!!c),
@@ -90,17 +141,52 @@ export default function SongWidget() {
       () => setChannelFound(true),
     );
     const stall = window.setTimeout(() => setStalledFor(channelId), STALL_MS);
+
+    /*
+      ทางสำรอง — สายสดเงียบเกิน FALLBACK_MS ก็ถามผ่าน REST เป็นระยะจนกว่าสายสดจะกลับมา
+      ถามช่องครั้งเดียวพอ (มี/ไม่มีไม่เปลี่ยนระหว่างไลฟ์) ที่เหลือถามแต่คิว
+      ล้มครั้งไหนเก็บคิวล่าสุดไว้ ไม่ล้างจอทิ้งเพราะเน็ตสะดุดครั้งเดียว
+    */
+    let found: boolean | null = null;
+    const pull = async () => {
+      let queue: SongRequest[] | null = null;
+      let error: string | null = null;
+      try {
+        if (found === null) found = (await fetchChannelOnce(channelId)) !== null;
+        queue = found ? await fetchOpenSongQueue(channelId) : EMPTY;
+      } catch (e) {
+        error = (e as Error).message || "อ่านไม่ได้";
+      }
+      if (stopped || live) return;
+      setRest((prev) => ({
+        channelId,
+        found,
+        queue: queue ?? (prev?.channelId === channelId ? prev.queue : EMPTY),
+        error,
+      }));
+      // ไม่มีช่องนี้ก็ไม่ต้องถามต่อ ป้าย "ไม่พบช่องนี้" ค้างไว้อย่างนั้น
+      if (found !== false) poll = window.setTimeout(pull, POLL_MS);
+    };
+    poll = window.setTimeout(pull, FALLBACK_MS);
+
     return () => {
+      stopped = true;
       stopQueue();
       stopChannel();
       window.clearTimeout(stall);
+      window.clearTimeout(poll);
     };
   }, [channelId]);
 
-  // เซิร์ฟเวอร์ตอบเรื่องช่องเมื่อไหร่ก็นับว่าต่อติด ป้ายหายเองโดยไม่ต้องรีเฟรช source
-  const stalled = stalledFor === channelId && channelFound === null;
+  const fallback = rest?.channelId === channelId ? rest : null;
+  // ทางสำรองถามสำเร็จแล้วอย่างน้อยครั้งหนึ่ง — โชว์ของจากทางนั้นแทนของ SDK ที่ค้างอยู่
+  const viaRest = fallback !== null && fallback.found !== null;
+  const found = channelFound ?? fallback?.found ?? null;
 
-  const { playing, queued } = splitQueue(queue);
+  // ทางไหนตอบเรื่องช่องก็นับว่าต่อติด ป้ายหายเองโดยไม่ต้องรีเฟรช source
+  const stalled = stalledFor === channelId && found === null;
+
+  const { playing, queued } = splitQueue(viaRest ? fallback.queue : queue);
   const next = queued.slice(0, BAR_NEXT_LIMIT);
 
   if (!channelId) {
@@ -119,7 +205,7 @@ export default function SongWidget() {
     ต่อฐานข้อมูลไม่ได้เลย — อาการจะเหมือนจอขาวเปล่าทุกประการ
     ต้องบอกให้รู้ ไม่งั้นคนเปิดจะไปไล่แก้ผิดจุด (นึกว่าลิงก์ผิดหรือ widget พัง)
   */
-  if (!hasBackend || queueError || stalled) {
+  if (!hasBackend || (queueError && !viaRest) || stalled) {
     return (
       <WidgetShell>
         <WidgetHint setup title="ต่อฐานข้อมูลไม่ได้">
@@ -131,13 +217,20 @@ export default function SongWidget() {
           <br />
           ถ้าเครื่องอื่นเปิดได้แต่เครื่องนี้ไม่ได้ ลองปิดส่วนขยายกันโฆษณาเฉพาะเว็บนี้
           หรือเปลี่ยนเครือข่าย (บางที่บล็อก googleapis.com)
+          {/* รายละเอียดไว้ไล่สาเหตุ — แอปที่ฝังเบราว์เซอร์ (TikTok LIVE Studio ฯลฯ) เปิด console ดูไม่ได้ */}
+          {fallback?.error && (
+            <span className="mt-1 block text-[13px] opacity-75">
+              ทางสำรองก็ไม่ผ่าน: {fallback.error}
+              {browserTag() && ` · ${browserTag()}`}
+            </span>
+          )}
         </WidgetHint>
       </WidgetShell>
     );
   }
 
   // รหัสช่องมีมาแต่ไม่มีช่องนั้นจริง = ตั้งค่าผิด บอกให้รู้แทนที่จะปล่อยจอว่าง
-  if (channelFound === false) {
+  if (found === false) {
     return (
       <WidgetShell>
         <WidgetHint setup title="ไม่พบช่องนี้">

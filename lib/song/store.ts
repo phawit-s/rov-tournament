@@ -15,6 +15,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { getDb } from "@/lib/backend/firebase";
+import { restQueryIn } from "@/lib/backend/firestore-rest";
 import type { SongConfig, SongRequest, SongStatus } from "./types";
 
 const COL = "channels";
@@ -94,12 +95,14 @@ export async function submitSongRequest(
  */
 export function watchSongQueue(
   channelId: string,
-  onChange: (list: SongRequest[]) => void,
+  /** fromCache = SDK ตอบจากแคชเพราะยังไม่ได้คำตอบจากเซิร์ฟเวอร์ (ต่อไม่ติด/กำลังต่อ) */
+  onChange: (list: SongRequest[], fromCache: boolean) => void,
   options?: { onlyOpen?: boolean; onError?: (e: Error) => void },
 ): () => void {
   const db = getDb();
   if (!db || !channelId) {
-    onChange(EMPTY);
+    // ไม่มีอะไรให้รอ คิวว่างนี่คือคำตอบจริง ไม่ใช่ของค้างในแคช
+    onChange(EMPTY, false);
     return () => {};
   }
 
@@ -114,10 +117,22 @@ export function watchSongQueue(
     (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as SongRequest);
       list.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
-      onChange(list);
+      onChange(list, snap.metadata.fromCache);
     },
     (err) => options?.onError?.(err),
   );
+}
+
+/**
+ * คิวที่ยังไม่จบ อ่านผ่าน REST ครั้งเดียว — ทางสำรองของ widget ตอนสายสดของ SDK ใช้ไม่ได้
+ * (เหตุผลอยู่ใน lib/backend/firestore-rest.ts) เงื่อนไขต้องตรงกับ onlyOpen ข้างบน
+ */
+export async function fetchOpenSongQueue(channelId: string): Promise<SongRequest[]> {
+  const list = await restQueryIn<SongRequest>(`${COL}/${channelId}`, SONGS, "status", [
+    "queued",
+    "playing",
+  ]);
+  return list.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
 }
 
 /**

@@ -53,6 +53,15 @@ export function getDb(): Firestore | null {
     browser source ทุกตัวใน OBS ใช้ที่เก็บข้อมูลก้อนเดียวกัน โหมดหลายแท็บจึงให้
     source ตัวเดียวเป็นคนต่อเน็ตแทนทุกตัว ถ้าตัวนั้นถูกพัก/ค้าง ตัวอื่นก็ค้างตาม
     ทั้งที่ widget แค่โชว์ของสด แคชถาวรไม่ได้ช่วยอะไรมันเลย
+
+    widget ยังบังคับ long-polling ด้วย (ต.ค. 2569) — ค่าปริยายของ SDK คือเปิดสายค้างไว้
+    ให้เซิร์ฟเวอร์ส่งข้อมูลลงมาเรื่อยๆ ซึ่งแอนติไวรัสที่สแกน HTTPS / proxy บางตัว "เก็บไว้ก่อน"
+    แบบไม่มีกำหนด ข้อมูลจึงไม่เคยถึงหน้าเว็บ และ SDK ไม่โยน error ให้ด้วย (ตรวจอัตโนมัติ
+    ของ SDK จับกรณีนี้ไม่ได้ทุกครั้ง) · อาการที่เจอจริง: widget บนเครื่องสตรีมเมอร์ขึ้น
+    "ต่อฐานข้อมูลไม่ได้" ทั้งที่ลิงก์เดียวกันเปิดจากเครื่องอื่นได้ปกติ
+    long-polling ปิดคำขอทุกครั้งที่ได้ข้อมูล ผ่านตัวกลางพวกนั้นได้ แลกกับช้าลงนิดหน่อย
+    ซึ่ง widget ที่ฟังเอกสารไม่กี่ใบไม่รู้สึก — หน้าอื่นยังใช้แบบปกติ
+    (ห้ามตั้ง experimentalAutoDetectLongPolling คู่กัน SDK โยน error ตอนเริ่ม)
   */
   const widget = /\/widget\//.test(window.location.pathname);
   try {
@@ -62,6 +71,7 @@ export function getDb(): Firestore | null {
         : persistentLocalCache({
             tabManager: persistentMultipleTabManager(),
           }),
+      ...(widget ? { experimentalForceLongPolling: true } : {}),
     });
   } catch {
     // เบราว์เซอร์บางตัวปิด IndexedDB (โหมดส่วนตัวบางรุ่น) — ใช้แบบไม่มีแคชแทน
