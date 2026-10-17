@@ -7,12 +7,18 @@
   "main": "tiktok-song-bridge.mjs",
   "scripts": {
     "start": "node tiktok-song-bridge.mjs",
-    "test:worker": "node tiktok-song-bridge.mjs --test"
+    "test:worker": "node tiktok-song-bridge.mjs --test",
+    "app": "node app.mjs",
+    "build:exe": "node build/build-exe.mjs"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "tiktok-live-connector": "^2.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "postject": "^1.0.0-alpha.6"
   }
 }

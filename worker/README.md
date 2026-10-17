@@ -240,8 +240,34 @@ Worker ตัวนี้ยังเป็นทางเข้าของค�
 
 ```http
 POST /?ingest=1
-Authorization: Bearer <INGEST_TOKEN>
+Authorization: Bearer <INGEST_TOKEN หรือรหัสต่อช่อง k1.<รุ่น>.<ลายเซ็น>>
 ```
+
+กุญแจมีสองแบบ
+
+- **`INGEST_TOKEN`** — กุญแจกลาง เขียนได้ทุกช่อง ใช้กับสะพานแบบคำสั่งของเจ้าของระบบ
+  หรือเครื่องมืออื่นอย่าง Social Stream Ninja · **ห้ามแจกสตรีมเมอร์**
+- **รหัสต่อช่อง** — โปรแกรม `kiew-bridge.exe` ที่แจกสตรีมเมอร์ใช้ตัวนี้ เขียนได้เฉพาะช่องที่ออกรหัสให้
+  (`channelId` ต้องเป็นไอดีเอกสาร ไม่รับ handle) ได้จาก `?pair=1` ข้างล่าง
+
+### ออกรหัสต่อช่อง (`?pair=1`)
+
+หน้าสตูดิโอเรียกตอนเจ้าของช่องกด “สร้างรหัสเชื่อมต่อ” (`components/widget/ChatBridgePanel.tsx`)
+
+```http
+POST /?pair=1
+Authorization: Bearer <Firebase ID token ของคนที่กด>
+{ "channelId": "...", "rotate": false }
+→ { "ok": true, "channelId", "handle", "gen", "key": "k1.<gen>.<ลายเซ็น>" }
+```
+
+- รหัส = HMAC-SHA256(`INGEST_TOKEN`, `chat:<ไอดีช่อง>:<รุ่น>`) ตัด 32 ตัว — ไม่ได้เก็บไว้ที่ไหน
+  Worker คำนวณซ้ำแล้วเทียบ จึงปฏิเสธรหัสปลอมได้ก่อนแตะ Firestore
+- รุ่นเก็บที่ `chatKeyGen` ในเอกสารช่อง `rotate: true` = ขยับรุ่น รหัสเก่า (`key-revoked`) ใช้ไม่ได้ทันที
+- สิทธิ์ตัดสินด้วย `firestore.rules` เอง: Worker เขียน `chatKeyGen` **ด้วยโทเคนของคนที่กด**
+  เขียนผ่าน = เป็นเจ้าของช่องหรือผู้ดูแล (ไม่ผ่าน = `not-owner`) ไม่ต้องใช้บัญชีบอท
+- ต้องมี `INGEST_TOKEN`, `FIREBASE_API_KEY`, `FIREBASE_PROJECT` · จำกัด 10 ครั้ง/นาที/IP
+- **เปลี่ยน `INGEST_TOKEN` = รหัสของทุกช่องเป็นโมฆะพร้อมกัน** สตรีมเมอร์ทุกคนต้องสร้างรหัสใหม่
 
 | ฟิลด์ | จำเป็น | ความหมาย |
 | --- | --- | --- |
@@ -260,7 +286,8 @@ Authorization: Bearer <INGEST_TOKEN>
 
 | `reason` | แปลว่า |
 | --- | --- |
-| `ingest-disabled` / `bad-token` | ยังไม่ได้ตั้ง `INGEST_TOKEN` หรือส่งมาไม่ตรง |
+| `ingest-disabled` / `bad-token` | ยังไม่ได้ตั้ง `INGEST_TOKEN` หรือส่งมาไม่ตรง (รวมรหัสต่อช่องที่ไม่ใช่ของช่องนี้) |
+| `key-revoked` | รหัสต่อช่องของรุ่นก่อน — เจ้าของกดสร้างรหัสใหม่ไปแล้ว |
 | `not-a-command` | บรรทัดแชทธรรมดา ไม่ได้ขอเพลง (ไม่ใช่ความผิดพลาด) |
 | `channel-not-found` / `songs-closed` | ช่องไม่มีอยู่ หรือปิดรับคำขอเพลงอยู่ |
 | `no-match` / `video-not-found` | ค้นไม่เจอ หรือคลิปตามลิงก์เปิดไม่ได้ |

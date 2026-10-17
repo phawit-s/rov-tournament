@@ -252,6 +252,11 @@ export async function pushChannelAs(channel: Channel, targetId: string): Promise
   const slim: Channel = { ...channel, id: targetId };
   // รูปใหญ่เกินโควตา doc ก็ตัดทิ้ง
   if (slim.cover && slim.cover.length > 500_000) delete slim.cover;
+  /* รุ่นของรหัสสะพานแชทเป็นของ Worker — ร่างที่เปิดค้างไว้ถือค่าตอนโหลด ถ้าเขียนกลับ
+     จะย้อนรุ่นไปทับตอนที่เจ้าของเพิ่งกดสร้างรหัสใหม่ — รหัสใหม่ใช้ไม่ได้ทันที
+     แถมรหัสเก่าที่ตั้งใจยกเลิก (เช่นหลุดขึ้นจอไลฟ์) กลับมาใช้ได้อีก
+     ตัดทิ้งไว้ merge จะคงค่าบนเซิร์ฟเวอร์ไว้ */
+  delete slim.chatKeyGen;
   await setDoc(
     doc(db, COL, targetId),
     { ...slim, isPublic: true, syncedAt: serverTimestamp() },

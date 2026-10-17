@@ -236,14 +236,19 @@ function plainFields(fields) {
  *
  * รับสองแบบเพราะสตรีมเมอร์จำ handle ของตัวเองได้ (มันคือชื่อในลิงก์ที่แจกคนดู)
  * แต่จำไอดีเอกสารที่เป็นตัวอักษรสุ่มไม่ได้ ให้ตั้งค่าสะพานผิดยากขึ้นหน่อย
+ *
+ * คืน { error: "db-quota" } ตอนโควตาอ่านของ Firebase หมด (แพ็กเกจฟรีอ่านได้วันละ 50,000)
+ * ต้องแยกออกมา ไม่งั้นจะตกเป็น "หาช่องไม่เจอ" ทั้งที่ช่องอยู่ครบ — เคยพาคนไปไล่แก้ผิดที่มาแล้ว
  */
 async function loadChannel(env, token, ref) {
   const auth = { Authorization: `Bearer ${token}` };
 
-  const direct = await fetch(
-    `${docsRoot(env)}/channels/${encodeURIComponent(ref)}`,
-    { headers: auth, signal: AbortSignal.timeout(10000) },
-  ).then((r) => r.json());
+  const res = await fetch(`${docsRoot(env)}/channels/${encodeURIComponent(ref)}`, {
+    headers: auth,
+    signal: AbortSignal.timeout(10000),
+  });
+  if (res.status === 429) return { error: "db-quota" };
+  const direct = await res.json().catch(() => null);
   if (direct?.fields) {
     return { id: ref, data: plainFields(direct.fields) };
   }
@@ -402,6 +407,125 @@ const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 /** แพลตฟอร์มที่ยอมรับ — ต้องตรงกับที่ firestore.rules ยอมให้บอทเขียนแทน */
 const PLATFORMS = ["tiktok", "youtube", "twitch"];
 
+const bearerOf = (request) => {
+  const header = request.headers.get("Authorization") || "";
+  return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+};
+
+/* ------------------------------------------------------------------ *
+ * รหัสเชื่อมต่อต่อช่อง — ให้โปรแกรมสะพานที่แจกสตรีมเมอร์
+ *
+ * ทำไมไม่แจก INGEST_TOKEN ไปเลย: มันเป็นกุญแจกลาง เขียนคิวได้ทุกช่อง
+ * ฝังในโปรแกรมที่แจกออกไป = ใครแกะไฟล์ได้ก็ยัดเพลงเข้าช่องไหนก็ได้
+ *
+ * รหัสต่อช่องคือ HMAC(INGEST_TOKEN, "chat:<ไอดีช่อง>:<รุ่น>") — ไม่ต้องเก็บรหัสไว้ที่ไหน
+ * Worker คำนวณซ้ำแล้วเทียบได้เลย ส่วน "รุ่น" (chatKeyGen ในเอกสารช่อง สาธารณะได้
+ * ไม่ใช่ความลับ) มีไว้ยกเลิกรหัสเก่า: เจ้าของกดสร้างใหม่ = รุ่นขยับ = รหัสเดิมใช้ไม่ได้
+ * เปลี่ยน INGEST_TOKEN เมื่อไหร่ รหัสของทุกช่องเป็นโมฆะพร้อมกัน
+ *
+ * รูปที่โปรแกรมส่งมาใน Authorization: "k1.<รุ่น>.<ลายเซ็น 32 ตัว>"
+ * ------------------------------------------------------------------ */
+
+const CHAT_KEY = /^k1\.(\d{1,6})\.([A-Za-z0-9_-]{32})$/;
+
+async function chatKeyFor(env, channelId, gen) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(env.INGEST_TOKEN),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = new Uint8Array(
+    await crypto.subtle.sign("HMAC", key, enc.encode(`chat:${channelId}:${gen}`)),
+  );
+  let bin = "";
+  for (const b of sig) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "").slice(0, 32);
+}
+
+/**
+ * ออกรหัสเชื่อมต่อให้ช่อง — หน้าสตูดิโอเรียกตอนเจ้าของกดปุ่ม
+ *
+ *   POST ?pair=1
+ *   Authorization: Bearer <Firebase ID token ของคนที่กด>
+ *   JSON { channelId, rotate? }   rotate = ยกเลิกรหัสเก่า ออกรุ่นใหม่
+ *   ตอบ { ok, channelId, handle, gen, key }
+ *
+ * ทุกอย่างทำในนามคนที่กด ไม่ใช่บอท: ให้ Google ตรวจโทเคน (accounts:lookup)
+ * แล้วให้ firestore.rules เป็นคนตัดสินสิทธิ์ — เขียน chatKeyGen ได้ = เป็นเจ้าของ/ผู้ดูแล
+ * ไม่ต้องเขียนกติกาสิทธิ์ซ้ำในนี้ และไม่ต้องตั้งบอทก็ออกรหัสได้
+ */
+export async function handleChatPair(request, env, cors, helpers) {
+  const { reply, allow } = helpers;
+  const bad = (reason, extra) => reply({ ok: false, reason, ...extra }, cors);
+
+  if (request.method !== "POST") return bad("method-not-allowed");
+  if (!env.INGEST_TOKEN) return bad("ingest-disabled");
+  if (!env.FIREBASE_API_KEY || !env.FIREBASE_PROJECT) return bad("no-bot");
+
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  if (!allow(`pair:${ip}`, 10)) return bad("rate-limited");
+
+  const idToken = bearerOf(request);
+  if (!idToken) return bad("signed-out");
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return bad("bad-json");
+  }
+  const channelId = str(body?.channelId);
+  if (!channelId) return bad("no-channel");
+
+  const who = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.FIREBASE_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken }),
+      signal: AbortSignal.timeout(10000),
+    },
+  )
+    .then((r) => r.json())
+    .catch(() => null);
+  const uid = who?.users?.[0]?.localId;
+  if (!uid) return bad("signed-out");
+
+  // ไอดีเอกสารเท่านั้น (ไม่รับ handle) — รหัสผูกกับไอดี ซึ่งไม่เปลี่ยนแม้เจ้าของเปลี่ยน handle
+  const channel = await loadChannel(env, idToken, channelId);
+  if (channel?.error) return bad(channel.error);
+  if (!channel || channel.id !== channelId) return bad("channel-not-found");
+
+  /* ขอเขียน chatKeyGen ด้วยโทเคนของคนที่กด — ผ่าน = มีสิทธิ์จัดการช่องนี้
+     ไม่หมุนรุ่นก็ยังเขียนค่าเดิมซ้ำ เพื่อใช้กติกาเป็นตัวตรวจสิทธิ์ทุกครั้ง */
+  const gen = num(channel.data?.chatKeyGen) + (body?.rotate === true ? 1 : 0);
+  const res = await fetch(
+    `${docsRoot(env)}/channels/${encodeURIComponent(channel.id)}?updateMask.fieldPaths=chatKeyGen`,
+    {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ fields: { chatKeyGen: { integerValue: String(gen) } } }),
+      signal: AbortSignal.timeout(10000),
+    },
+  );
+  if (res.status === 403) return bad("not-owner");
+  if (!res.ok) return bad(`write-failed-${res.status}`);
+
+  return reply(
+    {
+      ok: true,
+      channelId: channel.id,
+      handle: channel.data?.handle ?? null,
+      gen,
+      key: `k1.${gen}.${await chatKeyFor(env, channel.id, gen)}`,
+    },
+    cors,
+  );
+}
+
 /**
  * @param helpers { reply, allow, botLogin } — ยืมจาก slip-verify.js
  *   botLogin ต้องเป็นตัวเดียวกับที่นั่นใช้ จะได้แชร์ token ที่แคชไว้ ไม่ต้อง
@@ -415,9 +539,7 @@ export async function handleSongIngest(request, env, cors, helpers) {
 
   // ไม่ตั้ง token = ปิดทางนี้ไว้ ไม่ใช่เปิดให้ใครก็ได้
   if (!env.INGEST_TOKEN) return bad("ingest-disabled");
-  const header = request.headers.get("Authorization") || "";
-  const given = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!safeEqual(given, env.INGEST_TOKEN)) return bad("bad-token");
+  const given = bearerOf(request);
 
   let body;
   try {
@@ -429,6 +551,19 @@ export async function handleSongIngest(request, env, cors, helpers) {
 
   const ref = str(body.channelId) || str(body.handle);
   if (!ref) return bad("no-channel");
+
+  /* ยืนยันตัวได้สองแบบ
+       INGEST_TOKEN — กุญแจกลาง เขียนได้ทุกช่อง (ของเจ้าของระบบ/เครื่องมืออย่าง Social Stream Ninja)
+       รหัสต่อช่อง — โปรแกรมสะพานที่แจกสตรีมเมอร์ เขียนได้เฉพาะช่องที่รหัสออกให้
+     เช็คลายเซ็นของรหัสก่อนแตะ Firestore เสมอ รหัสปลอมจึงไม่ทำให้บอทต้องล็อกอินหรืออ่านอะไร */
+  let scoped = null;
+  if (!safeEqual(given, env.INGEST_TOKEN)) {
+    const m = CHAT_KEY.exec(given);
+    if (!m) return bad("bad-token");
+    const gen = Number(m[1]);
+    if (!safeEqual(m[2], await chatKeyFor(env, ref, gen))) return bad("bad-token");
+    scoped = { channelId: ref, gen };
+  }
 
   const platform = (str(body.platform) || "tiktok").toLowerCase();
   if (!PLATFORMS.includes(platform)) return bad("bad-platform");
@@ -468,7 +603,12 @@ export async function handleSongIngest(request, env, cors, helpers) {
   }
 
   const channel = await loadChannel(env, token, ref);
+  if (channel?.error) return bad(channel.error);
   if (!channel) return bad("channel-not-found");
+  // รหัสของรุ่นก่อน = เจ้าของกด "สร้างรหัสใหม่" ไปแล้ว (เช่นรหัสหลุดขึ้นจอไลฟ์)
+  if (scoped && (channel.id !== scoped.channelId || num(channel.data?.chatKeyGen) !== scoped.gen)) {
+    return bad("key-revoked");
+  }
 
   const cfg = channel.data?.songs ?? {};
   // ปิดรับแล้วต้องปิดจริง — กติกาฝั่ง Firestore ก็เช็คซ้ำอีกชั้นอยู่แล้ว

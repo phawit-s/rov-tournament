@@ -33,6 +33,13 @@ export type Channel = {
   /** ระบบขอเพลง YouTube — ช่องเก่าที่ยังไม่มีฟิลด์นี้ให้ถือว่าปิดอยู่ */
   songs?: SongConfig;
 
+  /**
+   * รุ่นของรหัสเชื่อมต่อโปรแกรมสะพานแชท — Worker เป็นคนเขียน (?pair=1) ไม่มีที่ไหนในเว็บแก้
+   * ขยับเมื่อเจ้าของกด "สร้างรหัสใหม่" รหัสรุ่นก่อนจึงใช้ไม่ได้ (ดู worker/song-ingest.js)
+   * ไม่ใช่ความลับ ตัวรหัสคำนวณจากกุญแจที่อยู่ใน Worker เท่านั้น
+   */
+  chatKeyGen?: number;
+
   ownerUid: string;
   ownerEmail?: string;
   createdAt: string;

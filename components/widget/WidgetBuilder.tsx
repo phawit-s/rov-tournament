@@ -13,6 +13,7 @@ import Panel from "../ui/Panel";
 import LinkRow from "../ui/LinkRow";
 import MiniBtn, { MiniLink } from "../ui/MiniBtn";
 import { EmptyState, Input, Label, Skeleton } from "../ui/kit";
+import ChatBridgePanel from "./ChatBridgePanel";
 
 type ShapeDef = {
   shape: WidgetShape;
@@ -358,6 +359,9 @@ export default function WidgetBuilder() {
           ))}
         </ol>
       </section>
+
+      {/* key = รีเซ็ตชื่อ TikTok กับรหัสที่ออกไว้ทุกครั้งที่สลับช่อง */}
+      <ChatBridgePanel key={activeChannel.id} channel={activeChannel} />
     </div>
   );
 }

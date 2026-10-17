@@ -1,0 +1,61 @@
+# สร้างโปรแกรมสะพานแชท TikTok (kiew-bridge.exe) แล้วแนบขึ้น GitHub Releases
+#
+# ออกรุ่นใหม่: แก้ "version" ใน bridge/package.json แล้ว push tag ที่ตรงกัน
+#   git tag bridge-v1.0.0 && git push origin bridge-v1.0.0
+#
+# สตูดิโอลิงก์ไปที่ releases/latest/download/kiew-bridge-windows.zip
+# (components/widget/ChatBridgePanel.tsx) — รุ่นใหม่ล่าสุดจึงถูกแจกเองทันทีที่ออก
+# กดรันเองจากแท็บ Actions ได้ด้วย (workflow_dispatch) ได้ไฟล์เป็น artifact ไม่ออก release
+
+name: Build chat bridge (Windows)
+
+on:
+  push:
+    tags: ["bridge-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: bridge
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node ตัวนี้คือ Node ที่ถูกฝังอยู่ในโปรแกรม — ใช้ LTS
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: bridge/package-lock.json
+
+      - run: npm ci
+      - run: npm run build:exe
+
+      # tag ต้องตรงกับเลขรุ่นในโปรแกรม ไม่งั้นหน้าโปรแกรมโชว์รุ่นผิดจากที่ประกาศ
+      - name: Check version matches tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          want="${GITHUB_REF_NAME#bridge-v}"
+          have="$(node -p "require('./package.json').version")"
+          [ "$want" = "$have" ] || { echo "tag $GITHUB_REF_NAME แต่ package.json เป็น $have"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kiew-bridge-windows
+          path: bridge/dist/kiew-bridge-windows.zip
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/kiew-bridge-windows.zip \
+            --title "สะพานแชท TikTok ${GITHUB_REF_NAME#bridge-}" \
+            --notes "ดาวน์โหลด kiew-bridge-windows.zip แตกไฟล์ แล้วเปิด kiew-bridge.exe — วิธีใช้อยู่ที่หน้าสตูดิโอ → ลิงก์สำหรับ OBS"

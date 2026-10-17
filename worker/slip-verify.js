@@ -25,9 +25,10 @@
  *   GET  ?health=1   บอกว่าตั้งค่าครบไหม
  *   GET  ?search=... ค้นเพลงบน YouTube (คีย์อยู่ฝั่งนี้)
  *   POST ?ingest=1   รับคำขอเพลงจากแชทไลฟ์ (song-ingest.js)
+ *   POST ?pair=1     ออกรหัสเชื่อมต่อต่อช่องให้โปรแกรมสะพาน (song-ingest.js)
  */
 
-import { handleSongIngest } from "./song-ingest.js";
+import { handleChatPair, handleSongIngest } from "./song-ingest.js";
 
 /* ------------------------------------------------------------------ *
  * ตาราง adapter ของผู้ให้บริการ
@@ -853,6 +854,11 @@ const handler = {
         มาจากไอพีเดียว (เครื่องสตรีมเมอร์) ถ้านับรวมกับคนโอนจะเต็มโควตา
         ตั้งแต่คนที่สาม — ตัวมันมีเพดานของตัวเองอยู่แล้ว (MAX_INGEST_PER_MIN)
       */
+      // ออกรหัสเชื่อมต่อให้โปรแกรมสะพาน — มีเพดานต่อ IP ของตัวเองข้างใน
+      if (params.get("pair") === "1") {
+        return handleChatPair(request, env, cors, { reply, allow });
+      }
+
       if (params.get("ingest") === "1") {
         return handleSongIngest(request, env, cors, {
           reply,
