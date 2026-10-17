@@ -87,7 +87,7 @@ export default function SongRequestView() {
 
 function RequestScreen({ channel }: { channel: Channel }) {
   const config = { ...DEFAULT_SONG_CONFIG, ...channel.songs };
-  const { queue, loaded } = useOpenQueue(config.enabled ? channel.id : null);
+  const { queue, loaded } = useOpenQueue(config.enabled ? channel.id : null, "cheap");
   const { playing, queued } = splitQueue(queue);
   const avatar = channel.avatar ? safeImageSrc(channel.avatar) : null;
   const live = channel.live?.isLive ? channel.live.url : null;

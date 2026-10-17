@@ -401,8 +401,8 @@ export async function setChannelLive(channelId: string, isLive: boolean): Promis
   });
 }
 
-/** ของที่อยู่ใต้ช่อง — คิว/ประวัติเพลง และโดเนทสมัยก่อนที่ยังค้างอยู่บางช่อง */
-const CHANNEL_CHILDREN = ["songRequests", "donations"] as const;
+/** ของที่อยู่ใต้ช่อง — คิว/ประวัติเพลง คิวสรุป (live) และโดเนทสมัยก่อนที่ยังค้างอยู่บางช่อง */
+const CHANNEL_CHILDREN = ["songRequests", "donations", "live"] as const;
 
 /**
  * ลบช่องทั้งใบ พร้อมคิวและประวัติเพลงของช่อง — ย้อนกลับไม่ได้

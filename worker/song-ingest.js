@@ -282,8 +282,35 @@ async function loadChannel(env, token, ref) {
  *
  * ขอเฉพาะฟิลด์ที่ใช้ตัดสิน (select) ไม่ดึงทั้งใบ เพราะชื่อเพลงกับข้อความ
  * ของทั้งคิวรวมกันแล้วใหญ่โดยไม่จำเป็น ตรงนี้อยู่ในเส้นทางที่คนดูรออยู่
+ * (select ลดขนาด แต่ไม่ลดค่าอ่าน — Firestore คิดรายเอกสาร จึงลองคิวสรุปก่อน)
  */
+/** คิวสรุปไม่มีใครเขียนนานเกินนี้ = ตัวเล่นปิดแล้ว — ต้องตรงกับ STALE_MS ใน lib/song/snapshot.ts */
+const SNAPSHOT_STALE_MS = 25 * 60_000;
+
 async function loadOpenQueue(env, token, channelId) {
+  /* คิวสรุปก่อน (1 read) — ตัวเล่นในสตูดิโอเขียนไว้ระหว่างไลฟ์ (lib/song/snapshot.ts)
+     คำขอจากแชทมาถี่ตอนไลฟ์ อ่านคิวจริงทุกครั้ง = จ่ายเท่าจำนวนเพลงต่อหนึ่งคำขอ
+     ใบไม่มี/เก่า/ปิดแล้ว (ตัวเล่นไม่ได้เปิด) ค่อยอ่านคิวจริงแบบเดิม */
+  try {
+    const snapRes = await fetch(
+      `${docsRoot(env)}/channels/${encodeURIComponent(channelId)}/live/queue`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) },
+    );
+    if (snapRes.ok) {
+      const snap = plainFields((await snapRes.json())?.fields);
+      const at = Date.parse(snap.updatedAt);
+      const fresh =
+        snap.v === 1 &&
+        !snap.closed &&
+        Array.isArray(snap.songs) &&
+        Number.isFinite(at) &&
+        Date.now() - at < SNAPSHOT_STALE_MS;
+      if (fresh) return snap.songs;
+    }
+  } catch {
+    /* อ่านใบสรุปไม่ได้ก็ใช้คิวจริง */
+  }
+
   const res = await fetch(
     `${docsRoot(env)}/channels/${encodeURIComponent(channelId)}:runQuery`,
     {

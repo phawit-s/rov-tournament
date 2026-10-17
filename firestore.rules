@@ -215,6 +215,19 @@ service cloud.firestore {
       // เจ้าของห้ามยกช่องให้คนอื่นด้วยการแก้ ownerUid ระหว่างทาง
       // ส่วนผู้ดูแลระบบแก้ของใครก็ได้ (ใช้ตอนช่วยตั้งค่าให้ผู้จัด)
       allow update: if (isChannelOwner() && claimsChannel()) || isAdmin();
+
+      /*
+        คิวสรุป (live/queue) — ตัวเล่นในสตูดิโอของเจ้าของช่องเขียน ใครก็อ่าน
+        คนดู widget และ Worker อ่านใบเดียวนี้แทนการฟังคิวทั้งก้อน เพื่อประหยัดโควตาอ่าน
+        (ดู lib/song/snapshot.ts) ข้อมูลชุดเดียวกับ songRequests ที่เปิดอ่านสาธารณะอยู่แล้ว
+        ดูเจ้าของจาก "ช่องแม่" — ฟังก์ชันของช่องข้างบนดู resource ซึ่งในนี้คือใบสรุป ไม่ใช่ช่อง
+      */
+      match /live/{docId} {
+        allow read: if true;
+        allow write: if request.auth != null
+          && (get(/databases/$(database)/documents/channels/$(channelId)).data.ownerUid == request.auth.uid
+              || isAdmin());
+      }
       allow delete: if canManageChannel();
 
       match /donations/{donationId} {

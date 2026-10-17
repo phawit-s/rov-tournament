@@ -5,7 +5,8 @@ import { useHashParam } from "@/hooks/useClient";
 import { useWidgetOptions } from "@/hooks/useWidgetOptions";
 import { hasBackend } from "@/lib/backend/firebase";
 import { fetchChannelOnce, watchChannel } from "@/lib/channel/store";
-import { fetchOpenSongQueue, fetchPlayingSong, splitQueue, watchSongQueue } from "@/lib/song/store";
+import { fetchQueueSnapshot, isFresh, watchOpenQueueCheap } from "@/lib/song/snapshot";
+import { fetchOpenSongQueue, fetchPlayingSong, splitQueue } from "@/lib/song/store";
 import type { SongRequest } from "@/lib/song/types";
 import NowPlayingCard, {
   BAR_NEXT_LIMIT,
@@ -38,6 +39,9 @@ const PLAYING_POLL_MS = 15_000;
  * ราว 4 + (จำนวนเพลง ÷ 2) ครั้งต่อนาทีต่อ widget แทน 12 × จำนวนเพลง ของรุ่นแรก
  */
 const FULL_POLL_MS = 120_000;
+
+/** คิวสรุปไม่สด (ตัวเล่นปิดอยู่) แล้วเว้นไม่ถามใบสรุปนานเท่านี้ ค่อยลองใหม่ */
+const SNAPSHOT_RETRY_MS = 5 * 60_000;
 
 /** ล้มติดกันก็ถอยห่างขึ้นเรื่อยๆ ไม่ยิงซ้ำรัวๆ ใส่ฐานข้อมูลที่กำลังมีปัญหา (เช่นโควตาหมด) */
 const MAX_BACKOFF_MS = 5 * 60_000;
@@ -128,7 +132,8 @@ export default function SongWidget() {
     let stopped = false;
     let poll = 0;
 
-    const stopQueue = watchSongQueue(
+    // คิวสรุปใบเดียวถ้าตัวเล่นเปิดอยู่ ไม่งั้นคิวจริง (lib/song/snapshot.ts) — widget เปิดค้างทั้งไลฟ์
+    const stopQueue = watchOpenQueueCheap(
       channelId,
       (list, fromCache) => {
         setQueue(list);
@@ -138,12 +143,9 @@ export default function SongWidget() {
           setRest(null);
         }
       },
-      {
-        onlyOpen: true,
-        onError: (e) => {
-          setQueue(EMPTY);
-          setQueueError(e.message || "อ่านคิวไม่ได้");
-        },
+      (e) => {
+        setQueue(EMPTY);
+        setQueueError(e.message || "อ่านคิวไม่ได้");
       },
     );
     const stopChannel = watchChannel(
@@ -166,15 +168,24 @@ export default function SongWidget() {
     let lastFull = 0;
     let playingId: string | null = null;
     let failures = 0;
+    /** คิวสรุปไม่สดเมื่อไหร่ เว้นไม่ถามใบนั้นสักพัก — ไม่งั้นทุกรอบจ่ายสองครั้ง (ใบสรุป + เพลงที่เล่น) */
+    let skipSnapshotUntil = 0;
     const pull = async () => {
       let queue: SongRequest[] | null = null;
       let playing: SongRequest | null = null;
       let error: string | null = null;
       try {
         if (found === null) found = (await fetchChannelOnce(channelId)) !== null;
+        const snap =
+          found && Date.now() >= skipSnapshotUntil ? await fetchQueueSnapshot(channelId) : null;
         if (!found) {
           queue = EMPTY;
+        } else if (snap && isFresh(snap)) {
+          // ตัวเล่นเปิดอยู่ — ใบเดียวได้ทั้งคิว (1 read) ไม่ต้องถามเพลงที่เล่นแยก
+          queue = snap.songs;
+          playingId = queue.find((s) => s.status === "playing")?.id ?? null;
         } else {
+          if (Date.now() >= skipSnapshotUntil) skipSnapshotUntil = Date.now() + SNAPSHOT_RETRY_MS;
           let full = Date.now() - lastFull >= FULL_POLL_MS;
           if (!full) {
             playing = await fetchPlayingSong(channelId);

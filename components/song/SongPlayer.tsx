@@ -25,6 +25,12 @@ import {
   type LockState,
 } from "@/lib/song/player-lock";
 import { pickFiller } from "@/lib/song/filler";
+import {
+  HEARTBEAT_MS,
+  closeQueueSnapshot,
+  snapshotKey,
+  writeQueueSnapshot,
+} from "@/lib/song/snapshot";
 import { saveFillerList, setSongsEnabled } from "@/lib/song/config";
 import {
   addSongToQueue,
@@ -143,6 +149,8 @@ export function SongPlayerCore({
     120 ใบล่าสุดครอบคลุมเกินพอ (กองสำรองมีได้ไม่เกิน 100 เพลง หลบซ้ำแค่ครึ่งกอง)
   */
   const [openSongs, setOpenSongs] = useState<SongRequest[]>(EMPTY);
+  /** คิวที่ถืออยู่มาจากเซิร์ฟเวอร์จริง (ไม่ใช่แคช) — ใช้ตัดสินว่าประกาศคิวสรุปได้ไหม */
+  const [openFresh, setOpenFresh] = useState(false);
   const [recentDone, setRecentDone] = useState<SongRequest[]>(EMPTY);
   const queue = useMemo(() => {
     if (recentDone.length === 0) return openSongs;
@@ -209,10 +217,20 @@ export function SongPlayerCore({
   /* ---------- คิว ---------- */
   useEffect(() => {
     if (!channelId) return;
-    const stopOpen = watchSongQueue(channelId, setOpenSongs, {
-      onlyOpen: true,
-      onError: () => setOpenSongs(EMPTY),
-    });
+    const stopOpen = watchSongQueue(
+      channelId,
+      (list, fromCache) => {
+        setOpenSongs(list);
+        setOpenFresh(!fromCache);
+      },
+      {
+        onlyOpen: true,
+        onError: () => {
+          setOpenSongs(EMPTY);
+          setOpenFresh(false);
+        },
+      },
+    );
     const stopDone = watchRecentFinished(channelId, setRecentDone, 120, () =>
       setRecentDone(EMPTY),
     );
@@ -221,6 +239,46 @@ export function SongPlayerCore({
       stopDone();
     };
   }, [channelId]);
+
+  /* ---------- คิวสรุป ----------
+     คนดู widget และ Worker อ่านใบเดียวนี้แทนการฟังคิวทั้งก้อน (เหตุผลใน lib/song/snapshot.ts)
+     เขียนเฉพาะแท็บที่คุมคิว และเฉพาะคิวที่เซิร์ฟเวอร์ยืนยันแล้ว — ของจากแคชอาจเก่า ห้ามประกาศ
+     คิวเปลี่ยน → รอ 1 วิ รวบการเปลี่ยนที่มาติดกัน (เพลงจบ + เพลงถัดไปขึ้น) เป็นการเขียนครั้งเดียว
+     คิวไม่เปลี่ยน → เขียนซ้ำทุก HEARTBEAT_MS ให้คนอ่านรู้ว่าตัวเล่นยังเปิดอยู่ */
+  const snapRef = useRef<{ channelId: string; key: string; at: number } | null>(null);
+  const [snapAt, setSnapAt] = useState(0);
+  useEffect(() => {
+    if (!channelId || !active || !uid || !openFresh) return;
+    const key = snapshotKey(openSongs);
+    const last = snapRef.current;
+    const same = last?.channelId === channelId && last.key === key;
+    const wait = same ? Math.max(0, last.at + HEARTBEAT_MS - Date.now()) : 1000;
+    const t = window.setTimeout(() => {
+      writeQueueSnapshot(channelId, openSongs)
+        .then(() => {
+          snapRef.current = { channelId, key, at: Date.now() };
+          setSnapAt(Date.now()); // ให้เอฟเฟกต์นี้ตั้งรอบหัวใจเต้นครั้งถัดไป
+        })
+        .catch(() => undefined); // เขียนไม่ได้ (กติกายังไม่ publish) คนอ่านก็ใช้คิวจริงแบบเดิม
+    }, wait);
+    return () => window.clearTimeout(t);
+  }, [channelId, active, uid, openFresh, openSongs, snapAt]);
+
+  /* เลิกคุมคิว (ปิดหน้า สลับช่อง อีกแท็บแย่งไป) → บอกคนอ่านให้กลับไปฟังคิวจริงทันที
+     ไม่งั้นเขาจะเห็นคิวค้างจนกว่าใบจะเก่าเกิน STALE_MS */
+  useEffect(() => {
+    if (!channelId || !active || !uid) return;
+    const close = () => {
+      if (snapRef.current?.channelId !== channelId) return;
+      snapRef.current = null;
+      closeQueueSnapshot(channelId);
+    };
+    window.addEventListener("pagehide", close);
+    return () => {
+      window.removeEventListener("pagehide", close);
+      close();
+    };
+  }, [channelId, active, uid]);
 
   /* ---------- ใครเป็นคนเล่น ---------- */
   useEffect(() => {
