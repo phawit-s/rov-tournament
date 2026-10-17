@@ -1,1366 +1,173 @@
 @import "tailwindcss";
 
-@theme {
-  /*
-    ---- palette: Midnight Violet ----
-
-    พื้นเป็นน้ำเงินหมึกเกือบดำ (ไม่ใช่ดำสนิท) สีเน้นเป็นม่วงไอริส ไซยานเป็นสีรอง
-
-    ทำไมพื้นถึงเป็นน้ำเงินไม่ใช่ดำ: ดำสนิทกับม่วงวางติดกันแล้วม่วงจะดู "ลอย"
-    ออกมาเหมือนสติกเกอร์ พื้นที่มีน้ำเงินผสมอยู่นิดหน่อยทำให้สีเน้นดูเป็น
-    "แสงในฉากเดียวกัน" ไม่ใช่สีที่แปะทับลงไป
-
-    ชื่อ iris ใช้แทน iris ของเดิม — สามระดับคือ อ่อน (ตัวหนังสือ/เส้นขอบ)
-    กลาง (พื้นทึบ/ปุ่ม) เข้ม (เงา/ไล่สี)
-  */
-  --color-ink: #07080f;
-  --color-ink-2: #0d0f19;
-  --color-ink-3: #141726;
-  --color-iris: #a99bff;
-  --color-iris-mid: #7c6cf5;
-  --color-iris-deep: #4b3dbf;
-  --color-cyan: #35d6e8;
-  --color-platinum: #c7cce4;
-  --color-ice: #e7e9f5;
-  --color-muted: #8e93ad;
-  --color-line: #232741;
-
-  /*
-    ---- สีสัญญาณ ----
-
-    ของเดิมกระจายเป็นเลขฐานสิบหกดิบอยู่ตามไฟล์ 58 จุด (แค่สีแดงสีเดียว)
-    ทำให้เปลี่ยนชุดสีทีต้องไล่แก้ทุกไฟล์ ตอนนี้ทุกจุดชี้มาที่นี่ที่เดียว
-  */
-  --color-danger: #ff8fa3;
-  --color-live: #ff5b7a;
-  --color-win: #34e3b0;
-  --color-info: #6e9bf0;
-  --color-out: #7e8299;
-  /* ตัวหนังสือบนพื้นสีเน้น (ปุ่มหลัก / เม็ดยาแท็บ / สวิตช์ที่เปิดอยู่) */
-  --color-onaccent: #120b2e;
-
-  /* ---- fonts ---- */
-  --font-display: var(--font-prompt), "Segoe UI", sans-serif;
-  --font-body: var(--font-plex-thai), "Segoe UI", sans-serif;
-
-  /* ---- สเกลตัวอักษรกลาง ใช้แทนการเขียน text-3xl sm:text-5xl ซ้ำทุกหน้า ---- */
-  --text-display: clamp(2.8rem, 8vw, 7rem);
-  --text-display--line-height: 0.96;
-  --text-display--letter-spacing: -0.02em;
-  --text-h2: clamp(1.9rem, 4.6vw, 3.4rem);
-  --text-h2--line-height: 1.06;
-  --text-deck: 1.02rem;
-  --text-deck--line-height: 1.8;
-  /* ป้ายตัวเล็กเว้นห่าง — 10px กับ tracking .32em อ่านยากเกินไปบนจอความละเอียดสูง
-     ขยับขึ้นเป็น 11px แล้วมันกลับมาอ่านออกโดยไม่เสียบุคลิกแบบสูจิบัตร */
-  --text-eyebrow: 0.6875rem;
-
-  /*
-    ---- รัศมีมุมกลางของทั้งเว็บ ----
-
-    เคยดันให้ใหญ่กว่าค่าเริ่มต้นของ Tailwind หนึ่งขั้น แล้วปุ่มกับเม็ดยาเมนู
-    กลายเป็นแคปซูลเกือบหมด ซึ่งอ่านเป็นงานเว็บมากกว่างานระบบปฏิบัติการ
-
-    ตอนนี้ถอยกลับมาเป็นสี่เหลี่ยมมุมมน — โค้งพอให้นุ่ม แต่ยังเห็น "ด้าน" ของ
-    กล่องอยู่ ซึ่งเป็นสัดส่วนเดียวกับปุ่มและแผงของ macOS
-
-    สัดส่วนต้องไล่กันเป็นชั้น — ของที่ซ้อนอยู่ในการ์ดต้องมุมเล็กกว่าตัวการ์ด
-    ไม่งั้นขอบด้านในจะดูปลิ้นออกมาจากขอบด้านนอก
-  */
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.625rem;
-  --radius-2xl: 0.875rem;
-  --radius-3xl: 1.25rem;
-
-  /* ---- สเกลความสูง: เลือกความสำคัญของการ์ดด้วยเงา ไม่ใช่ backdrop-filter ซ้อนชั้น ----
-     เงาฟุ้งกว้างและจางกว่าของเดิม — เงาแคบเข้มอ่านเป็นกล่องลอย
-     เงากว้างจางอ่านเป็นแสงในห้อง ซึ่งคือสิ่งที่โทนหรูต้องการ */
-  --shadow-lift-1: 0 1px 2px rgb(0 0 0 / 0.28), 0 6px 16px -10px rgb(0 0 0 / 0.5);
-  --shadow-lift-2:
-    0 1px 2px rgb(0 0 0 / 0.32), 0 12px 28px -14px rgb(0 0 0 / 0.55),
-    0 48px 96px -56px rgb(0 0 0 / 0.9);
-  --shadow-lift-3:
-    0 1px 2px rgb(0 0 0 / 0.38), 0 18px 40px -18px rgb(0 0 0 / 0.6),
-    0 70px 130px -60px rgb(0 0 0 / 1), 0 0 80px -40px rgb(var(--accent) / 0.5);
-
-  /* ---- animations ---- */
-  --animate-drift: drift 26s ease-in-out infinite;
-  --animate-drift-slow: drift 38s ease-in-out infinite reverse;
-  --animate-sheen: sheen 3.4s ease-in-out infinite;
-  --animate-rise: rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-spin-slow: spin 16s linear infinite;
-  --animate-breathe: breathe 4.5s ease-in-out infinite;
-  --animate-halo: halo 6s linear infinite;
-  --animate-shimmer-slow: shimmer-slow 6s ease-in-out infinite;
-  --animate-float-soft: float-soft 9s ease-in-out infinite;
-}
-
-@keyframes halo {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes shimmer-slow {
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-}
-
 /*
-  ฉากหลังที่ไหลช้าๆ — ใช้กับปกเพลงที่เบลอแล้วบนหน้าขอเพลง
+  คิวเพลง — ระบบดีไซน์ (อ่านเหตุผลเต็มที่ docs/DESIGN.md)
 
-  ขยับ transform อย่างเดียว (ห้ามแตะ filter/opacity ที่นี่) เพราะรูปถูกเบลอ
-  64px ไว้แล้ว ถ้าค่าเบลอขยับด้วยจะบังคับให้เบราว์เซอร์เบลอใหม่ทุกเฟรม
-  ซึ่งบนมือถือคือกินแบตฟรีตลอดเวลาที่เปิดหน้าค้างไว้
+  สีมาจากเพลงเท่านั้น: หน้าจอเป็นขาว ดำ เทา สีที่เหลือมาจากปกเพลง (--art)
+  ทุกค่าที่ต้องพลิกตามธีมอยู่ใน :root / [data-theme="dark"] ด้านล่าง
+  @theme แค่ชี้ไปหาตัวแปรพวกนั้น Tailwind จึงสร้างคลาสที่พลิกตามธีมได้เอง
 */
-@keyframes art-drift {
-  0%,
-  100% {
-    transform: scale(1.28) translate3d(-2.5%, -1.5%, 0);
-  }
-  50% {
-    transform: scale(1.42) translate3d(2.5%, 1.5%, 0);
-  }
-}
 
-.art-drift {
-  animation: art-drift 48s ease-in-out infinite;
-  will-change: transform;
-}
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-@keyframes float-soft {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-6px);
-  }
-}
+@theme {
+  --color-canvas: var(--c-canvas);
+  --color-fill: var(--c-fill);
+  --color-fill-2: var(--c-fill-2);
+  --color-paper: var(--c-paper);
+  --color-ink: var(--c-ink);
+  --color-onink: var(--c-onink);
+  --color-muted: var(--c-muted);
+  --color-faint: var(--c-faint);
+  --color-line: var(--c-line);
+  --color-live: var(--c-live);
+  --color-open: var(--c-open);
+  --color-danger: var(--c-danger);
 
-@keyframes drift {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  33% {
-    transform: translate3d(4%, -3%, 0) scale(1.08);
-  }
-  66% {
-    transform: translate3d(-3%, 3%, 0) scale(0.96);
-  }
-}
 
-@keyframes sheen {
-  0% {
-    transform: translateX(-140%) skewX(-12deg);
-  }
-  55%,
-  100% {
-    transform: translateX(240%) skewX(-12deg);
-  }
-}
+  --font-sans: var(--font-anuphan), "Segoe UI", system-ui, sans-serif;
 
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+  /* ตัวบางกว่า 400 อ่านยากบนจอ — ปิดทางไว้เลย ใครเผลอเขียน font-light ก็ได้ 400 */
+  --font-weight-thin: 400;
+  --font-weight-extralight: 400;
+  --font-weight-light: 400;
 
-@keyframes breathe {
-  0%,
-  100% {
-    opacity: 0.45;
-  }
-  50% {
-    opacity: 0.9;
-  }
+  /*
+    สเกลตัวอักษร — ราก 17px (html 106.25%) ทำให้ text-xs ≈ 13 · sm ≈ 15 · base = 17
+    ซึ่งตรงกับสเกลใน DESIGN.md พอดี หัวข้อใหญ่ใช้ชื่อเฉพาะด้านล่าง
+  */
+  --text-title: 1.41rem; /* 24 */
+  --text-title--line-height: 1.25;
+  --text-headline: 1.88rem; /* 32 */
+  --text-headline--line-height: 1.22;
+  --text-headline--letter-spacing: -0.01em;
+  --text-display: clamp(2.2rem, 6.4vw, 3.55rem); /* 37–60 */
+  --text-display--line-height: 1.18;
+  --text-display--letter-spacing: -0.015em;
+
+  --radius-stage: 1.75rem;
+  --radius-sheet: 1.25rem;
+  --radius-field: 0.875rem;
+  --radius-art: 0.625rem;
+  --radius-thumb: 0.375rem;
+
+  /* ของลอยเท่านั้นที่มีเงา (เมนู dialog toast) ของที่วางบนพื้นไม่มี */
+  --shadow-float: 0 1px 2px rgb(0 0 0 / 0.08), 0 12px 32px -8px rgb(0 0 0 / 0.22);
+
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 :root {
-  color-scheme: dark;
-  /* สีเน้นของแต่ละส่วน ใส่เป็น "R G B" */
-  --accent: 169 155 255;
-
-  /*
-    ไล่สีของพื้นสีเน้น — ปุ่มหลัก เม็ดยาแท็บ และรางสวิตช์ใช้ตัวเดียวกันหมด
-
-    อยู่ในตัวแปรเพราะธีมสว่างต้องใช้คนละไล่สี: บนกระดาษขาว ม่วงอ่อนจะจมหาย
-    ต้องเข้มขึ้นแล้วสลับเป็นตัวหนังสือขาวแทน — ถ้าฝังไล่สีไว้ในคลาสของปุ่ม
-    เรื่องนี้จะแก้ไม่ได้เลยโดยไม่เขียนเงื่อนไขธีมซ้ำในทุกคอมโพเนนต์
-  */
-  --grad-accent: linear-gradient(180deg, #cfc7ff 0%, #a99bff 52%, #8a79f2 100%);
-  --sat: env(safe-area-inset-top, 0px);
-  --sab: env(safe-area-inset-bottom, 0px);
-
-  /*
-    สีสถานะ — กติกาเดียวของทั้งเว็บ: สีเน้นแปลว่า "สถานะ" ไม่ใช่การตกแต่ง
-    ใช้ผ่าน style={{ ["--st"]: "var(--st-win)" }} แล้วเติมคลาส .tally
-  */
-  --st-live: 255 91 122;
-  --st-next: 169 155 255;
-  --st-win: 52 227 176;
-  --st-out: 126 130 153;
-  --st-idle: 138 142 168;
-
-  --chamfer: 12px;
-
-  /* ความสูงของแถบเมนูที่ลอยอยู่ — <main> เว้นที่ด้านบนจากค่านี้ค่าเดียว
-     (ปุ่มสูง 36px + กรอบบน-ล่าง 16px + เส้นขอบ 2px) */
-  --nav-h: 3.375rem;
-
-  /* โทนกลางที่ต้องพลิกตามธีม
-     ดันขึ้นจากของเดิมนิดเดียวทุกตัว — บนพื้นเกือบดำ ค่าเดิมทำให้การ์ดกับ
-     ฉากหลังกลืนกันจนแยกไม่ออกว่าอะไรเป็นชั้นไหน */
-  --hair: 255 255 255;
-  --hair-a: 0.11;
-  --tile: 255 255 255;
-  --tile-a: 0.05;
-  --field: 0 0 0;
-  --field-a: 0.32;
-  --sunken: 0 0 0;
-  --sunken-a: 0.35;
-}
-
-/* ---------- ธีมสว่าง: กระดาษอมม่วง + ม่วงเข้ม ---------- */
-:root[data-theme="light"] {
+  --c-canvas: #ffffff;
+  --c-fill: #f1f1f4;
+  --c-fill-2: #e6e6eb;
+  --c-paper: #ffffff;
+  --c-ink: #000000;
+  --c-onink: #ffffff;
+  --c-muted: #5c5c66;
+  --c-faint: #8e8e98;
+  --c-line: #e4e4e9;
+  --c-live: #d8232a;
+  --c-open: #0f7a3b;
+  --c-danger: #c4271e;
+  /* สีจากปกเพลง r g b — คอมโพเนนต์ที่รู้จักเพลงเป็นคนตั้งทับ */
+  --art: 142 142 152;
   color-scheme: light;
-
-  --color-ink: #eae9f6;
-  --color-ink-2: #ffffff;
-  --color-ink-3: #dedcf0;
-  --color-iris: #5b4bd6;
-  --color-iris-mid: #6c5ce7;
-  --color-iris-deep: #3a2e9e;
-  --color-cyan: #0d8ea6;
-  --color-platinum: #4a4a5c;
-  --color-ice: #14141f;
-  --color-muted: #5f6076;
-  --color-line: #d9d9e8;
-
-  --color-danger: #c93a55;
-  --color-live: #d62d52;
-  --color-win: #0f8a6a;
-  --color-info: #3a6fd8;
-  --color-out: #6e7082;
-
-  --accent: 91 75 214;
-  /* เส้นกับพื้นกล่องย่อยใช้ "สีของหมึกม่วง" ไม่ใช่ดำเทา
-     เทาบนกระดาษขาวอ่านเป็น "ยังไม่ได้ทำสี" ส่วนม่วงจางอ่านเป็นชุดสีที่ตั้งใจ */
-  --hair: 78 66 168;
-  --hair-a: 0.2;
-  --tile: 90 78 190;
-  --tile-a: 0.07;
-  --field: 255 255 255;
-  --field-a: 0.85;
-  --sunken: 20 20 45;
-  --sunken-a: 0.04;
-
-  /* บนกระดาษขาว ม่วงอ่อนจมหาย ปุ่มจึงต้องเข้มแล้วสลับเป็นตัวหนังสือขาว */
-  --grad-accent: linear-gradient(180deg, #8e7bf5 0%, #6c5ce7 52%, #5344c9 100%);
-  --color-onaccent: #ffffff;
-
-  --st-live: 214 45 82;
-  --st-next: 91 75 214;
-  --st-win: 15 138 106;
-  --st-out: 110 112 130;
-  --st-idle: 120 122 140;
-
-  /* เงาบนกระดาษต้องเป็นสีของหมึกบนหน้า ไม่ใช่ดำ ไม่งั้นดูเลอะ */
-  --shadow-lift-1: 0 1px 1px rgb(40 38 80 / 0.09), 0 4px 10px -6px rgb(40 38 80 / 0.2);
-  --shadow-lift-2:
-    0 1px 1px rgb(40 38 80 / 0.1), 0 8px 18px -10px rgb(40 38 80 / 0.24),
-    0 30px 60px -44px rgb(40 38 80 / 0.4);
-  --shadow-lift-3:
-    0 1px 2px rgb(40 38 80 / 0.12), 0 14px 30px -14px rgb(40 38 80 / 0.26),
-    0 44px 90px -54px rgb(40 38 80 / 0.5), 0 0 50px -28px rgb(var(--accent) / 0.3);
 }
 
-* {
-  min-width: 0;
+[data-theme="dark"] {
+  --c-canvas: #000000;
+  --c-fill: #1c1c1f;
+  --c-fill-2: #2a2a2e;
+  --c-paper: #161618;
+  --c-ink: #ffffff;
+  --c-onink: #000000;
+  --c-muted: #a3a3ad;
+  --c-faint: #6e6e78;
+  --c-line: #2c2c31;
+  --c-live: #ff453a;
+  --c-open: #32d74b;
+  --c-danger: #ff6961;
+  --art: 90 90 98;
+  color-scheme: dark;
 }
 
-/* เส้นโฟกัสของเบราว์เซอร์เป็นสีดำ ทับด้วยวงแหวนสีทองให้เข้าธีม */
-:focus-visible {
-  outline: 2px solid color-mix(in srgb, rgb(var(--accent)) 75%, transparent);
-  outline-offset: 2px;
-  border-radius: 12px;
-}
+/* ---------------- พื้นฐาน ---------------- */
 
-/* พื้นหลังต้องอยู่ที่ html เท่านั้น ถ้าใส่ที่ body ด้วย body จะทับ layer ที่อยู่ล่างสุด */
 html {
-  background: var(--color-ink);
-  /* ฟอนต์ไทยตัวเล็กกว่าละติน ดันขึ้นนิดนึงให้อ่านสบาย */
+  /* ราก 17px — ดู --text-* ด้านบน */
   font-size: 106.25%;
-  /* clip ไม่ใช่ hidden — hidden จะทำให้ sticky/fixed ข้างในเพี้ยน */
-  overflow-x: clip;
-}
-
-@media (max-width: 480px) {
-  html {
-    font-size: 100%;
-  }
+  background: var(--c-canvas);
+  color: var(--c-ink);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  color: var(--color-ice);
-  font-family: var(--font-body);
+  font-family: var(--font-sans);
+  line-height: 1.6;
   min-height: 100dvh;
-  /*
-    clip ไม่ใช่ hidden — เหตุผลเดียวกับที่ html ใช้ clip
-
-    overflow-x: hidden บังคับให้แกน y กลายเป็น auto ตามไปด้วย body จึงกลาย
-    เป็น "กล่องที่เลื่อนได้" ของตัวเอง แล้ว position: sticky ทุกตัวข้างในจะไป
-    ยึดกับกล่องนั้นแทนที่จะยึดกับจอ — ผลคือแถบเมนูเลื่อนหายไปกับหน้า
-    ทั้งที่เขียน sticky ไว้ถูกแล้ว clip กันแถบเลื่อนแนวนอนได้เหมือนกัน
-    โดยไม่สร้างกล่องเลื่อนใหม่
-  */
-  overflow-x: clip;
-  -webkit-tap-highlight-color: transparent;
-  text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--color-iris) 35%, transparent);
-  color: var(--color-ice);
+  background: rgb(var(--art) / 0.35);
 }
 
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+:focus-visible {
+  outline: 2px solid var(--c-ink);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
-::-webkit-scrollbar-track {
-  background: #0a0b14;
-}
-::-webkit-scrollbar-thumb {
-  background: #2a2c48;
-  border-radius: 99px;
-  border: 3px solid #0a0b14;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #3b3e63;
-}
-
-:root[data-theme="light"] ::-webkit-scrollbar-track {
-  background: #e9e9f4;
-}
-:root[data-theme="light"] ::-webkit-scrollbar-thumb {
-  background: #c3c3d8;
-  border-color: #e9e9f4;
-}
-:root[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
-  background: #adadc6;
-}
-
-/* ---------- พื้นผิว ---------- */
-
-.surface {
-  /*
-    การ์ดโปร่งแสง — เห็นสีของฉากหลังผ่านขึ้นมา แต่ไม่มี backdrop-filter
-
-    เคยใส่ blur(20px) ไว้ให้เป็นกระจกฝ้าจริงๆ แล้ววัดได้ว่ามันแพงมาก:
-    ฉากหลังของเว็บนี้ขยับตลอดเวลา (ผ้าไหม ก้อนแสง ฝุ่น แสงกวาด) ทุกครั้งที่
-    ของข้างหลังขยับหนึ่งพิกเซล การ์ด "ทุกใบบนหน้า" ต้องไปสุ่มพื้นหลังมาเบลอใหม่
-    หน้าเดียวมีการ์ดสิบใบก็คือเบลอใหม่สิบผืนต่อเฟรม ตลอดเวลาที่หน้าเปิดอยู่
-
-    ตัดออกแล้วยังได้ผลทางสายตาเกือบทั้งหมด เพราะสิ่งที่ทำให้ "อ่านเป็นกระจก"
-    คือความโปร่งกับขอบที่สว่าง ไม่ใช่ความเบลอ — ของที่อยู่ข้างหลังการ์ดเป็น
-    ไล่สีนวลๆ ที่เบลออยู่แล้วในตัว เบลอซ้ำอีกชั้นจึงแทบไม่เปลี่ยนอะไร
-
-    ที่ยังเหลือ backdrop-filter ไว้คือ .nav-shell ชิ้นเดียว — มันมีชิ้นเดียว
-    ทั้งหน้า และเนื้อหาที่เลื่อนผ่านใต้มันต้องถูกกลบจริงๆ ถึงจะอ่านเมนูออก
-  */
-  background:
-    linear-gradient(
-      180deg,
-      rgb(255 255 255 / 0.07) 0%,
-      rgb(255 255 255 / 0.02) 38%,
-      rgb(255 255 255 / 0) 100%
-    ),
-    rgb(17 19 32 / 0.72);
-  border: 1px solid rgb(255 255 255 / 0.1);
-  /*
-    ไม่มี backdrop-filter โดยตั้งใจ — พื้นการ์ดทึบ 0.9 อยู่แล้ว การเบลอจึงมีผลกับ
-    อีก 10% ที่เหลือเท่านั้น ซึ่งแทบมองไม่ออก แต่ราคาคือทุกการ์ดกลายเป็นเลเยอร์ที่
-    ต้องไปสุ่มพื้นหลังทั้งจอมาเบลอใหม่ทุกครั้งที่ของข้างหลังขยับ
-    หนักที่สุดที่หน้า /player ซึ่งมีวิดีโอเล่นอยู่ — วิดีโอขยับทุกเฟรม เท่ากับสั่งให้
-    การ์ดทุกใบบนหน้าเบลอใหม่ 30-60 ครั้งต่อวินาที
-
-    "ความเป็นกระจก" ที่ได้มาแทนคือแสงที่ขอบ ไม่ใช่ความเบลอ:
-    เส้นสว่างบนสุด (แสงตกกระทบ) · วงแหวนจางรอบใบ (ความหนาของแผ่น) ·
-    แสงนวลลอดขอบล่าง (แสงที่ผ่านทะลุแล้วกระจายออก)
-    สามเส้นนี้คือสิ่งที่ตาอ่านว่าเป็นวัสดุโปร่ง และไม่กินแรงวาดเลยสักนิด
-  */
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.16),
-    inset 0 0 0 1px rgb(255 255 255 / 0.05),
-    inset 0 -24px 44px -34px rgb(255 255 255 / 0.16),
-    0 24px 60px -36px rgb(0 0 0 / 0.85);
-}
-
-:root[data-theme="light"] .surface {
-  /* ขาวโปร่งบนกระดาษลาเวนเดอร์ — ขอบเป็นแสงขาวไม่ใช่เส้นม่วง */
-  background: linear-gradient(
-    180deg,
-    rgb(255 255 255 / 0.92) 0%,
-    rgb(255 255 255 / 0.82) 100%
-  );
-  border: 1px solid rgb(255 255 255 / 0.9);
-  /* เงาแคบและจาง — เงาฟุ้งกว้างบนพื้นสว่างไม่ได้อ่านเป็น "ลอย"
-     แต่อ่านเป็นรอยเปื้อนรอบกล่อง โดยเฉพาะตรงร่องแคบๆ ระหว่างการ์ดสองใบ */
-  box-shadow:
-    0 1px 0 0 rgb(255 255 255 / 0.9) inset,
-    0 1px 2px rgb(40 34 90 / 0.07),
-    0 10px 24px -16px rgb(40 34 90 / 0.28);
-}
-
-/*
-  จอเล็กใช้พื้นทึบไปเลย
-
-  การ์ดกินเต็มความกว้างจนแทบไม่เหลือฉากหลังให้มองทะลุอยู่แล้ว การทำให้โปร่ง
-  จึงไม่ได้อะไรทางสายตา แต่ยังต้องผสมสีทุกครั้งที่ของข้างหลังขยับอยู่ดี
-*/
-@media (max-width: 640px) {
-  .surface {
-    background:
-      linear-gradient(
-        180deg,
-        rgb(255 255 255 / 0.06) 0%,
-        rgb(255 255 255 / 0.02) 38%,
-        rgb(255 255 255 / 0) 100%
-      ),
-      rgb(15 17 28 / 0.96);
-  }
-  :root[data-theme="light"] .surface {
-    background: #ffffff;
-  }
-}
-
-/* กล่องย่อยภายในการ์ด — ใส่ transition ไว้ที่นี่ที่เดียว
-   .hover-tile ของเดิมเปลี่ยนสีแบบตัดทันที ซึ่งบนของที่กดได้จะรู้สึกกระตุก */
-.tile {
-  background: rgb(var(--tile) / var(--tile-a));
-  border: 1px solid rgb(var(--hair) / var(--hair-a));
-  transition:
-    background-color 0.22s ease,
-    border-color 0.22s ease;
-}
-
-/*
-  ช่องกรอกข้อมูล
-
-  เส้นไฮไลต์บางๆ ที่ขอบบนด้านใน ทำให้ช่องอ่านเป็น "ร่องที่จมลงไป" จริงๆ
-  ไม่ใช่สี่เหลี่ยมทึบที่บังเอิญสีเข้มกว่าพื้น — เป็นรายละเอียดที่แยกงานที่ตั้งใจ
-  ออกจากงานที่แค่ใส่ border ไว้
-
-  วงแหวนตอนโฟกัสหนา 4px กว้างกว่าเดิม เพราะช่องกรอกบนพื้นเข้มมองยากอยู่แล้ว
-  ว่าเคอร์เซอร์อยู่ช่องไหน โดยเฉพาะฟอร์มที่มีหลายช่องเรียงกัน
-*/
-.field {
-  background: rgb(var(--field) / var(--field-a));
-  border: 1px solid rgb(var(--hair) / calc(var(--hair-a) + 0.04));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035);
-  transition:
-    border-color 0.25s ease,
-    background-color 0.25s ease,
-    box-shadow 0.25s ease;
-}
-.field:hover:not(:focus) {
-  border-color: rgb(var(--hair) / calc(var(--hair-a) + 0.09));
-}
-.field:focus {
-  border-color: color-mix(in srgb, rgb(var(--accent)) 62%, transparent);
-  box-shadow:
-    0 0 0 4px color-mix(in srgb, rgb(var(--accent)) 13%, transparent),
-    inset 0 1px 0 rgb(255 255 255 / 0.04);
-}
-
-:root[data-theme="light"] .field {
-  box-shadow: inset 0 1px 2px rgb(30 28 60 / 0.06);
-}
-:root[data-theme="light"] .field:focus {
-  box-shadow:
-    0 0 0 4px color-mix(in srgb, rgb(var(--accent)) 15%, transparent),
-    inset 0 1px 2px rgb(30 28 60 / 0.05);
-}
-
-/* พื้นที่จมลงไป เช่นจอแสดงผลของเครื่องสุ่ม */
-.sunken {
-  background: rgb(var(--sunken) / var(--sunken-a));
-  border: 1px solid rgb(var(--hair) / var(--hair-a));
-}
-
-/*
-  พื้นสีเน้น — ปุ่มหลัก เม็ดยาแท็บ รางสวิตช์ที่เปิดอยู่ ใช้คลาสนี้ตัวเดียวกันหมด
-
-  ของเดิมทั้งสามที่ฝังไล่สีทองไว้ในคลาสของตัวเอง เวลาจะเปลี่ยนชุดสีจึงต้อง
-  ไล่แก้สามที่ให้ตรงกัน ซึ่งพลาดแน่นอนเพราะไม่มีอะไรบังคับให้ตรง
-*/
-.accent-fill {
-  background-image: var(--grad-accent);
-  color: var(--color-onaccent);
-}
-
-/* เส้นคั่น */
-.rule {
-  background: rgb(var(--hair) / var(--hair-a));
-}
-
-/*
-  เส้นใต้หัวการ์ด — เข้มตรงหัวแล้วจางหายไปทางขวา
-
-  เส้นทึบเสมอกันทั้งเส้นลากสายตาไปจนสุดขอบการ์ดโดยไม่มีอะไรอยู่ตรงนั้น
-  เส้นที่จางหายพาสายตากลับมาที่ชื่อหัวข้อ ซึ่งเป็นของที่ควรอ่าน
-*/
-.rule-fade {
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    rgb(var(--hair) / calc(var(--hair-a) + 0.07)) 0%,
-    rgb(var(--hair) / var(--hair-a)) 22%,
-    transparent 100%
-  );
-}
-
-.border-hair {
-  border-color: rgb(var(--hair) / var(--hair-a));
-}
-
-.hover-tile:hover {
-  background: rgb(var(--tile) / calc(var(--tile-a) + 0.055));
-  border-color: rgb(var(--hair) / calc(var(--hair-a) + 0.06));
-}
-
-.tile-dashed {
-  border: 1px dashed rgb(var(--hair) / calc(var(--hair-a) + 0.02));
-}
-
-/* เส้นทองบางๆ พาดหัวการ์ด */
-.hairline-top::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 12%;
-  right: 12%;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, rgb(var(--accent)) 65%, transparent),
-    transparent
-  );
-  pointer-events: none;
-}
-
-/* ไฟนวลตามเมาส์ — เซ็ต --mx / --my เป็น px จาก JS */
-.spotlight {
-  position: relative;
-  isolation: isolate;
-}
-.spotlight::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(
-    340px circle at var(--mx, 50%) var(--my, 50%),
-    color-mix(in srgb, rgb(var(--accent)) 12%, transparent),
-    transparent 62%
-  );
-  opacity: 0;
-  transition: opacity 0.45s ease;
-  pointer-events: none;
-  z-index: -1;
-}
-.spotlight:hover::after {
-  opacity: 1;
-}
-
-/* เกรนละเอียด ให้ผิวงานดูมีเนื้อเหมือนงานพิมพ์ */
-.grain {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
-}
-
-.text-accent-grad {
-  background: linear-gradient(
-    100deg,
-    #5b4bd6 0%,
-    #8a79f2 22%,
-    #dcd6ff 42%,
-    #8a79f2 62%,
-    #5b4bd6 100%
-  );
-  background-size: 220% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: var(--animate-shimmer-slow);
-}
-
-/* วงแหวนทองหมุนรอบโลโก้ */
-.animate-halo {
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    color-mix(in srgb, var(--color-iris) 55%, transparent) 40deg,
-    transparent 90deg,
-    transparent 360deg
-  );
-  -webkit-mask:
-    radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
-  animation: var(--animate-halo);
-  opacity: 0.75;
-  pointer-events: none;
-}
-
-:root[data-theme="light"] .text-accent-grad {
-  background: linear-gradient(100deg, #3a2e9e 0%, #7c6cf5 45%, #5b4bd6 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-}
-
-/* ฉากหลัง */
-.scene-base {
-  background: linear-gradient(180deg, #0c0e1a 0%, #07080f 45%, #05060c 100%);
-}
-.scene-top-glow {
-  background: radial-gradient(
-    60% 100% at 50% 0%,
-    rgba(124, 108, 245, 0.16),
-    transparent 70%
-  );
-}
-.scene-vignette {
-  background: radial-gradient(
-    130% 105% at 50% 40%,
-    transparent 55%,
-    rgba(0, 0, 0, 0.72) 100%
-  );
-}
-
-:root[data-theme="light"] .scene-base {
-  background: linear-gradient(180deg, #f3f2fc 0%, #eae9f6 48%, #e2e0f2 100%);
-}
-:root[data-theme="light"] .scene-top-glow {
-  background: radial-gradient(
-    60% 100% at 50% 0%,
-    rgba(108, 92, 231, 0.2),
-    transparent 70%
-  );
-}
-/* ชั้นผ้าไหม — ธีมสว่างต้องเบากว่ามาก ไม่งั้นดูขุ่น */
-.silk-layer {
-  opacity: 0.72;
-  filter: blur(2px) saturate(1.25);
-}
-:root[data-theme="light"] .silk-layer {
-  opacity: 0.3;
-  filter: blur(3px) saturate(1.05);
-}
-
-/*
-  แสงกวาดเฉียงผ่านจอทุก 26 วิ
-
-  ตัวที่ขยับคือ transform ของแผ่นลูก ไม่ใช่ background-position ของตัวเอง
-  เบราว์เซอร์ประกอบ transform ได้บน compositor แต่ background-position ทำไม่ได้
-  ต้องทาสีใหม่ทั้งเลเยอร์ทุกเฟรม ซึ่งเลเยอร์นี้กินเต็มจอและวิ่งอยู่ตลอดทุกหน้า
-
-  ระยะที่แปลงมา: พื้นกว้าง 260% ของจอ ของเดิมวิ่ง background-position 130% -> -30%
-  เท่ากับภาพเลื่อนจาก -2.08 เท่าความกว้างจอ ไป +0.48 เท่า คิดเป็นสัดส่วนของแผ่นเอง
-  (2.6 เท่าของจอ) ได้ -80% ถึง +18.46%
-*/
-/* จอเล็กไม่ต้องมี — แผ่นกว้าง 260% ของจอที่ขยับตลอดเวลา คือเลเยอร์เต็มจอ
-   อีกชั้นที่ compositor ต้องแบกไว้ โดยที่บนมือถือแทบมองไม่เห็นความต่าง */
-@media (max-width: 640px) {
-  .scene-sweep::after {
-    display: none;
-  }
-}
-
-.scene-sweep::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 260%;
-  background: linear-gradient(
-    108deg,
-    transparent 38%,
-    color-mix(in srgb, var(--color-iris) 9%, transparent) 50%,
-    transparent 62%
-  );
-  animation: scene-sweep 26s ease-in-out infinite;
-}
-@keyframes scene-sweep {
-  0%,
-  100% {
-    transform: translate3d(-80%, 0, 0);
-  }
-  50% {
-    transform: translate3d(18.4615%, 0, 0);
-  }
-}
-
-/* ม่านบางคลุมผ้าไหม ให้ตัวหนังสืออ่านง่าย */
-.scene-veil {
-  background: linear-gradient(
-    180deg,
-    rgba(7, 8, 15, 0.62) 0%,
-    rgba(7, 8, 15, 0.76) 45%,
-    rgba(5, 6, 12, 0.86) 100%
-  );
-}
-:root[data-theme="light"] .scene-veil {
-  background: linear-gradient(
-    180deg,
-    rgba(251, 251, 255, 0.55) 0%,
-    rgba(248, 248, 253, 0.62) 45%,
-    rgba(244, 244, 250, 0.72) 100%
-  );
-}
-
-/*
-  ฉากหลังหน้าขอเพลง — ไล่สีสามชั้นจากสีที่ดูดมาจากปกเพลง
-
-  วางจุดศูนย์กลางของแต่ละชั้นไว้คนละมุม แล้วให้แต่ละชั้นแผ่กว้างเกินครึ่งจอ
-  สามชั้นทับกันจึงไม่มีมุมไหนเหลือว่าง — ต่างจากรูปเบลอที่สีไปกองตรงไหน
-  ก็ขึ้นอยู่กับว่าปกใบนั้นมีอะไรสว่าง ซึ่งคุมไม่ได้เลย
-
-  ธีมสว่างใช้สีของชุดสีเอง ไม่ใช่สีจากปก — ปกโทนส้ม/เหลืองบนกระดาษม่วง
-  อ่านเป็นคราบเปื้อน ไม่ใช่บรรยากาศ
-*/
-.song-wash {
-  /*
-    ใช้เฉพาะสีที่อิ่มตัวจากชุดสีของปก (glow กับ tint) — ไม่แตะ base/soft
-
-    base คือสีพื้นการ์ดของ widget ซึ่งถูกลดความอิ่มตัวลงเหลือหลักหน่วยโดยตั้งใจ
-    (มันมีหน้าที่เป็น "พื้นให้ตัวหนังสืออ่านออก" ไม่ใช่ "สีของเพลง")
-    เอามาแผ่เป็นฉากหลังเมื่อไหร่ก็ได้หมอกเทาคลุมจอ ไม่ว่าปกจะสีอะไร
-  */
-  background:
-    radial-gradient(92% 74% at 14% 4%, var(--glow), transparent 64%),
-    radial-gradient(86% 76% at 86% 22%, var(--tint), transparent 62%),
-    radial-gradient(120% 90% at 50% 106%, var(--glow), transparent 70%);
-  opacity: 0.5;
-}
-:root[data-theme="light"] .song-wash {
-  background:
-    radial-gradient(90% 72% at 16% 6%, rgb(var(--accent) / 0.55), transparent 62%),
-    radial-gradient(88% 78% at 84% 24%, rgb(var(--accent) / 0.4), transparent 66%),
-    radial-gradient(130% 95% at 50% 104%, rgb(var(--accent) / 0.3), transparent 72%);
-  opacity: 0.35;
-}
-
-/* ม่านของฉากหลังหน้าขอเพลง — บางด้านบน หนาลงตรงที่มีตัวหนังสือ */
-.song-veil {
-  background: linear-gradient(
-    180deg,
-    rgb(7 8 15 / 0.6) 0%,
-    rgb(7 8 15 / 0.68) 50%,
-    rgb(7 8 15 / 0.76) 100%
-  );
-}
-:root[data-theme="light"] .song-veil {
-  background: linear-gradient(
-    180deg,
-    rgb(234 233 246 / 0.86) 0%,
-    rgb(234 233 246 / 0.9) 50%,
-    rgb(234 233 246 / 0.93) 100%
-  );
-}
-
-/*
-  แถบเมนูลอย — กระจกฝ้า (liquid glass)
-
-  ของจริงที่ทำให้ "เป็นกระจก" มีสามชั้น ขาดชั้นไหนก็กลายเป็นแค่แผ่นสีทึบ:
-
-  1. พื้นต้องโปร่งพอให้เห็นของข้างหลัง — ของเดิมทึบ 0.84 ในธีมสว่าง
-     เบลอไปก็ไม่มีใครเห็น เพราะแทบไม่มีอะไรทะลุมา
-  2. backdrop-filter ต้องมี saturate กับ brightness ไม่ใช่แค่ blur —
-     กระจกจริงไม่ได้แค่ทำให้มัว มันขับสีที่อยู่ข้างหลังให้เข้มขึ้นด้วย
-  3. ขอบต้องเป็นไล่สี ไม่ใช่เส้นสีเดียว — แสงสะท้อนที่ขอบเลนส์สว่างไม่เท่ากัน
-     ทุกด้าน (สว่างมุมบนซ้ายกับล่างขวา จางตรงกลาง) เส้นสีเดียวอ่านเป็น "กรอบ"
-     ส่วนไล่สีอ่านเป็น "ความหนาของกระจก"
-
-  ยอมจ่ายค่า backdrop-filter ที่นี่ที่เดียวทั้งเว็บ (ดูเหตุผลที่ .surface)
-  เพราะแถบนี้ลอยทับเนื้อหาที่เลื่อนผ่านใต้มันตลอดเวลา ถ้าไม่กลบก็อ่านเมนูไม่ออก
-*/
-.nav-shell {
-  background:
-    linear-gradient(
-      180deg,
-      rgb(255 255 255 / 0.12) 0%,
-      rgb(255 255 255 / 0.03) 45%,
-      rgb(255 255 255 / 0) 100%
-    ),
-    rgb(11 13 24 / 0.44);
-  border: 0;
-  -webkit-backdrop-filter: blur(26px) saturate(190%) brightness(1.06);
-  backdrop-filter: blur(26px) saturate(190%) brightness(1.06);
-  box-shadow:
-    /* แสงสะท้อนบนสุด — ขอบกระจกที่รับแสงจากด้านบน */
-    inset 0 1px 0 rgb(255 255 255 / 0.22),
-    /* แสงที่ลอดออกทางขอบล่างของเลนส์ */
-    inset 0 -10px 22px -14px rgb(255 255 255 / 0.22),
-    0 20px 46px -26px rgb(0 0 0 / 0.9);
-  transition:
-    padding 0.35s ease,
-    background-color 0.35s ease,
-    box-shadow 0.35s ease;
-}
-
-/*
-  ขอบไล่สี — ใช้ mask เจาะไส้ในทิ้ง เหลือเฉพาะวงแหวนหนา 1px
-  ทำเป็น ::before (ลูกคนแรก) ไม่ใช่ ::after เพื่อให้เมนูข้างในวาดทับได้ตามปกติ
-*/
-.nav-shell::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(
-    140deg,
-    rgb(255 255 255 / 0.5) 0%,
-    rgb(255 255 255 / 0.12) 26%,
-    rgb(255 255 255 / 0.04) 50%,
-    rgb(255 255 255 / 0.14) 74%,
-    rgb(255 255 255 / 0.38) 100%
-  );
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  pointer-events: none;
-}
-
-:root[data-theme="light"] .nav-shell {
-  /* โปร่งน้อยกว่าธีมมืดหน่อย — บนกระดาษสว่าง ตัวหนังสือเทาบนของที่ทะลุมา
-     เสียคอนทราสต์เร็วกว่าตัวหนังสือขาวบนพื้นมืดมาก */
-  background:
-    linear-gradient(
-      180deg,
-      rgb(255 255 255 / 0.62) 0%,
-      rgb(255 255 255 / 0.34) 55%,
-      rgb(255 255 255 / 0.2) 100%
-    ),
-    rgb(255 255 255 / 0.4);
-  -webkit-backdrop-filter: blur(26px) saturate(180%) brightness(1.08);
-  backdrop-filter: blur(26px) saturate(180%) brightness(1.08);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.95),
-    inset 0 -10px 22px -14px rgb(255 255 255 / 0.7),
-    0 18px 40px -26px rgb(40 38 80 / 0.45);
-}
-:root[data-theme="light"] .nav-shell::before {
-  background: linear-gradient(
-    140deg,
-    rgb(255 255 255 / 0.95) 0%,
-    rgb(28 26 60 / 0.1) 30%,
-    rgb(28 26 60 / 0.06) 52%,
-    rgb(28 26 60 / 0.1) 76%,
-    rgb(255 255 255 / 0.8) 100%
-  );
-}
-
-/*
-  วัสดุกระจกสำหรับ "ของที่ลอยทับเนื้อหา" — กล่องยืนยัน ป้ายแจ้งเตือน ลิ้นชัก
-  และแถบบันทึกที่เด้งขึ้นมา
-
-  ตรงนี้คุ้มที่จะจ่ายค่า backdrop-filter จริง (ต่างจากการ์ดทั่วไป ดูเหตุผลที่ .surface)
-  เพราะบนหน้าจอมีทีละชิ้นสองชิ้น ไม่ใช่สิบใบ และมันมีหน้าที่ "กลบของข้างหลัง"
-  โดยตรง — ถ้าไม่กลบก็อ่านข้อความบนมันไม่ออก
-
-  ต้องประกาศหลัง .surface เพื่อให้พื้นของอันนี้ชนะ (ทั้งคู่เป็นคลาสชั้นเดียวกัน)
-*/
-.glass-panel {
-  background:
-    linear-gradient(
-      180deg,
-      rgb(255 255 255 / 0.1) 0%,
-      rgb(255 255 255 / 0.025) 45%,
-      rgb(255 255 255 / 0) 100%
-    ),
-    rgb(13 15 26 / 0.62);
-  -webkit-backdrop-filter: blur(24px) saturate(185%);
-  backdrop-filter: blur(24px) saturate(185%);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.2),
-    inset 0 0 0 1px rgb(255 255 255 / 0.06),
-    inset 0 -14px 30px -22px rgb(255 255 255 / 0.2),
-    0 26px 60px -30px rgb(0 0 0 / 0.9);
-}
-:root[data-theme="light"] .glass-panel {
-  background:
-    linear-gradient(
-      180deg,
-      rgb(255 255 255 / 0.66) 0%,
-      rgb(255 255 255 / 0.38) 55%,
-      rgb(255 255 255 / 0.24) 100%
-    ),
-    rgb(255 255 255 / 0.46);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.95),
-    inset 0 0 0 1px rgb(28 26 60 / 0.07),
-    inset 0 -14px 30px -22px rgb(255 255 255 / 0.8),
-    0 22px 50px -30px rgb(40 38 80 / 0.45);
-}
-
-/*
-  เลื่อนหน้าลงแล้วกระจกหนาขึ้นนิดเดียว — ไม่ใช่ทึบขึ้น
-  ของเดิมดันขึ้นไป 0.9 ซึ่งเท่ากับปิดกระจกทิ้งพอดีตอนที่มีของให้มองทะลุจริงๆ
-*/
-.nav-shell.is-condensed {
-  background:
-    linear-gradient(
-      180deg,
-      rgb(255 255 255 / 0.1) 0%,
-      rgb(255 255 255 / 0.02) 45%,
-      rgb(255 255 255 / 0) 100%
-    ),
-    rgb(9 11 20 / 0.58);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.2),
-    inset 0 -10px 22px -14px rgb(255 255 255 / 0.18),
-    0 24px 54px -28px rgb(0 0 0 / 0.95);
-}
-:root[data-theme="light"] .nav-shell.is-condensed {
-  background:
-    linear-gradient(
-      180deg,
-      rgb(255 255 255 / 0.62) 0%,
-      rgb(255 255 255 / 0.34) 55%,
-      rgb(255 255 255 / 0.2) 100%
-    ),
-    rgb(255 255 255 / 0.4);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.98),
-    inset 0 -10px 22px -14px rgb(255 255 255 / 0.75),
-    0 20px 46px -28px rgb(40 38 80 / 0.5);
-}
-:root[data-theme="light"] .nav-shell.is-condensed {
-  background: rgb(252 252 255 / 0.95);
-}
-
-:root[data-theme="light"] .scene-vignette {
-  background: radial-gradient(
-    130% 105% at 50% 40%,
-    transparent 58%,
-    rgba(40, 38, 80, 0.14) 100%
-  );
-}
-
-.tracking-luxe {
-  letter-spacing: 0.32em;
-}
-
-/* ---------- ตัวอักษรเชิงระบบ ---------- */
-
-/* ตัวเลขทุกตัวที่ต้องเรียงกันเป็นคอลัมน์ */
-.num {
-  font-variant-numeric: tabular-nums lining-nums;
-  letter-spacing: 0.01em;
-}
-
-/* ตัวเลขขนาดพาดหัว — ใช้เฉพาะขนาด ≥2rem เท่านั้น ไม่งั้นสระไทยชนกัน */
-.fig {
-  font-family: var(--font-display);
-  font-weight: 300;
-  font-variant-numeric: tabular-nums lining-nums;
-  letter-spacing: -0.03em;
-  line-height: 0.88;
-}
-
-/* ป้ายกำกับตัวเล็กเว้นห่าง — แทนการเขียน font-display text-[10px] tracking-luxe ซ้ำ */
-.slug {
-  font-family: var(--font-display);
-  font-size: var(--text-eyebrow);
-  font-weight: 600;
-  letter-spacing: 0.32em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, rgb(var(--accent)) 78%, transparent);
-}
-.slug-2 {
-  color: color-mix(in srgb, var(--color-platinum) 55%, transparent);
-}
-
-/* ตัวอักษรเหมือนถูกสลักลงบนแผ่น */
-.engrave {
-  text-shadow:
-    0 1px 0 rgb(255 255 255 / 0.07),
-    0 -1px 1px rgb(0 0 0 / 0.65);
-}
-:root[data-theme="light"] .engrave {
-  text-shadow:
-    0 1px 0 rgb(255 255 255 / 0.8),
-    0 -1px 1px rgb(40 38 80 / 0.16);
-}
-
-/* เลขผี — ตัวโปร่งเห็นแต่เส้นขอบ ใช้เป็นเลขบท */
-.text-outline {
-  color: transparent;
-  -webkit-text-stroke: 1px color-mix(in srgb, rgb(var(--accent)) 42%, transparent);
-}
-:root[data-theme="light"] .text-outline {
-  -webkit-text-stroke-color: color-mix(in srgb, rgb(var(--accent)) 55%, transparent);
-}
-@supports not (-webkit-text-stroke: 1px red) {
-  .text-outline {
-    color: color-mix(in srgb, rgb(var(--accent)) 20%, transparent);
-  }
-}
-
-/* ---------- แถบสถานะ ---------- */
-
-/* ขีดสีชิดซ้ายบอกสถานะ ใช้คู่กับ --st */
-.tally {
-  position: relative;
-}
-.tally::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 10%;
-  bottom: 10%;
-  width: 3px;
-  border-radius: 99px;
-  background: linear-gradient(
-    180deg,
-    rgb(var(--st, var(--accent)) / 0.95),
-    rgb(var(--st, var(--accent)) / 0.25)
-  );
-  pointer-events: none;
-}
-
-/* ตกรอบ/แพ้ — จางลงแต่ยังอ่านออก */
-.state-out {
-  filter: saturate(0.55);
-  opacity: 0.62;
-}
-
-/* เส้นตั้งคั่นช่องสถิติ */
-.rule-v {
-  width: 1px;
-  background: rgb(var(--hair) / var(--hair-a));
-}
-
-/* ---------- กริดและแถบเต็มจอ ---------- */
-
-/* ดันบล็อกออกไปกว้างเท่าจอ ต้องไม่มีบรรพบุรุษที่มี transform/filter */
-.band {
-  position: relative;
-  left: 50%;
-  width: 100vw;
-  transform: translateX(-50%);
-}
-
-@keyframes marquee {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-  to {
-    transform: translate3d(-50%, 0, 0);
-  }
-}
-.marquee {
-  animation: marquee var(--dur, 38s) linear infinite;
-  will-change: transform;
-}
-.marquee-rev {
-  animation-direction: reverse;
-}
-
-/* เส้นคอลัมน์ 12 ช่องจางๆ ใช้เฉพาะหน้าแรกบนจอใหญ่ */
-.grid-rules {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  pointer-events: none;
-}
-.grid-rules > span {
-  border-left: 1px solid rgb(var(--hair) / calc(var(--hair-a) * 0.4));
-}
-.grid-rules > span:last-child {
-  border-right: 1px solid rgb(var(--hair) / calc(var(--hair-a) * 0.4));
-}
-
-/* ---------- ผิวแบบจอภาพ ---------- */
-
-/* มุมตัดเฉียง — ใช้ได้เฉพาะ widget เท่านั้น clip-path ตัดเงากับ focus ring ทิ้ง */
-.chamfer {
-  clip-path: polygon(
-    var(--chamfer) 0,
-    100% 0,
-    100% calc(100% - var(--chamfer)),
-    calc(100% - var(--chamfer)) 100%,
-    0 100%,
-    0 var(--chamfer)
-  );
-}
-
-.scanlines {
-  background-image: repeating-linear-gradient(
-    180deg,
-    rgb(255 255 255 / 0.055) 0 1px,
-    transparent 1px 3px
-  );
-  mix-blend-mode: overlay;
-  opacity: 0.5;
-  pointer-events: none;
-}
-:root[data-theme="light"] .scanlines {
-  background-image: repeating-linear-gradient(
-    180deg,
-    rgb(30 28 60 / 0.05) 0 1px,
-    transparent 1px 3px
-  );
-  mix-blend-mode: multiply;
-  opacity: 0.3;
-}
-@media (max-width: 640px) {
-  .scanlines {
-    display: none;
-  }
-}
-
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  scrollbar-width: none;
-}
-
-/* ---------- ฟอร์ม ---------- */
 
-/*
-  ช่องวันที่/เวลา/ตัวเลข ใช้ UI ของเบราว์เซอร์ ปรับได้เท่าที่สเปกเปิดให้
-  - accent-color เปลี่ยนสีไฮไลต์ในปฏิทินจากน้ำเงินระบบเป็นสีทอง
-  - color-scheme คุมว่าป็อปอัปปฏิทินเป็นธีมสว่างหรือมืด
-*/
 input,
 textarea,
 select {
-  accent-color: var(--color-iris-mid);
-  font-family: inherit;
-}
-
-input[type="date"],
-input[type="datetime-local"],
-input[type="time"],
-input[type="number"] {
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-}
-
-input::-webkit-calendar-picker-indicator {
-  cursor: pointer;
-  opacity: 0.55;
-  padding: 2px;
-  border-radius: 6px;
-  transition:
-    opacity 0.2s ease,
-    background-color 0.2s ease;
-  /* ไอคอนเดิมเป็นสีดำ ธีมมืดต้องกลับสีถึงจะเห็น */
-  filter: invert(1) sepia(1) saturate(2.2) hue-rotate(5deg) brightness(0.95);
-}
-input::-webkit-calendar-picker-indicator:hover {
-  opacity: 1;
-  background-color: color-mix(in srgb, rgb(var(--accent)) 18%, transparent);
-}
-
-:root[data-theme="light"] input::-webkit-calendar-picker-indicator {
-  filter: sepia(1) saturate(2.4) hue-rotate(3deg) brightness(0.72);
-}
-
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  opacity: 0.45;
-  height: 1.4rem;
-  cursor: pointer;
-}
-input[type="number"]::-webkit-inner-spin-button:hover {
-  opacity: 0.9;
-}
-
-/* เมนู select ให้เข้าชุดกับ .field */
-select.field,
-select {
-  cursor: pointer;
-}
-
-/* ปิด autofill สีเหลืองของ Chrome ที่ทำให้ธีมเพี้ยน */
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus {
-  -webkit-text-fill-color: var(--color-ice);
-  -webkit-box-shadow: 0 0 0 1000px rgb(var(--field) / var(--field-a)) inset;
-  transition: background-color 9999s ease-in-out 0s;
-}
-
-input[type="file"] {
-  cursor: pointer;
-}
-
-/*
-  ช่องเลือกสีของเบราว์เซอร์ — ปรับได้เท่าที่สเปกเปิดให้
-
-  ตัวช่องเองแต่งได้แค่กรอบนอก ส่วนจานสีที่เด้งขึ้นมาเป็นของระบบปฏิบัติการ
-  แต่งไม่ได้และไม่ควรพยายามเลียนแบบ — จานสีของ OS คนใช้คุ้นมืออยู่แล้ว
-  และมีเครื่องมือดูดสีจากจอ (eyedropper) ที่เขียนเองไม่ได้
-*/
-input[type="color"] {
-  -webkit-appearance: none;
-  appearance: none;
-  cursor: pointer;
-  background: transparent;
-  border: 1px solid rgb(var(--hair) / calc(var(--hair-a) + 0.1));
-  border-radius: 99px;
-  padding: 3px;
-}
-input[type="color"]::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-input[type="color"]::-webkit-color-swatch {
-  border: none;
-  border-radius: 99px;
-}
-input[type="color"]::-moz-color-swatch {
-  border: none;
-  border-radius: 99px;
+  font: inherit;
 }
 
 input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  background: transparent;
-}
-/*
-  แถบสีต้องจบตรงกึ่งกลางหัวจับพอดี
-
-  หัวจับกว้าง 18px มันจึงวิ่งอยู่แค่ช่วง 9px ถึง (กว้างทั้งหมด − 9px)
-  ถ้าวางจุดจบของสีที่ "กี่เปอร์เซ็นต์ของความกว้างเต็ม" ตรงๆ สองอันจะเหลื่อมกัน
-  ห่างสุดถึง 9px ที่ปลายทั้งสองข้าง ซึ่งเห็นชัดมากว่าไม่ตรงกัน
-  --fill จึงรับค่าเป็นตัวเลขล้วน 0–1 ไม่ใช่เปอร์เซ็นต์ เพราะต้องเอาไปคูณใน calc
-*/
-input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 99px;
-  background: linear-gradient(
-    90deg,
-    var(--color-iris-deep) 0%,
-    var(--color-iris) calc(9px + (100% - 18px) * var(--fill, 0.5)),
-    var(--color-line) calc(9px + (100% - 18px) * var(--fill, 0.5))
-  );
-}
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  height: 18px;
-  width: 18px;
-  margin-top: -7px;
-  border-radius: 99px;
-  background: linear-gradient(180deg, #fff 0%, #a99bff 100%);
-  border: 1px solid #5b4bd6;
-  box-shadow: 0 2px 10px rgb(0 0 0 / 0.6);
-  cursor: grab;
-  transition: transform 0.15s ease;
-}
-input[type="range"]::-webkit-slider-thumb:active {
-  transform: scale(1.18);
-  cursor: grabbing;
-}
-input[type="range"]::-moz-range-track {
-  height: 4px;
-  border-radius: 99px;
-  background: var(--color-line);
-}
-input[type="range"]::-moz-range-progress {
-  height: 4px;
-  border-radius: 99px;
-  background: linear-gradient(90deg, var(--color-iris-deep), var(--color-iris));
-}
-input[type="range"]::-moz-range-thumb {
-  height: 16px;
-  width: 16px;
-  border-radius: 99px;
-  background: #a99bff;
-  border: 1px solid #5b4bd6;
-  cursor: grab;
+  accent-color: var(--c-ink);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-  }
-
-  /* กฎด้านบนจะทำให้ marquee กระโดดไปค้างที่ -50% ต้องปิดทั้งอัน */
-  .marquee {
-    animation: none !important;
-    transform: none !important;
-  }
-
-  /* เส้นกราฟเสียงต้องค้างที่ความสูงเต็ม ไม่ใช่แบนราบจนดูเหมือนพัง */
-  .eq-bar {
-    animation: none !important;
-    transform: scaleY(0.7) !important;
-  }
-
-  /* แถบเพลงต้องค้างที่ตำแหน่งจริงตอนเปิด ไม่ใช่กระโดดไปสุดปลายทาง
-     (--at คือสัดส่วนที่เล่นไปแล้ว ส่งมาจากคอมโพเนนต์) */
-  .bar-run {
-    animation: none !important;
-    transform: scaleX(var(--at, 0)) !important;
-  }
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--c-ink);
 }
 
-/* ---------------------------------------------------------------
-   widget เพลงบนสตรีม — แอนิเมชันทุกตัวเป็น CSS ล้วน
-
-   widget ตัวนี้ค้างอยู่บนจอตลอดไลฟ์ ถ้าขับด้วย JS (rAF ต่อเฟรม)
-   เครื่องที่เข้ารหัสวิดีโออยู่แล้วจะโดนแย่งซีพียูไปเรื่อยๆ
-   ใช้เฉพาะ transform กับ opacity เท่านั้น เบราว์เซอร์จะยกไปให้ compositor
-   ทำงานคนละเธรดกับที่ใช้เรนเดอร์ ไม่แตะ layout และไม่ต้องวาดใหม่
-   (ห้ามใช้ filter/blur หรือ box-shadow ที่ขยับ อันนั้นวาดใหม่ทุกเฟรมจริง)
-   --------------------------------------------------------------- */
-
-@keyframes eq-pulse {
-  0%,
-  100% {
-    transform: scaleY(0.28);
-  }
-  50% {
-    transform: scaleY(1);
-  }
+/* ตัวเลขลำดับคิว เวลา จำนวน — หลักตรงกันทุกแถว อ่านเทียบกันง่าย */
+.num {
+  font-variant-numeric: tabular-nums;
 }
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* แถวในรายการ — เส้นบางคั่นระหว่างแถว ไม่มีเส้นบนสุด/ล่างสุด */
+.rows > * + * {
+  border-top: 1px solid var(--c-line);
+}
+
+/* ---------------- การเคลื่อนไหว ----------------
+
+   ทุกตัวขยับแค่ transform/opacity — เบราว์เซอร์ยกไปให้ compositor ทำ
+   ไม่แตะ layout ไม่ต้องวาดใหม่ (สำคัญกับ widget ที่ค้างบนจอไลฟ์ทั้งคืน) */
 
 @keyframes rise-in {
   from {
     opacity: 0;
-    transform: translate3d(0, 12px, 0);
+    transform: translate3d(0, 10px, 0);
   }
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0);
   }
+}
+.rise-in {
+  animation: rise-in 0.42s var(--ease-out-soft) both;
 }
 
 @keyframes slide-in {
@@ -1373,32 +180,32 @@ input[type="range"]::-moz-range-thumb {
     transform: translate3d(0, 0, 0);
   }
 }
+.slide-in {
+  animation: slide-in 0.32s var(--ease-out-soft) both;
+}
 
+/* แถบเสียงเต้น = "กำลังเล่นอยู่" ของเดียวที่ขยับเองได้ เพราะมันคือข้อมูล */
+@keyframes eq-pulse {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
 .eq-bar {
   transform-origin: bottom;
   animation: eq-pulse 1.1s ease-in-out infinite;
   will-change: transform;
 }
 
-.rise-in {
-  animation: rise-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.slide-in {
-  animation: slide-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
 /*
-  ม่านเข้าฉากของ widget — ขยับตำแหน่งอย่างเดียว ห้ามแตะ opacity หรือ clip-path
+  ม่านเข้าฉากของ widget — ขยับตำแหน่งอย่างเดียว ห้ามแตะ opacity
 
-  เหตุผลสำคัญ: แอนิเมชันที่ "เริ่มจากมองไม่เห็น" ค้างได้จริง
-  ถ้าหน้าโหลดตอนแท็บถูกซ่อน (หรือ OBS ยังไม่แสดงซีนนั้น) นาฬิกาแอนิเมชันไม่เดิน
-  แล้วกล่องค้างอยู่ที่เฟรมแรกคือ opacity 0 / clip ปิดสนิท และไม่กลับมาเอง
-  ทั้งที่โค้ดรันครบ ข้อมูลมาครบ รูปโหลดครบ — ผลคือจอขาวที่หาสาเหตุไม่เจอเลย
-  (ทดสอบแล้วเกิดจริงทั้งกับ motion และกับ CSS keyframes เหมือนกัน)
-
-  พอเหลือแต่ transform ต่อให้ค้างที่เฟรมแรก widget ก็แค่อยู่ต่ำกว่าเดิม 10px
-  — ยังเห็นครบทุกอย่าง เสียแค่ลูกเล่นตอนเข้าฉาก ซึ่งแลกกันคุ้มกว่ามาก
+  แอนิเมชันที่ "เริ่มจากมองไม่เห็น" ค้างได้จริงถ้าหน้าโหลดตอน OBS ยังไม่แสดงซีน
+  นาฬิกาแอนิเมชันไม่เดินแล้วกล่องค้างที่ opacity 0 — จอขาวที่หาสาเหตุไม่เจอ
+  เหลือแต่ transform ต่อให้ค้างก็แค่อยู่ต่ำกว่าเดิม 10px ยังเห็นครบ
 */
 @keyframes widget-enter {
   from {
@@ -1408,17 +215,13 @@ input[type="range"]::-moz-range-thumb {
     transform: translate3d(0, 0, 0);
   }
 }
-
 .widget-enter {
-  animation: widget-enter 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: widget-enter 0.55s var(--ease-out-soft);
 }
 
 /*
-  แถบความคืบหน้าของเพลง
-
-  ตั้ง animation-duration เท่าความยาวคลิป แล้วใส่ animation-delay ติดลบ
-  เท่ากับเวลาที่เล่นไปแล้ว แถบจะโผล่มาที่ตำแหน่งถูกต้องทันทีแล้ววิ่งต่อเอง
-  ไม่มี JS ขยับเลยแม้แต่เฟรมเดียว — เบราว์เซอร์เดินให้บน compositor
+  แถบความคืบหน้าของเพลง — duration เท่าความยาวคลิป delay ติดลบเท่าเวลาที่เล่นไปแล้ว
+  แถบโผล่ตรงตำแหน่งจริงทันทีแล้ววิ่งต่อเอง ไม่มี JS ขยับสักเฟรม
 */
 @keyframes bar-run {
   from {
@@ -1428,7 +231,6 @@ input[type="range"]::-moz-range-thumb {
     transform: scaleX(1);
   }
 }
-
 .bar-run {
   transform-origin: left center;
   animation-name: bar-run;
@@ -1437,62 +239,22 @@ input[type="range"]::-moz-range-thumb {
   will-change: transform;
 }
 
-/* ---------------------------------------------------------------
-   หลังบ้าน (สตูดิโอ)
-
-   ที่ทำงานคนละเรื่องกับหน้าสาธารณะ: ไม่มีฉากหลังเคลื่อนไหว ไม่มีปกใหญ่
-   แต่ก็ไม่ควรเป็นพื้นเรียบตันๆ ทั้งจอเหมือนฟอร์มราชการ — ใส่แสงนวลจางๆ
-   ที่ขอบบนพอให้แถบบนกับเนื้อหาแยกชั้นกันได้ด้วยตา ไม่ใช่ด้วยเส้นอย่างเดียว
-   --------------------------------------------------------------- */
-
-.studio-canvas {
-  position: relative;
-  isolation: isolate;
-}
-.studio-canvas::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 22rem;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(
-      70% 100% at 18% 0%,
-      rgb(var(--accent) / 0.07) 0%,
-      transparent 62%
-    ),
-    radial-gradient(
-      55% 100% at 92% 0%,
-      rgb(var(--accent) / 0.045) 0%,
-      transparent 68%
-    );
-}
-
-/*
-  แถบข้างของสตูดิโอ — ไล่เข้มลงล่างนิดเดียว
-
-  พื้นทึบสีเดียวทั้งแถบทำให้เมนูล่างๆ ลอยเท่ากับเมนูบนสุด ทั้งที่ของที่อยู่
-  ท้ายแถบ (บัญชี ออกจากระบบ) ควรถอยไปเป็นฉากหลัง
-*/
-.studio-rail {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-ink-2) 100%, transparent) 0%,
-      color-mix(in srgb, var(--color-ink-2) 94%, var(--color-ink)) 100%
-    );
-}
-
-/*
-  เส้นคั่นกลุ่มเมนู — จางลงเรื่อยๆ จากซ้ายไปขวา
-  เส้นทึบเต็มความกว้างในแถบแคบๆ อ่านเป็น "ขีดฆ่า" มากกว่า "คั่นกลุ่ม"
-*/
-.rail-divider {
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    rgb(var(--hair) / calc(var(--hair-a) + 0.05)),
-    transparent
-  );
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  /* แถบเสียงค้างครึ่งทาง ไม่ใช่แบนราบจนดูเหมือนพัง */
+  .eq-bar {
+    animation: none !important;
+    transform: scaleY(0.7) !important;
+  }
+  /* แถบเพลงค้างที่ตำแหน่งจริงตอนเปิด (--at = สัดส่วนที่เล่นไปแล้ว) */
+  .bar-run {
+    animation: none !important;
+    transform: scaleX(var(--at, 0)) !important;
+  }
 }

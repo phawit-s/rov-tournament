@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
-import { motion, useReducedMotion } from "motion/react";
 import { authStore } from "@/lib/backend/firebase";
 import {
   PLATFORMS,
@@ -12,19 +11,17 @@ import {
   withdrawStreamerRequest,
   type StreamerRequest,
 } from "@/lib/backend/roles";
-import { formatThaiDate } from "@/lib/tournament/share";
+import { formatThaiDate } from "@/lib/format";
 import Button from "@/components/ui/Button";
 import Panel from "@/components/ui/Panel";
-import Corners from "@/components/ui/Corners";
 import { toast } from "@/components/ui/Toast";
-import { IconCheck, IconShield } from "@/components/ui/icons";
-import { Input, Label, Skeleton, Textarea } from "@/components/tournament/ui";
+import { Input, Label, Skeleton, Textarea } from "@/components/ui/kit";
 
 /**
  * ขอสิทธิ์สตรีมเมอร์ — ประตูเดียวที่ผู้ใช้ทั่วไปเดินเข้าสตูดิโอได้
  *
- * ตั้งใจไม่ให้กดแล้วได้สิทธิ์ทันที เพราะสิทธิ์นี้เปิดช่องรับเงิน (พร้อมเพย์)
- * และเขียนกราฟิกที่ขึ้นจอไลฟ์ได้ — ต้องมีคนกดรับรองเสมอ
+ * ตั้งใจไม่ให้กดแล้วได้สิทธิ์ทันที เพราะสิทธิ์นี้เปิดคิวเพลงที่เล่นขึ้นจอไลฟ์
+ * และวาง widget ลง OBS ได้ — ต้องมีคนกดรับรองเสมอ
  * กติกาฝั่งเซิร์ฟเวอร์บังคับไว้แล้วว่าใบที่คนขอเขียนเองตั้งได้แค่ 'pending'
  */
 export default function StreamerRequestPanel() {
@@ -76,7 +73,6 @@ function RequestForm({
   previous: StreamerRequest | null;
   onDone: () => void;
 }) {
-  const reduced = useReducedMotion();
   const [channelName, setChannelName] = useState(
     () => previous?.channelName ?? "",
   );
@@ -87,7 +83,7 @@ function RequestForm({
 
   const submit = async () => {
     if (!channelName.trim()) {
-      toast("ใส่ชื่อช่องก่อนนะ", "error");
+      toast("ใส่ชื่อช่องก่อนส่งคำขอ", "error");
       return;
     }
     setBusy(true);
@@ -103,8 +99,8 @@ function RequestForm({
       const message = err instanceof Error ? err.message : String(err);
       toast(
         message.includes("permission")
-          ? "ส่งไม่สำเร็จ — กติกาความปลอดภัยของ Firestore ยังไม่ถูกอัปเดต บอกคนที่ดูแลเว็บให้ deploy firestore.rules"
-          : `ส่งไม่สำเร็จ — ${message}`,
+          ? "ส่งไม่สำเร็จ ฐานข้อมูลไม่ยอมให้บันทึกคำขอ บอกคนดูแลเว็บให้ deploy firestore.rules รุ่นล่าสุด"
+          : `ส่งไม่สำเร็จ (${message}) เช็กอินเทอร์เน็ตแล้วลองอีกครั้ง`,
         "error",
         7000,
       );
@@ -114,157 +110,134 @@ function RequestForm({
   };
 
   return (
-    <motion.div
-      initial={reduced ? false : { opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-    >
-      <Panel variant="feature" interactive={false} className="relative p-7 sm:p-8">
-        <Corners len={18} o={0.45} />
+    <Panel className="p-6 sm:p-8">
+      <h1 className="text-headline font-bold">
+        {previous ? "แก้คำขอแล้วส่งใหม่" : "เปิดคิวเพลงให้ช่องของคุณ"}
+      </h1>
+      <p className="mt-3 max-w-prose text-muted">
+        สตูดิโอเปิดให้สตรีมเมอร์ที่ผู้ดูแลอนุมัติแล้ว พออนุมัติ คุณจะเปิดคิวให้คนดูขอเพลง
+        ใช้ตัวเล่นที่เปิดเพลงตามคิวให้เอง และได้ลิงก์สำหรับ OBS
+        บอกเราว่าช่องของคุณอยู่ที่ไหน แล้วผู้ดูแลจะตรวจให้
+      </p>
 
-        <p className="slug">Become a streamer</p>
-        <h2 className="mt-2 font-display text-2xl font-light text-ice">
-          ขอเปิดช่องของคุณ
-        </h2>
-        <p className="mt-2.5 text-sm leading-relaxed text-muted">
-          สตูดิโอเปิดให้สตรีมเมอร์ — ตั้งค่าพร้อมเพย์ รับโดเนท เปิดคิวขอเพลง
-          จับเวลาบนสตรีม และสร้าง widget ลง OBS ได้ทั้งชุด
-          บอกเราหน่อยว่าช่องของคุณอยู่ที่ไหน แล้วผู้ดูแลจะกดอนุมัติให้
-        </p>
-
-        <div className="mt-7 space-y-5">
-          <div>
-            <Label hint="ชื่อที่คนดูเรียกช่องคุณ เปลี่ยนทีหลังได้">ชื่อช่อง</Label>
-            <Input
-              value={channelName}
-              onChange={(e) => setChannelName(e.target.value)}
-              placeholder="เช่น Affarain Live"
-              maxLength={60}
-              autoFocus
-            />
-          </div>
-
-          <div>
-            <Label hint="ที่ไลฟ์อยู่ประจำ">แพลตฟอร์ม</Label>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {PLATFORMS.map((p) => {
-                const on = platform === p.key;
-                return (
-                  <button
-                    key={p.key}
-                    type="button"
-                    onClick={() => setPlatform(p.key)}
-                    aria-pressed={on}
-                    className={`cursor-pointer rounded-full px-4 py-2 font-display text-xs transition-colors ${
-                      on
-                        ? "accent-fill text-onaccent"
-                        : "tile text-muted hover:text-ice"
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <Label hint="ไม่ใส่ก็ได้ แต่ใส่แล้วผู้ดูแลตรวจให้ได้เร็วกว่ามาก">
-              ลิงก์ช่อง
-            </Label>
-            <Input
-              value={channelUrl}
-              onChange={(e) => setChannelUrl(e.target.value)}
-              placeholder="https://www.tiktok.com/@yourname"
-              maxLength={200}
-            />
-          </div>
-
-          <div>
-            <Label hint="จัดทัวร์อยู่ไหม ไลฟ์เกมอะไร บอกสั้นๆ พอ">
-              เล่าให้ฟังหน่อย
-            </Label>
-            <Textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="ไลฟ์ RoV ทุกคืน จัดทัวร์เดือนละครั้ง อยากได้สกอร์บอร์ดกับคิวขอเพลง"
-              maxLength={300}
-              rows={3}
-            />
-          </div>
-
-          <Button
-            size="lg"
-            className="w-full"
-            loading={busy}
-            onClick={() => void submit()}
-          >
-            {previous ? "ยื่นคำขอใหม่" : "ส่งคำขอ"}
-          </Button>
+      <form
+        className="mt-8 space-y-6"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <div>
+          <Label htmlFor="req-channel" hint="ชื่อที่คนดูเรียกช่องคุณ เปลี่ยนทีหลังได้">
+            ชื่อช่อง
+          </Label>
+          <Input
+            id="req-channel"
+            value={channelName}
+            onChange={(e) => setChannelName(e.target.value)}
+            placeholder="เช่น Affarain Live"
+            maxLength={60}
+            autoComplete="off"
+            autoFocus
+          />
         </div>
 
-        <p className="mt-5 text-xs leading-relaxed text-muted">
-          ระหว่างรออนุมัติ ใช้เครื่องมือฟรีได้ตามปกติ —{" "}
-          <Link href="/draw/" className="text-iris hover:underline">
-            สุ่มแบ่งทีม
-          </Link>{" "}
-          และ{" "}
-          <Link href="/wheel/" className="text-iris hover:underline">
-            วงล้อสุ่ม
-          </Link>{" "}
-          ไม่ต้องใช้สิทธิ์อะไรเลย
-        </p>
-      </Panel>
-    </motion.div>
+        <div role="group" aria-labelledby="req-platform">
+          <Label hint="ที่ไลฟ์อยู่ประจำ">
+            <span id="req-platform">แพลตฟอร์ม</span>
+          </Label>
+          <div className="flex flex-wrap gap-2">
+            {PLATFORMS.map((p) => {
+              const on = platform === p.key;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => setPlatform(p.key)}
+                  aria-pressed={on}
+                  className={`inline-flex min-h-11 cursor-pointer items-center rounded-full px-4 text-[0.94rem] font-medium transition-colors ${
+                    on ? "bg-ink text-onink" : "bg-fill text-ink hover:bg-fill-2"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <Label
+            htmlFor="req-url"
+            hint="ไม่ใส่ก็ได้ แต่ใส่แล้วผู้ดูแลตรวจได้เร็วขึ้นมาก"
+          >
+            ลิงก์ช่อง
+          </Label>
+          <Input
+            id="req-url"
+            value={channelUrl}
+            onChange={(e) => setChannelUrl(e.target.value)}
+            placeholder="https://www.tiktok.com/@ชื่อช่อง"
+            inputMode="url"
+            autoComplete="url"
+            spellCheck={false}
+            maxLength={200}
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="req-note" hint="ไม่ใส่ก็ได้ ไลฟ์อะไร ไลฟ์บ่อยแค่ไหน บอกสั้นๆ พอ">
+            เกี่ยวกับช่อง
+          </Label>
+          <Textarea
+            id="req-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="ไลฟ์ร้องเพลงทุกคืน อยากให้คนดูขอเพลงผ่านลิงก์แทนพิมพ์ในแชต"
+            maxLength={300}
+            rows={3}
+          />
+        </div>
+
+        <Button type="submit" size="lg" className="w-full" loading={busy}>
+          {previous ? "ส่งคำขอใหม่" : "ส่งคำขอ"}
+        </Button>
+      </form>
+    </Panel>
   );
 }
 
 /* ---------------- สถานะของใบ ---------------- */
 
 function StatusShell({
-  eyebrow,
   title,
-  tone,
+  description,
   children,
 }: {
-  eyebrow: string;
   title: string;
-  tone: string;
-  children: React.ReactNode;
+  description: ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <Panel
-      variant="feature"
-      interactive={false}
-      className="relative p-7 sm:p-8"
-      style={{ ["--st" as string]: tone }}
-    >
-      <Corners len={18} o={0.4} />
-      <div className="flex items-start gap-4">
-        <span
-          className="sunken grid h-12 w-12 shrink-0 place-items-center rounded-2xl"
-          style={{ color: `rgb(${tone})` }}
-        >
-          <IconShield className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <p className="slug">{eyebrow}</p>
-          <h2 className="mt-1.5 font-display text-xl font-light text-ice">
-            {title}
-          </h2>
-        </div>
-      </div>
+    <Panel className="p-6 sm:p-8">
+      <h1 className="text-headline font-bold">{title}</h1>
+      <p className="mt-3 max-w-prose text-muted">{description}</p>
       <div className="mt-6">{children}</div>
     </Panel>
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+/** รายละเอียดของใบ — แถวคั่นเส้นบาง ชื่อซ้าย ค่าขวา */
+function Details({ items }: { items: [label: string, value: string][] }) {
   return (
-    <div className="tile flex items-center justify-between gap-4 rounded-xl px-4 py-3">
-      <span className="slug slug-2 shrink-0">{label}</span>
-      <span className="min-w-0 truncate text-right text-sm text-ice">{value}</span>
-    </div>
+    <dl className="rows">
+      {items.map(([label, value]) => (
+        <div key={label} className="flex items-baseline justify-between gap-4 py-3">
+          <dt className="shrink-0 text-muted">{label}</dt>
+          <dd className="num min-w-0 truncate text-right font-medium">{value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -272,33 +245,41 @@ function PendingCard({ req }: { req: StreamerRequest }) {
   const [busy, setBusy] = useState(false);
 
   return (
-    <StatusShell eyebrow="Pending" title="ส่งคำขอแล้ว รอผู้ดูแลอนุมัติ" tone="var(--st-next)">
-      <p className="text-sm leading-relaxed text-muted">
-        พออนุมัติแล้วหน้านี้จะเปลี่ยนเป็นสตูดิโอให้เองทันที ไม่ต้องรีเฟรช
-        ระหว่างนี้ยังใช้เครื่องมือฟรีและสมัครแข่งได้ตามปกติ
-      </p>
+    <StatusShell
+      title="ส่งคำขอแล้ว รอผู้ดูแลอนุมัติ"
+      description="พออนุมัติแล้วหน้านี้จะเปลี่ยนเป็นสตูดิโอเอง ไม่ต้องรีเฟรช ระหว่างนี้ยังขอเพลงให้ช่องอื่นได้ตามปกติ"
+    >
+      <Details
+        items={[
+          ["ชื่อช่อง", req.channelName],
+          ["แพลตฟอร์ม", platformLabel(req.platform)],
+          ["ส่งเมื่อ", formatThaiDate(req.createdAt)],
+        ]}
+      />
 
-      <div className="mt-5 space-y-2">
-        <DetailRow label="ชื่อช่อง" value={req.channelName} />
-        <DetailRow label="แพลตฟอร์ม" value={platformLabel(req.platform)} />
-        <DetailRow label="ส่งเมื่อ" value={formatThaiDate(req.createdAt)} />
+      <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+        <Button
+          variant="secondary"
+          loading={busy}
+          onClick={() => {
+            setBusy(true);
+            void withdrawStreamerRequest(req.uid)
+              .then(() => toast("ถอนคำขอแล้ว", "success"))
+              .catch(() =>
+                toast("ถอนคำขอไม่สำเร็จ เช็กอินเทอร์เน็ตแล้วลองอีกครั้ง", "error"),
+              )
+              .finally(() => setBusy(false));
+          }}
+        >
+          ถอนคำขอ
+        </Button>
+        <Link
+          href="/"
+          className="inline-flex min-h-11 items-center justify-center rounded-full px-5 text-[0.94rem] font-medium transition-colors hover:bg-fill"
+        >
+          ดูช่องที่เปิดรับเพลง
+        </Link>
       </div>
-
-      <Button
-        variant="ghost"
-        size="sm"
-        className="mt-5"
-        loading={busy}
-        onClick={() => {
-          setBusy(true);
-          void withdrawStreamerRequest(req.uid)
-            .then(() => toast("ถอนคำขอแล้ว", "success"))
-            .catch(() => toast("ถอนไม่สำเร็จ", "error"))
-            .finally(() => setBusy(false));
-        }}
-      >
-        ถอนคำขอ
-      </Button>
     </StatusShell>
   );
 }
@@ -311,25 +292,26 @@ function RejectedCard({
   onRedo: () => void;
 }) {
   return (
-    <StatusShell eyebrow="Not approved" title="คำขอยังไม่ผ่าน" tone="var(--st-live)">
-      <p className="text-sm leading-relaxed text-muted">
-        แก้ตามที่ผู้ดูแลบอกแล้วยื่นใหม่ได้เลย ไม่จำกัดจำนวนครั้ง
-      </p>
-
+    <StatusShell
+      title="คำขอยังไม่ผ่าน"
+      description="แก้ตามที่ผู้ดูแลบอกแล้วส่งใหม่ได้ ไม่จำกัดจำนวนครั้ง"
+    >
       {req.reason && (
-        <div className="tally sunken mt-5 rounded-xl py-3 pr-4 pl-5">
-          <p className="slug slug-2">เหตุผลจากผู้ดูแล</p>
-          <p className="mt-1.5 text-sm leading-relaxed text-ice">{req.reason}</p>
+        <div className="mb-4 rounded-field bg-fill px-4 py-3">
+          <p className="text-sm text-muted">เหตุผลจากผู้ดูแล</p>
+          <p className="mt-1 whitespace-pre-line">{req.reason}</p>
         </div>
       )}
 
-      <div className="mt-5 space-y-2">
-        <DetailRow label="ชื่อช่องที่ขอ" value={req.channelName} />
-        <DetailRow label="ตัดสินเมื่อ" value={formatThaiDate(req.decidedAt)} />
-      </div>
+      <Details
+        items={[
+          ["ชื่อช่องที่ขอ", req.channelName],
+          ["ตัดสินเมื่อ", formatThaiDate(req.decidedAt)],
+        ]}
+      />
 
-      <Button className="mt-5" onClick={onRedo}>
-        แก้แล้วยื่นใหม่
+      <Button size="lg" className="mt-6 w-full sm:w-auto" onClick={onRedo}>
+        แก้คำขอ
       </Button>
     </StatusShell>
   );
@@ -338,35 +320,44 @@ function RejectedCard({
 /**
  * ใบที่อนุมัติแล้ว — ปกติผู้ใช้จะไม่เห็นการ์ดนี้ เพราะพอมีสิทธิ์แล้ว
  * ประตูจะพาเข้าสตูดิโอไปก่อน การ์ดนี้จึงเป็นทางออกกรณีสิทธิ์ยังมาไม่ถึงเครื่อง
+ * (ถอดสิทธิ์ตอนนี้ลบใบทิ้งด้วยแล้ว — ดู revokeStreamer — ใบที่ค้างเป็นของที่ถอดก่อนแก้)
  */
 function ApprovedCard({ req }: { req: StreamerRequest }) {
   return (
-    <StatusShell eyebrow="Approved" title="อนุมัติแล้ว" tone="var(--st-win)">
-      <p className="text-sm leading-relaxed text-muted">
-        บัญชีนี้เป็นสตรีมเมอร์แล้ว เปิดสตูดิโอเพื่อตั้งค่าช่อง{" "}
-        {req.channelName ? `“${req.channelName}”` : ""} ได้เลย
-      </p>
-      <Link href="/studio/" className="mt-5 inline-flex">
-        <Button icon={<IconCheck className="h-4 w-4" strokeWidth={2} />}>
-          เข้าสตูดิโอ
-        </Button>
+    <StatusShell
+      title="อนุมัติแล้ว"
+      description={
+        <>
+          บัญชีนี้เปิดคิวเพลงได้แล้ว เข้าสตูดิโอเพื่อตั้งค่าช่อง
+          {req.channelName ? ` “${req.channelName}”` : "ของคุณ"}
+        </>
+      }
+    >
+      <Link
+        href="/studio/"
+        className="inline-flex min-h-13 w-full items-center justify-center rounded-full bg-ink px-7 font-medium text-onink transition-opacity hover:opacity-85 sm:w-auto"
+      >
+        เข้าสตูดิโอ
       </Link>
+      <p className="mt-4 max-w-prose text-sm text-muted">
+        ถ้ากดแล้วยังอยู่หน้านี้ ลองรีเฟรชหน้าอีกครั้ง ถ้ายังไม่ได้
+        แปลว่าสิทธิ์ถูกถอนไปแล้ว ติดต่อผู้ดูแลเพื่อขอสิทธิ์คืน
+      </p>
     </StatusShell>
   );
 }
 
 function RequestSkeleton() {
   return (
-    <div className="surface hairline-top rounded-2xl p-7 sm:p-8" aria-busy="true">
-      <Skeleton className="h-2.5 w-24" />
-      <Skeleton className="mt-3 h-7 w-56" />
-      <Skeleton className="mt-4 h-3 w-full" />
-      <Skeleton className="mt-2 h-3 w-4/5" />
-      <Skeleton className="mt-7 h-3 w-20" />
-      <Skeleton className="mt-2 h-11 w-full rounded-xl" />
-      <Skeleton className="mt-5 h-3 w-24" />
-      <Skeleton className="mt-2 h-11 w-full rounded-xl" />
-      <Skeleton className="mt-6 h-12 w-full rounded-xl" />
+    <div className="rounded-sheet border border-line p-6 sm:p-8" aria-busy="true">
+      <Skeleton className="h-9 w-64 max-w-full" />
+      <Skeleton className="mt-4 h-4 w-full" />
+      <Skeleton className="mt-2 h-4 w-4/5" />
+      <Skeleton className="mt-8 h-5 w-24" />
+      <Skeleton className="mt-2 h-12 w-full rounded-field" />
+      <Skeleton className="mt-6 h-5 w-24" />
+      <Skeleton className="mt-2 h-11 w-full rounded-full" />
+      <Skeleton className="mt-8 h-13 w-full rounded-full" />
     </div>
   );
 }

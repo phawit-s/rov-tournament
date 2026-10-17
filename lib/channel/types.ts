@@ -1,16 +1,23 @@
-import type { DonateConfig, LiveInfo, MemberConfig } from "@/lib/tournament/types";
 import { DEFAULT_SONG_CONFIG, type SongConfig } from "@/lib/song/types";
-import { DEFAULT_TIMER, type StreamTimer } from "@/lib/timer/types";
+
+/** ไลฟ์ของช่อง — ใช้ทำป้าย "ไลฟ์อยู่" ที่กดแล้วพาไปดูได้ */
+export type LiveInfo = {
+  /** กำลังไลฟ์อยู่ไหม */
+  isLive: boolean;
+  platform: "tiktok" | "youtube" | "facebook" | "twitch" | "other";
+  url: string;
+  title?: string;
+};
 
 /**
- * ช่อง = โปรไฟล์ของผู้จัด/สตรีมเมอร์ หนึ่งบัญชีหนึ่งช่อง
+ * ช่อง = หน้าขอเพลงของสตรีมเมอร์หนึ่งคน
  *
- * ระบบโดเนทกับสมาชิกอยู่ที่ระดับช่อง ไม่ใช่ระดับทัวร์
- * จะได้ตั้งพร้อมเพย์กับแพ็กเกจสมาชิกครั้งเดียว แล้วใช้ได้ทุกทัวร์
- * และ widget แจ้งเตือนใน OBS ใช้ลิงก์เดียวตลอด ไม่ต้องเปลี่ยนทุกครั้งที่จัดทัวร์ใหม่
+ * เอกสารเก่าบน Firestore ยังมีฟิลด์ donate / member / timer ค้างอยู่
+ * (สมัยที่เว็บยังมีโดเนทกับนาฬิกา) ตั้งใจไม่ลบ — การบันทึกช่องใช้ merge
+ * ของพวกนั้นจึงอยู่ครบ แค่เว็บไม่อ่านแล้ว
  */
 export type Channel = {
-  /** ใช้ uid ของเจ้าของเป็น id เลย จะได้ไม่ต้องจัดการ id ซ้ำ */
+  /** ช่องแรกของบัญชีใช้ uid เป็นชื่อเอกสาร ช่องที่สองเป็นต้นไปเป็นรหัสสุ่ม */
   id: string;
   /** ชื่อสั้นในลิงก์ เช่น affarain */
   handle: string;
@@ -23,12 +30,8 @@ export type Channel = {
   links: { label: string; url: string }[];
 
   live: LiveInfo;
-  donate: DonateConfig;
-  member: MemberConfig;
   /** ระบบขอเพลง YouTube — ช่องเก่าที่ยังไม่มีฟิลด์นี้ให้ถือว่าปิดอยู่ */
   songs?: SongConfig;
-  /** นาฬิกาจับเวลาสด + วงล้อสุ่มเวลา — ช่องเก่าไม่มีฟิลด์นี้ ถือว่าปิดอยู่ */
-  timer?: StreamTimer;
 
   ownerUid: string;
   ownerEmail?: string;
@@ -44,22 +47,7 @@ export const DEFAULT_CHANNEL: Omit<Channel, "id" | "ownerUid" | "createdAt" | "u
     about: "",
     links: [],
     live: { isLive: false, platform: "tiktok", url: "" },
-    donate: {
-      enabled: false,
-      promptPayId: "",
-      displayName: "",
-      note: "โอนแล้วแนบสลิป ชื่อจะขึ้นหน้าจอสตรีม",
-      quickAmounts: [20, 50, 100, 300, 500],
-    },
-    member: {
-      enabled: false,
-      headline: "สมัครสมาชิก",
-      description: "สมัครรายเดือน รับป้ายสมาชิกและสิทธิพิเศษ",
-      tiers: [],
-      showMemberList: true,
-    },
     songs: { ...DEFAULT_SONG_CONFIG },
-    timer: { ...DEFAULT_TIMER },
   };
 
 /** ทำ handle ให้ปลอดภัยสำหรับใส่ใน URL */

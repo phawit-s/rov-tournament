@@ -1,0 +1,75 @@
+"use client";
+
+import { useEffect, useState, type CSSProperties } from "react";
+import { useLive } from "@/lib/backend/live";
+import { NEUTRAL_PALETTE, loadArtPalette, type ArtPalette } from "@/lib/song/artwork";
+import { watchSongQueue } from "@/lib/song/store";
+import type { SongRequest } from "@/lib/song/types";
+import { thumbUrl } from "@/lib/song/youtube";
+
+const NONE: SongRequest[] = [];
+
+/**
+ * คิวที่ยังไม่จบของช่อง (กำลังเล่น + รอคิว) แบบสด
+ *
+ * ใช้ท่อร่วม (useLive) — หลายที่ในหน้าเดียวขอช่องเดียวกันก็เปิด listener ท่อเดียว
+ * ขอแค่ใบที่ยังไม่จบ ให้ตรงกับสิทธิ์อ่านสาธารณะ และไม่ลากประวัติหลายพันใบมาด้วย
+ */
+export function useOpenQueue(channelId: string | null | undefined): {
+  queue: SongRequest[];
+  loaded: boolean;
+  error: boolean;
+} {
+  const [failed, setFailed] = useState<string | null>(null);
+  const { data, loaded } = useLive<SongRequest[]>(
+    channelId ? `songs:open:${channelId}` : null,
+    NONE,
+    (onChange, onError) =>
+      watchSongQueue(channelId ?? "", onChange, {
+        onlyOpen: true,
+        onError: () => {
+          setFailed(channelId ?? null);
+          onError();
+        },
+      }),
+  );
+  return { queue: data, loaded, error: !!channelId && failed === channelId };
+}
+
+/**
+ * ดูดสีจากปกเพลง
+ *
+ * เริ่มที่สีกลางแล้วค่อยเปลี่ยนเมื่อรูปโหลดเสร็จ ระหว่างเปลี่ยนเพลงให้ค้างสีเดิมไว้
+ * ถ้าเด้งกลับเทาแล้วค่อยเข้าสีใหม่ จะเห็นเทาแวบหนึ่งทุกครั้งที่เปลี่ยนเพลง
+ */
+export function useArtPalette(videoId: string | null | undefined): ArtPalette {
+  const [loaded, setLoaded] = useState<ArtPalette | null>(null);
+
+  useEffect(() => {
+    if (!videoId) return;
+    const ac = new AbortController();
+    void loadArtPalette(thumbUrl(videoId, "mq"), ac.signal).then((p) => {
+      if (!ac.signal.aborted) setLoaded(p);
+    });
+    // เพลงเปลี่ยนก่อนรูปเก่าโหลดเสร็จ ต้องทิ้งผลเก่า ไม่งั้นสีเก่าจะมาทับเพลงใหม่
+    return () => ac.abort();
+  }, [videoId]);
+
+  return videoId ? (loaded ?? NEUTRAL_PALETTE) : NEUTRAL_PALETTE;
+}
+
+/**
+ * สีพื้นของ "เวที" (กล่องเพลงที่กำลังเล่น) จากสีปก
+ *
+ * ผสมสีปกเข้ากับพื้นหน้า 24% — สว่างยังเป็นพื้นอ่อน มืดยังเป็นพื้นเข้ม
+ * ตัวหนังสือสีหลัก (ดำ/ขาว) อ่านออกเสมอโดยไม่ต้องคำนวณคอนทราสต์ต่อเพลง
+ * ไม่มีเพลง = พื้นเทาธรรมดา
+ */
+export function stageStyle(palette: ArtPalette, hasSong: boolean): CSSProperties {
+  return {
+    background: hasSong
+      ? `color-mix(in oklab, ${palette.glow} 24%, var(--c-canvas))`
+      : "var(--c-fill)",
+    transition: "background-color 600ms ease, background 600ms ease",
+  };
+}

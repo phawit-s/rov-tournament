@@ -9,16 +9,16 @@ const listeners = new Set<() => void>();
 
 function read(): Theme {
   if (cache) return cache;
-  if (typeof document === "undefined") return "dark";
-  cache = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  if (typeof document === "undefined") return "light";
+  cache = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
   return cache;
 }
 
 function apply(theme: Theme) {
   document.documentElement.dataset.theme = theme;
   document
-    .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", theme === "light" ? "#f4f4fa" : "#07080f");
+    .querySelectorAll('meta[name="theme-color"]')
+    .forEach((m) => m.setAttribute("content", theme === "light" ? "#ffffff" : "#000000"));
 }
 
 /** external store สำหรับ useSyncExternalStore — จำธีมไว้ใน localStorage */
@@ -30,7 +30,7 @@ export const themeStore = {
     };
   },
   getSnapshot: (): Theme => read(),
-  getServerSnapshot: (): Theme => "dark",
+  getServerSnapshot: (): Theme => "light",
   set(theme: Theme) {
     cache = theme;
     try {

@@ -1,235 +1,110 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
-import { useReducedMotion } from "motion/react";
-import { useWidgetOptions } from "@/hooks/useLiveTournament";
-import Corners from "@/components/ui/Corners";
-
-/** "#a99bff" -> "169 155 255" ใช้ป้อนโทเคน --accent ที่คลาสกลางทั้งเว็บอ่าน */
-function rgbTriplet(hex: string): string {
-  const h = hex.replace("#", "");
-  const full =
-    h.length === 3
-      ? h
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : h.slice(0, 6).padEnd(6, "0");
-  const n = Number.parseInt(full, 16);
-  if (!Number.isFinite(n)) return "169 155 255";
-  return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
-}
+import type { ReactNode } from "react";
+import { useWidgetOptions } from "@/hooks/useWidgetOptions";
 
 /**
- * widget ลอยอยู่บนภาพเกมเสมอ จึงต้องล็อกโทเคนโทนมืดไว้ในตัวเอง
- * ไม่งั้นคนที่ตั้งเว็บเป็นธีมสว่างจะได้ widget สีน้ำตาลอ่อนจมหายไปกับฉาก
- * และตั้ง --accent เป็นสีที่ผู้ใช้เลือก คลาสกลาง (.slug .tally .rule / Corners) จะเปลี่ยนตามให้เอง
+ * ระยะขอบรอบ widget เป็นพิกเซล — ขนาด Browser Source ที่หน้าแจกลิงก์บอก
+ * คือขนาดของ widget บวกขอบนี้สองด้าน (ดู SOURCE_SIZE ใน NowPlayingCard)
  */
-function widgetTokens(accent: string): CSSProperties {
-  return {
-    "--accent": rgbTriplet(accent),
-    "--hair": "255 255 255",
-    "--hair-a": "0.12",
-    "--tile": "255 255 255",
-    "--tile-a": "0.05",
-    "--field": "0 0 0",
-    "--field-a": "0.3",
-    "--sunken": "0 0 0",
-    "--sunken-a": "0.35",
-    "--st-live": "255 91 122",
-    "--st-next": "169 155 255",
-    "--st-win": "52 227 176",
-    "--st-out": "126 130 153",
-    "--st-idle": "138 142 168",
-    "--color-ice": "#e7e9f5",
-    "--color-muted": "#8a8ea8",
-    "--color-iris": "#a99bff",
-    "--color-gold": "#7c6cf5",
-    "--color-iris-deep": "#4b3dbf",
-    "--color-platinum": "#c7cce4",
-  } as CSSProperties;
-}
+export const SHELL_PAD = 12;
 
 /**
- * กรอบร่วมของทุก widget — คุมสเกล พื้นหลัง และจังหวะเข้าฉาก
- * ค่าเริ่มต้นพื้นหลังโปร่งใสเพื่อวางทับสตรีมได้เลย
+ * สีของตัวหนังสือบน widget
+ *
+ * เขียนเป็น rgb() ตรงๆ ไม่ใช้คลาสแบบ text-white/70 ด้วยสองเหตุผล
+ *   1. Tailwind v4 แปลงค่านั้นเป็น color-mix() ซึ่งเบราว์เซอร์ใน OBS รุ่นเก่า
+ *      (CEF/Chromium 103) อ่านไม่ออก ตัวหนังสือจะกลายเป็นสีตั้งต้นของหน้า
+ *   2. ค่าตรงๆ คิดคอนทราสต์ย้อนกลับได้ — พื้นการ์ดสว่างไม่เกิน ~0.11 เสมอ
+ *      (ดู lookOf ใน NowPlayingCard) กรณีแย่สุดขาวล้วนได้ 6.6:1 ขาว 78% ได้ 4.8:1
  */
-export default function WidgetShell({
-  children,
-  align = "start",
-}: {
-  children: ReactNode;
-  align?: "start" | "center";
-}) {
-  const { scale, solid, accent } = useWidgetOptions();
-  const reduced = useReducedMotion();
+export const WIDGET_TEXT = {
+  ink: "#ffffff",
+  /** ตัวหนังสือรองทุกอย่างที่ต้องอ่าน — ศิลปิน คนขอ เวลา */
+  soft: "rgb(255 255 255 / 0.78)",
+  /**
+   * เลขลำดับคิวเท่านั้น (กรณีแย่สุด ~4.2:1) — ห้ามใช้กับเนื้อหาที่ต้องอ่าน
+   * เหมือน faint ของเว็บ เลขบอกลำดับซึ่งตำแหน่งแถวบอกอยู่แล้ว
+   */
+  faint: "rgb(255 255 255 / 0.7)",
+  line: "rgb(255 255 255 / 0.12)",
+};
+
+/** พื้นการ์ดตอนไม่มีสีจากปกและไม่ได้ตั้งสีสำรอง — เทาเข้มกลางๆ อ่านออกทุกฉาก */
+export const IDLE_SURFACE = "rgb(34 34 38)";
+
+/** พื้นของโหมดพรีวิว (?solid=1) — เทาเข้มแทนฉากเกม ให้เห็นขอบการ์ดชัด */
+const PREVIEW_BACKDROP = "rgb(58 58 64)";
+
+/**
+ * กรอบร่วมของ widget — คุมสเกลกับพื้นหลัง
+ *
+ * พื้นหลังโปร่งใสเป็นค่าเริ่มต้นเพื่อวางทับภาพเกมได้เลย
+ * ไม่มีแอนิเมชันที่ชั้นนี้ — ของข้างในเล่นจังหวะเข้าเองตอนเพลงเปลี่ยน
+ * (ถ้าที่นี่เล่นด้วย ครั้งแรกที่โผล่จะขยับซ้อนกันสองชั้น)
+ */
+export default function WidgetShell({ children }: { children: ReactNode }) {
+  const { scale, solid } = useWidgetOptions();
 
   return (
     <div
-      className={`flex min-h-dvh w-full p-3 ${
-        align === "center" ? "items-center justify-center" : "items-start justify-start"
-      }`}
+      className="flex w-full items-start justify-start"
       style={{
-        ...widgetTokens(accent),
-        background: solid ? "#07080f" : "transparent",
-        colorScheme: "dark",
+        minHeight: "100vh",
+        padding: SHELL_PAD,
+        background: solid ? PREVIEW_BACKDROP : "transparent",
+        color: WIDGET_TEXT.ink,
       }}
     >
-      <div
-        style={{ transform: `scale(${scale})`, transformOrigin: "top left" }}
-        className="origin-top-left"
-      >
-        {/*
-          ม่านกวาดซ้าย→ขวาตอนสลับซีนใน OBS แทนที่จะโผล่พรึ่บ
-
-          เคยทำด้วย motion โดยตั้ง initial เป็น opacity 0 + clip-path ปิดสนิท
-          แล้วให้ JS ค่อยเปิดออก — ซึ่งแปลว่า "มองเห็น widget ไหม" ไปขึ้นอยู่กับว่า
-          แอนิเมชันวิ่งจนจบหรือเปล่า พอมันไม่วิ่ง (แท็บหลังบ้าน rAF ถูกพัก /
-          เบราว์เซอร์ interpolate clip-path ไม่ได้) widget จะค้างที่ opacity 0
-          ทั้งที่โค้ดรันครบ ข้อมูลมาครบ รูปโหลดครบ — เห็นเป็นจอขาวเปล่าโดยไม่มีอะไรบอก
-          (เจอของจริง: network 200 ทุกเส้น รูปปกโหลดสำเร็จ แต่จอขาว)
-
-          เปลี่ยนมาใช้ CSS ที่ "สถานะปกติคือมองเห็น" แล้วแอนิเมชันแค่วิ่งผ่าน
-          ถ้ามันไม่วิ่งด้วยเหตุใดก็ตาม ผลคือเห็น widget ตามปกติ ไม่ใช่หายไปเลย
-          และตัดเบลอออกด้วย — มันบังคับวาดใหม่ทุกเฟรม ผิดกติกาที่ widget ตั้งไว้เอง
-        */}
-        <div className={reduced ? undefined : "widget-enter"}>{children}</div>
+      {/*
+        ย่อ/ขยายด้วย transform ไม่ใช่ zoom หรือเปลี่ยนขนาดตัวอักษร
+        เบราว์เซอร์วาดใหม่ครั้งเดียวที่ความละเอียดใหม่ ตัวหนังสือคมเหมือนเดิม
+        (ต่างจากการลากยืดกรอบใน OBS ซึ่งขยายภาพที่วาดเสร็จแล้ว ได้ตัวหนังสือเบลอ)
+      */}
+      <div style={scale !== 1 ? { transform: `scale(${scale})`, transformOrigin: "top left" } : undefined}>
+        {children}
       </div>
     </div>
-  );
-}
-
-export type WidgetFrame = "plate" | "bar" | "crest";
-
-/**
- * กล่องพื้นหลังของ widget ที่อ่านง่ายบนภาพเกม
- * frame คือทรงของกราฟิกแพ็กเกจ — plate (มุมตัดเฉียงแบบแผ่นป้าย),
- * bar (แถบเตี้ยสำหรับสกอร์/คิว), crest (ทรงสูงมีปีกสำหรับแชมป์/แจ้งเตือน)
- *
- * ไม่ตั้ง padding ให้เอง เพราะแต่ละ widget ต้องการระยะไม่เท่ากัน
- * และการทับ px-/py- จากภายนอกใน Tailwind ลำดับไม่แน่นอน
- */
-export function WidgetCard({
-  children,
-  className = "",
-  accent,
-  frame = "plate",
-}: {
-  children: ReactNode;
-  className?: string;
-  accent?: string;
-  frame?: WidgetFrame;
-}) {
-  const a = accent ?? "#a99bff";
-  const chamfered = frame === "plate";
-  const shape = chamfered
-    ? "chamfer"
-    : frame === "crest"
-      ? "rounded-3xl"
-      : "rounded-2xl";
-
-  return (
-    /*
-      ไม่มีเงาทอดออกนอกกล่องโดยตั้งใจ
-
-      พื้นหลัง widget โปร่งใส เงาจึงไม่ได้ตกลงบนอะไรเลย มันแค่ย้อมภาพเกม
-      ที่อยู่ข้างหลังให้เป็นคราบดำฟุ้งตามรูปกล่อง ซึ่งเห็นชัดมากตอนวางบนฉากสว่าง
-      ขอบกล่องอ่านออกอยู่แล้วจากเส้นขอบสีเน้นกับพื้นเข้มด้านใน
-    */
-    <div className="relative">
-      <div
-        className={`relative overflow-hidden ${shape} ${className}`}
-        style={{
-          background: "linear-gradient(180deg, rgba(12,12,18,0.94), rgba(8,8,12,0.9))",
-          boxShadow: chamfered
-            ? `inset 0 0 0 1px ${a}55, inset 0 0 0 3px rgb(0 0 0 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.14)`
-            : `0 0 0 1px ${a}55, inset 0 0 0 1px rgb(255 255 255 / 0.07), inset 0 1px 0 rgb(255 255 255 / 0.14)`,
-          backdropFilter: "blur(6px)",
-        }}
-      >
-        {/* แสงฟุ้งสีเน้นที่ขอบบน ทำให้การ์ดดูมีแหล่งไฟจริง */}
-        <span
-          className="pointer-events-none absolute inset-x-0 top-0 h-24"
-          style={{
-            background: `radial-gradient(120% 100% at 50% 0%, ${a}, transparent 70%)`,
-            opacity: 0.12,
-          }}
-        />
-        <span
-          className="pointer-events-none absolute inset-x-8 top-0 h-px"
-          style={{
-            background: `linear-gradient(90deg, transparent, ${a}, transparent)`,
-          }}
-        />
-        <span className="grain pointer-events-none absolute inset-0 opacity-[0.32] mix-blend-overlay" />
-
-        {chamfered && (
-          <span className="pointer-events-none absolute inset-2">
-            <Corners len={14} o={0.55} />
-          </span>
-        )}
-
-        {frame === "crest" && <CrestWings accent={a} />}
-
-        <div className="relative">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-/** ปีกซ้าย-ขวาของทรงโล่ ใช้บอกว่านี่คือการ์ดพิธีการ ไม่ใช่แถบข้อมูล */
-function CrestWings({ accent }: { accent: string }) {
-  const wing = `linear-gradient(180deg, transparent, ${accent}, transparent)`;
-  return (
-    <span className="pointer-events-none absolute inset-0" aria-hidden>
-      <span
-        className="absolute top-1/2 left-0 h-2/5 w-1 -translate-y-1/2"
-        style={{ background: wing, opacity: 0.6 }}
-      />
-      <span
-        className="absolute top-1/2 right-0 h-2/5 w-1 -translate-y-1/2"
-        style={{ background: wing, opacity: 0.6 }}
-      />
-      <span
-        className="absolute top-0 left-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45"
-        style={{ background: accent, opacity: 0.75 }}
-      />
-    </span>
   );
 }
 
 /**
  * ข้อความบอกว่าทำไม widget ถึงว่างเปล่า
  *
- * เดิมโชว์เฉพาะโหมดพื้นทึบ เพราะกลัวไปโผล่บนสตรีม — แต่ผลคือลิงก์ที่ตั้งค่าผิด
- * (ลืมใส่รหัสช่อง / โปรแกรมสตรีมตัด #hash ทิ้ง) กลายเป็นหน้าขาวเปล่าๆ
- * ไม่มีอะไรบอกเลยสักตัว คนตั้งค่าเลยเข้าใจว่า widget พัง แล้วไล่แก้ผิดจุด
+ * ลิงก์ที่ตั้งค่าผิด (ลืมใส่รหัสช่อง / โปรแกรมสตรีมตัด #hash ทิ้ง / ต่อฐานข้อมูลไม่ติด)
+ * ถ้าปล่อยเป็นหน้าว่าง คนตั้งค่าจะเข้าใจว่า widget พังแล้วไล่แก้ผิดจุด
  *
- * ตัวนี้ขึ้นเฉพาะกรณีที่ตั้งค่าผิดจนไม่มีวันทำงานได้ ไม่ใช่ตอนคิวว่างชั่วคราว
- * — ถ้ามันโผล่บนสตรีม แปลว่าอันนั้นพังอยู่แล้ว เห็นดีกว่าไม่เห็น
+ * setup = ตั้งค่าผิดจนไม่มีวันทำงานได้ ให้โชว์เสมอ ถ้ามันโผล่บนสตรีม
+ *         แปลว่าอันนั้นพังอยู่แล้ว เห็นดีกว่าไม่เห็น
+ * ไม่ใส่ = แค่ยังไม่มีข้อมูลตอนนี้ (คิวว่าง) โชว์เฉพาะโหมดพรีวิว
+ *         บนสตรีมห้ามโผล่ เพราะเดี๋ยวข้อมูลก็มาเอง
  */
 export function WidgetHint({
   children,
-  title = "ยังไม่มีข้อมูล",
+  title,
   setup = false,
 }: {
   children: ReactNode;
-  title?: string;
-  /**
-   * true = ตั้งค่าผิดจนไม่มีวันทำงานได้ (ลืมใส่รหัสช่อง ฯลฯ) ให้โชว์เสมอ
-   * false = แค่ยังไม่มีข้อมูลตอนนี้ (ยังไม่มีแชมป์ ยังไม่มีแมตช์)
-   *         อันนี้ห้ามโชว์บนสตรีม เพราะเดี๋ยวข้อมูลก็มาเอง
-   */
+  title: string;
   setup?: boolean;
 }) {
-  const { solid, accent } = useWidgetOptions();
+  const { solid } = useWidgetOptions();
   if (!solid && !setup) return null;
 
   return (
-    <WidgetCard accent={accent} frame="plate" className="max-w-140 px-7 py-6">
-      <p className="slug">Widget</p>
-      <p className="mt-2 font-display text-lg text-white">{title}</p>
-      <div className="mt-2 text-sm leading-relaxed text-white/60">{children}</div>
-    </WidgetCard>
+    <div
+      className="rounded-sheet px-5 py-4 [&_code]:rounded-[6px] [&_code]:bg-[rgb(255_255_255/0.14)] [&_code]:px-1.5 [&_code]:text-[14px] [&_code]:text-white"
+      style={{
+        // กว้างพอดีกรอบ Browser Source ที่เล็กที่สุด (การ์ดนอน 500px) ไม่ล้นออกขวา
+        width: `min(560px, calc(100vw - ${SHELL_PAD * 2}px))`,
+        background: IDLE_SURFACE,
+        boxShadow: `inset 0 0 0 1px ${WIDGET_TEXT.line}`,
+      }}
+    >
+      <p className="text-[18px] leading-[1.3] font-bold">{title}</p>
+      <div className="mt-1.5 text-[15px] leading-[1.55]" style={{ color: WIDGET_TEXT.soft }}>
+        {children}
+      </div>
+    </div>
   );
 }

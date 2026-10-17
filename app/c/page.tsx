@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
 import AppShell from "@/components/AppShell";
-import ChannelSupport from "@/components/channel/ChannelSupport";
+import RedirectTo from "@/components/RedirectTo";
+import { pageTitle } from "@/lib/brand";
 
-export const metadata: Metadata = {
-  title: "สนับสนุนช่อง — Steamer Hub",
-  description: "โอนแล้วแนบสลิป ชื่อจะขึ้นหน้าจอสตรีม",
-};
+export const metadata: Metadata = { title: pageTitle("ขอเพลง") };
 
-export default function ChannelSupportPage() {
+/**
+ * หน้าสนับสนุนช่องเดิม (/c/#h=ชื่อช่อง) — ระบบโดเนทถูกตัดออกแล้ว
+ * QR ที่แปะบนไลฟ์ยังชี้มาที่นี่ จึงพาไปหน้าขอเพลงของช่องเดียวกันแทน (#h= ติดไปด้วย)
+ */
+export default function ChannelRedirectPage() {
   return (
     <AppShell>
-      <ChannelSupport />
+      <RedirectTo href="/song/" label="หน้าขอเพลง" keepHash />
     </AppShell>
   );
 }

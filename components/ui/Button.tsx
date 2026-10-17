@@ -1,41 +1,46 @@
 "use client";
 
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { motion } from "motion/react";
-import { sfx } from "@/lib/sound";
 import { IconCheck } from "./icons";
 
-type Variant = "primary" | "outline" | "ghost" | "danger";
+/**
+ * ปุ่มของทั้งเว็บ — ทรงแคปซูลแบบปุ่มในแอปเพลง
+ *
+ * primary   ดำทึบ (มืด = ขาวทึบ) — หนึ่งปุ่มต่อหนึ่งงาน ห้ามวางสองปุ่มนี้ติดกัน
+ * secondary พื้นเทา — งานรองที่อยู่ข้างปุ่มหลัก
+ * ghost     ไม่มีพื้น — ยกเลิก ปิด ย้อนกลับ
+ * danger    ตัวหนังสือแดงบนพื้นเทา — ลบ ปฏิเสธ (ยืนยันก่อนเสมอ)
+ *
+ * ชื่อ "outline" ยังรับไว้ให้โค้ดเก่า ถือเป็น secondary
+ */
+type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline";
 type Size = "sm" | "md" | "lg";
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: Variant;
   size?: Size;
-  /** สปินเนอร์ทับตัวหนังสือ ความกว้างปุ่มไม่ขยับ */
   loading?: boolean;
-  /** เปลี่ยนไส้ในเป็นเครื่องหมายถูกหนึ่งจังหวะ */
+  /** โชว์เครื่องหมายถูกแทนไอคอนชั่วครู่ — ใช้หลังคัดลอก/บันทึกสำเร็จ */
   success?: boolean;
   icon?: ReactNode;
   children: ReactNode;
 };
 
 const VARIANTS: Record<Variant, string> = {
-  primary:
-    "text-onaccent accent-fill shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_12px_34px_-18px_rgba(169,155,255,0.9)] hover:-translate-y-px hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_18px_44px_-18px_rgba(207,167,101,0.95)] hover:brightness-105",
-  outline:
-    "text-iris border border-iris/30 bg-iris/5 hover:bg-iris/15 hover:border-iris/50",
-  ghost: "text-ice/85 border border-hair tile hover-tile hover:text-ice",
-  danger:
-    "text-danger border border-danger/25 bg-danger/8 hover:bg-danger/14",
+  primary: "bg-ink text-onink hover:opacity-85",
+  secondary: "bg-fill text-ink hover:bg-fill-2",
+  outline: "bg-fill text-ink hover:bg-fill-2",
+  ghost: "text-ink hover:bg-fill",
+  danger: "bg-fill text-danger hover:bg-fill-2",
 };
 
+/* สูงขั้นต่ำ 44px ทุกขนาดที่ใช้บนมือถือ — sm ไว้ในแถบเครื่องมือของจอกว้างเท่านั้น */
 const SIZES: Record<Size, string> = {
-  sm: "px-4 py-2 text-xs",
-  md: "px-6 py-3 text-sm",
-  lg: "px-7 py-3.5 text-base",
+  sm: "min-h-9 px-4 text-sm gap-1.5",
+  md: "min-h-11 px-5 text-[0.94rem] gap-2",
+  lg: "min-h-13 px-7 text-base gap-2",
 };
 
-/** ปุ่มนิ่งๆ มีแค่แสงกวาดเบาๆ ตอน hover ไม่วิ่งตามเมาส์ */
 const Button = forwardRef<HTMLButtonElement, Props>(function Button(
   {
     variant = "primary",
@@ -45,7 +50,7 @@ const Button = forwardRef<HTMLButtonElement, Props>(function Button(
     icon,
     className = "",
     children,
-    onClick,
+    type = "button",
     disabled,
     ...rest
   },
@@ -54,45 +59,19 @@ const Button = forwardRef<HTMLButtonElement, Props>(function Button(
   return (
     <button
       ref={ref}
+      type={type}
       disabled={disabled || loading}
-      onClick={(e) => {
-        sfx.unlock();
-        sfx.play("click");
-        onClick?.(e);
-      }}
-      className={`group relative isolate inline-flex cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl font-display font-medium tracking-wide transition-all duration-300 outline-none select-none focus-visible:ring-2 focus-visible:ring-iris/50 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-none disabled:text-muted disabled:shadow-none disabled:ring-1 disabled:ring-[rgb(var(--hair)/var(--hair-a))] disabled:hover:translate-y-0 ${SIZES[size]} ${VARIANTS[variant]} ${className}`}
+      aria-busy={loading || undefined}
+      className={`relative inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full font-medium whitespace-nowrap transition-[background-color,opacity,transform] duration-150 select-none active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 ${SIZES[size]} ${VARIANTS[variant]} ${className}`}
       {...rest}
     >
-      <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
-        <span className="absolute inset-y-0 left-0 w-1/4 bg-white/20 opacity-0 blur-md group-hover:animate-sheen group-hover:opacity-100" />
+      <span className={`inline-flex items-center gap-[inherit] ${loading ? "invisible" : ""}`}>
+        {success ? <IconCheck className="h-4 w-4" strokeWidth={2.2} /> : icon}
+        {children}
       </span>
-
-      <span
-        className={`relative z-10 inline-flex items-center gap-2 transition-opacity duration-200 ${
-          loading ? "opacity-0" : ""
-        }`}
-      >
-        {success ? (
-          <motion.span
-            initial={{ scale: 0.6, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 480, damping: 18 }}
-            className="inline-flex items-center gap-2"
-          >
-            <IconCheck className="h-3.5 w-3.5" strokeWidth={2} />
-            {children}
-          </motion.span>
-        ) : (
-          <>
-            {icon}
-            {children}
-          </>
-        )}
-      </span>
-
       {loading && (
-        <span className="absolute inset-0 z-10 grid place-items-center">
-          <span className="h-4 w-4 animate-spin rounded-full border border-current/30 border-t-current" />
+        <span className="absolute inset-0 grid place-items-center" aria-hidden>
+          <Spinner />
         </span>
       )}
     </button>
@@ -100,3 +79,13 @@ const Button = forwardRef<HTMLButtonElement, Props>(function Button(
 });
 
 export default Button;
+
+/** วงหมุนเล็ก — ใช้สีของตัวหนังสือรอบข้าง */
+export function Spinner({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <span
+      className={`inline-block animate-spin rounded-full border-2 border-current border-r-transparent ${className}`}
+      aria-hidden
+    />
+  );
+}

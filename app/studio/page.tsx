@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import StudioHome from "@/components/studio/StudioHome";
+import { pageTitle } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: "สตูดิโอ — Steamer Hub",
-  description: "หลังบ้านของสตรีมเมอร์ — ช่อง ทัวร์นาเมนต์ และกราฟิกสำหรับสตรีม",
+  title: pageTitle("สตูดิโอ"),
+  description: "เพลงที่กำลังเล่น เปิดปิดรับเพลง และลิงก์ให้คนดูของช่องคุณ",
 };
 
 export default function StudioPage() {

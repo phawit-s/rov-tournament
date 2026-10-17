@@ -1,25 +1,13 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Skeleton } from "../tournament/ui";
+import { Skeleton } from "./kit";
 import MiniBtn, { CopyBtn, MiniLink } from "./MiniBtn";
-import { IconMonitor } from "./icons";
 
 /*
-  โหลดตัวสร้าง QR ตอนจะใช้จริงเท่านั้น
-
-  qrcode เป็นก้อนใหญ่ (ตัวเข้ารหัส Reed-Solomon กับตารางค่าคงที่) แต่ผลของมัน
-  ถูกใช้ในเอฟเฟกต์หลังคอมโพเนนต์ขึ้นจอแล้ว การ import ไว้บนหัวไฟล์จึงแปลว่า
-  ทุกคนที่เปิดหน้านี้ต้องดาวน์โหลดและแกะโค้ดก้อนนั้นให้เสร็จก่อน หน้าถึงจะเริ่ม
-  ทำงาน ทั้งที่ภาพ QR ยังไม่ต้องขึ้นในเฟรมแรกอยู่แล้ว
+  โหลดตัวสร้าง QR ตอนจะใช้จริงเท่านั้น — qrcode เป็นก้อนใหญ่
+  import ไว้บนหัวไฟล์ = ทุกคนที่เปิดหน้านี้ต้องโหลดก้อนนั้นให้เสร็จก่อนหน้าจะเริ่มทำงาน
 */
-
-/**
- * QR ของลิงก์สาธารณะ
- *
- * เป็น hook เพราะ toDataURL เป็น async — setState อยู่ใน .then() ไม่ใช่ในตัว effect
- * แคชไว้ต่อข้อความ ลิงก์เดิมจะได้ไม่ต้องวาดใหม่ทุกครั้งที่หน้ารีเรนเดอร์
- */
 export function useQr(text: string | null): string | null {
   const [map, setMap] = useState<Record<string, string>>({});
 
@@ -30,8 +18,8 @@ export function useQr(text: string | null): string | null {
       .then((m) =>
         m.default.toDataURL(text, {
           margin: 1,
-          width: 180,
-          color: { dark: "#12100b", light: "#ffffff" },
+          width: 220,
+          color: { dark: "#000000", light: "#ffffff" },
         }),
       )
       .then((url) => alive && setMap((p) => ({ ...p, [text]: url })))
@@ -45,12 +33,9 @@ export function useQr(text: string | null): string | null {
 }
 
 /**
- * แถวลิงก์ที่เอาไปแปะที่อื่น — เห็นลิงก์ คัดลอกได้ เปิดดูได้ จบในแถวเดียว
- *
- * kind บอกว่าลิงก์นี้เอาไปใช้ที่ไหน ซึ่งเปลี่ยนสิ่งที่ควรอยู่ในแถว:
- *   public = คนดูเปิดจากมือถือ จึงมี QR ให้สแกนจากจอ
- *   obs    = เอาไปวางใน Browser Source จึงบอกขนาดที่แนะนำแทน แล้วไม่ต้องมี QR
- *            (และไม่ต้องมีปุ่มเปิด เพราะเปิดในเบราว์เซอร์ปกติแล้วเห็นแต่จอใส)
+ * แถวลิงก์ที่ต้องเอาไปใช้ต่อ
+ *   public  ลิงก์ให้คนดู — มี QR ไว้แปะบนจอไลฟ์
+ *   obs     ลิงก์สำหรับ Browser Source — บอกขนาดที่ควรตั้ง
  */
 export default function LinkRow({
   label,
@@ -63,21 +48,19 @@ export default function LinkRow({
   label: string;
   url: string;
   kind?: "public" | "obs";
-  /** ขนาด Browser Source ที่แนะนำ เช่น "1280 × 720" */
   size?: string;
   hint?: ReactNode;
-  /** ปุ่มเพิ่มเติมท้ายแถว */
   extra?: ReactNode;
 }) {
   const qr = useQr(kind === "public" ? url : null);
 
   return (
-    <div className="flex items-start gap-3.5 rounded-xl tile p-3.5">
+    <div className="flex items-start gap-4 py-4">
       {kind === "public" && (
-        <span className="relative grid h-18 w-18 shrink-0 place-items-center overflow-hidden rounded-lg bg-white p-1">
+        <span className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-art bg-white p-1.5 ring-1 ring-line">
           {qr ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={qr} alt={`QR ${label}`} className="h-full w-full" />
+            <img src={qr} alt={`QR ของ${label}`} className="h-full w-full" />
           ) : (
             <Skeleton className="h-full w-full" />
           )}
@@ -85,36 +68,27 @@ export default function LinkRow({
       )}
 
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="slug">{label}</span>
-          {kind === "obs" && (
-            <>
-              <span className="inline-flex items-center gap-1 rounded-full bg-[rgb(109_146_219/0.14)] px-2 py-0.5 font-display text-eyebrow text-info">
-                <IconMonitor className="h-3 w-3" />
-                Browser Source
-              </span>
-              {size && (
-                <span className="num text-eyebrow text-muted">แนะนำ {size}</span>
-              )}
-            </>
+        <p className="font-medium">
+          {label}
+          {kind === "obs" && size && (
+            <span className="num ml-2 text-sm font-normal text-muted">ขนาด {size}</span>
           )}
-        </div>
+        </p>
+        <code className="mt-1 block truncate text-sm text-muted">{url}</code>
 
-        <code className="mt-1.5 block truncate text-xs text-ice/75">{url}</code>
-
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
+        <div className="mt-3 flex flex-wrap gap-2">
           <CopyBtn text={url} />
           {kind === "public" && <MiniLink href={url}>เปิด</MiniLink>}
           {extra}
         </div>
 
-        {hint && <p className="mt-2 text-xs leading-relaxed text-muted">{hint}</p>}
+        {hint && <p className="mt-2 text-sm text-muted">{hint}</p>}
       </div>
     </div>
   );
 }
 
-/** แถวลิงก์แบบผอม ไม่มี QR ไม่มีป้าย ใช้ในลิสต์ที่มีหลายลิงก์เรียงกัน */
+/** ลิงก์บรรทัดเดียว ชื่อซ้าย ลิงก์กลาง ปุ่มขวา */
 export function LinkLine({
   label,
   url,
@@ -125,9 +99,9 @@ export function LinkLine({
   onOpen?: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <span className="w-40 shrink-0 text-xs text-muted">{label}</span>
-      <code className="min-w-0 flex-1 truncate text-xs text-ice/75">{url}</code>
+    <div className="flex flex-wrap items-center gap-3 py-2">
+      <span className="w-40 shrink-0 text-sm text-muted">{label}</span>
+      <code className="min-w-0 flex-1 truncate text-sm">{url}</code>
       <CopyBtn text={url} toastText={null} />
       {onOpen && <MiniBtn onClick={onOpen}>เปิด</MiniBtn>}
     </div>

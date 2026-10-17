@@ -64,3 +64,20 @@ export function playbackProgress(
     delay: `-${Math.round(elapsed)}s`,
   };
 }
+
+/**
+ * เพลงนี้ "ค้างสถานะกำลังเล่น" ไหม — เลยความยาวคลิปไปเกินครึ่งนาทีแล้ว
+ *
+ * เกิดเมื่อปิดตัวเล่นไปก่อนเพลงจบ (เช่นจบไลฟ์แล้วปิดหน้าต่าง) ใบนั้นจะค้างเป็น
+ * "กำลังเล่น" จนกว่าจะเปิดตัวเล่นอีกครั้ง แถบเวลาเต็ม "4:00 / -0:00" ค้างทั้งวัน
+ * ไม่ได้บอกอะไร ผู้เรียกจึงซ่อนแถบเวลาแทน (ยังโชว์ชื่อเพลงตามเดิม)
+ */
+export function isStalePlayback(
+  song: { playedAt?: string | null; duration?: number },
+  nowMs: number,
+): boolean {
+  const duration = song.duration ?? 0;
+  const startedAt = song.playedAt ? Date.parse(song.playedAt) : NaN;
+  if (!(duration > 0) || !Number.isFinite(startedAt) || !(nowMs > 0)) return false;
+  return (nowMs - startedAt) / 1000 > duration + 30;
+}

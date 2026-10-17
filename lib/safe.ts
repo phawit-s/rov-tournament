@@ -31,17 +31,3 @@ export function safeImageSrc(raw?: string | null): string | null {
   }
   return safeUrl(value);
 }
-
-/** ตัดข้อมูลติดต่อออกก่อนเผยแพร่ — เบอร์/ไอดีไลน์ไม่ควรโผล่ในลิงก์สาธารณะ */
-export function stripContacts<T extends { teams: { contact?: string }[] }>(
-  data: T,
-): T {
-  return {
-    ...data,
-    teams: data.teams.map((team) => {
-      const copy = { ...team };
-      delete copy.contact;
-      return copy;
-    }),
-  };
-}

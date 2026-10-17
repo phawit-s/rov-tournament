@@ -5,7 +5,10 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
+  limit,
   onSnapshot,
+  orderBy,
   query,
   setDoc,
   where,
@@ -324,4 +327,63 @@ export async function addSongToQueue(
     playedAt: null,
   });
   return ref.id;
+}
+
+/**
+ * เพลงที่เล่นจบ/ข้ามไปล่าสุด — ไว้ดูย้อนหลังกับกดเล่นซ้ำ
+ *
+ * ต่างจาก watchSongQueue ทั้งคอลเลกชันตรงที่อ่านแค่ `max` ใบล่าสุด
+ * ช่องที่ไลฟ์ทุกคืนสะสมใบเก่าเป็นพันๆ ใบ (@affarain มีกว่า 5,000 ใบในสองเดือน)
+ * อ่านทั้งก้อนทุกครั้งที่เปิดหน้า = โควตาอ่านรายวันของ Firestore หมดในไม่กี่รอบ
+ *
+ * เรียงด้วย playedAt อย่างเดียว (มีดัชนีให้อยู่แล้ว ไม่ต้องสร้างดัชนีผสม)
+ * แล้วค่อยคัดสถานะในเครื่อง — ใบที่ยังรอคิวมี playedAt เป็น null จึงตกไปท้ายแถวเอง
+ */
+export function watchRecentFinished(
+  channelId: string,
+  onChange: (list: SongRequest[]) => void,
+  max = 40,
+  onError?: (e: Error) => void,
+): () => void {
+  const db = getDb();
+  if (!db || !channelId) {
+    onChange(EMPTY);
+    return () => {};
+  }
+  return onSnapshot(
+    query(collection(db, COL, channelId, SONGS), orderBy("playedAt", "desc"), limit(max)),
+    (snap) => {
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as SongRequest)
+        .filter((s) => s.status === "played" || s.status === "rejected");
+      onChange(list);
+    },
+    (err) => onError?.(err),
+  );
+}
+
+/**
+ * ลบประวัติเพลงที่เล่นจบ/ข้ามไปแล้วของช่องทั้งหมด ทีละก้อน
+ *
+ * ไม่รับคิวมาจากหน้าจอเหมือน clearFinishedSongs — หน้าจอโหลดประวัติมาแค่บางส่วน
+ * ถ้าลบตามนั้นจะเหลือใบเก่าค้างอยู่อีกหลายพัน จึงถามฐานข้อมูลเองทีละ 400 ใบ
+ * (batch รับได้ 500 การเขียน) จนไม่เหลือ คืนจำนวนที่ลบไป
+ */
+export async function clearAllFinishedSongs(channelId: string): Promise<number> {
+  const db = getDb();
+  if (!db || !channelId) return 0;
+  const base = collection(db, COL, channelId, SONGS);
+  let removed = 0;
+  for (;;) {
+    const snap = await getDocs(
+      query(base, where("status", "in", ["played", "rejected"]), limit(400)),
+    );
+    if (snap.empty) break;
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    removed += snap.size;
+    if (snap.size < 400) break;
+  }
+  return removed;
 }

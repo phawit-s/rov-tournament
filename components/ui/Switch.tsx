@@ -1,16 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
-import { sfx } from "@/lib/sound";
 
-/**
- * สวิตช์กลางของทั้งเว็บ
- *
- * บอกสถานะเป็นตัวหนังสือในราง ไม่ใช่สีอย่างเดียว — สีทองบนธีมสว่างแยกยาก
- * ว่าเปิดหรือปิด และคนตาบอดสีก็อ่านไม่ออก
- * กล่องคลิกสูง 44px ตามขนาดนิ้วขั้นต่ำ
- */
+/** สวิตช์เปิด/ปิด — เปิด = รางดำ (มืด = ขาว) ปุ่มกลมเลื่อนไปขวา */
 export default function Switch({
   checked,
   onChange,
@@ -19,12 +11,10 @@ export default function Switch({
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
-  /** ข้อความอ่านให้โปรแกรมอ่านหน้าจอฟัง — ตัวสวิตช์เองไม่มีตัวหนังสือกำกับ */
+  /** ข้อความให้โปรแกรมอ่านหน้าจอ — ตัวสวิตช์ไม่มีตัวหนังสือกำกับ */
   label: string;
   disabled?: boolean;
 }) {
-  const reduced = useReducedMotion();
-
   return (
     <button
       type="button"
@@ -32,44 +22,33 @@ export default function Switch({
       aria-checked={checked}
       aria-label={label}
       disabled={disabled}
-      onClick={() => {
-        sfx.unlock();
-        sfx.play("click");
-        onChange(!checked);
-      }}
-      className="relative grid h-11 w-21 shrink-0 cursor-pointer place-items-center disabled:cursor-not-allowed disabled:opacity-50"
+      onClick={() => onChange(!checked)}
+      /* กล่องกด 44px ตัวสวิตช์จริง 30px อยู่ตรงกลาง */
+      className="grid h-11 w-14 shrink-0 cursor-pointer place-items-center disabled:cursor-not-allowed disabled:opacity-40"
     >
-      <span
-        className={`relative block h-7 w-full rounded-full transition-colors duration-300 ${
-          checked ? "accent-fill" : "rule"
-        }`}
-      >
-        <span
-          className={`pointer-events-none absolute inset-y-0 flex items-center font-display text-eyebrow tracking-luxe ${
-            checked ? "left-3 text-onaccent" : "right-3 text-muted"
-          }`}
-        >
-          {checked ? "เปิด" : "ปิด"}
-        </span>
-        <motion.span
-          layout={!reduced}
-          transition={
-            reduced ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 34 }
-          }
-          className="absolute top-1 h-5 w-5 rounded-full bg-white shadow"
-          style={{ left: checked ? 60 : 4 }}
-        />
-      </span>
+      <Track checked={checked} />
     </button>
   );
 }
 
-/**
- * สวิตช์แบบเต็มแถว — กดได้ทั้งแถว มีชื่อกับคำอธิบายอยู่ข้างใน
- *
- * ใช้กับรายการตั้งค่าที่เรียงกันเป็นลิสต์ ซึ่งพื้นที่กดควรเป็นทั้งแถว
- * ไม่ใช่เฉพาะตัวสวิตช์เล็กๆ ท้ายแถว
- */
+function Track({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={`relative block h-7.5 w-12.5 rounded-full transition-colors duration-200 ${
+        checked ? "bg-ink" : "bg-fill-2"
+      }`}
+    >
+      <span
+        className={`absolute top-0.75 left-0.75 h-6 w-6 rounded-full shadow-[0_1px_3px_rgb(0_0_0/0.25)] transition-transform duration-200 ease-out ${
+          checked ? "translate-x-5 bg-onink" : "translate-x-0 bg-white"
+        }`}
+      />
+    </span>
+  );
+}
+
+/** แถวตั้งค่าที่กดได้ทั้งแถว — ชื่อซ้าย คำอธิบายใต้ชื่อ สวิตช์ขวา */
 export function SwitchRow({
   checked,
   onChange,
@@ -83,38 +62,19 @@ export function SwitchRow({
   hint?: ReactNode;
   className?: string;
 }) {
-  const reduced = useReducedMotion();
-
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      onClick={() => {
-        sfx.unlock();
-        sfx.play("click");
-        onChange(!checked);
-      }}
-      className={`hover-tile tile flex w-full cursor-pointer items-center gap-3.5 rounded-xl px-4 py-3 text-left transition-colors ${className}`}
+      onClick={() => onChange(!checked)}
+      className={`flex w-full cursor-pointer items-center justify-between gap-4 py-3 text-left ${className}`}
     >
-      <span
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-300 ${
-          checked ? "accent-fill" : "rule"
-        }`}
-      >
-        <motion.span
-          layout={!reduced}
-          transition={
-            reduced ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 34 }
-          }
-          className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow"
-          style={{ left: checked ? 22 : 2 }}
-        />
-      </span>
       <span className="min-w-0">
-        <span className="block text-sm text-ice">{label}</span>
-        {hint && <span className="block text-xs text-muted">{hint}</span>}
+        <span className="block font-medium">{label}</span>
+        {hint && <span className="mt-0.5 block text-sm text-muted">{hint}</span>}
       </span>
+      <Track checked={checked} />
     </button>
   );
 }

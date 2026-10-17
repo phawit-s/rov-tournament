@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { hasBackend } from "@/lib/backend/firebase";
 import { watchUsers, type UserProfile } from "@/lib/backend/users";
-import { EmptyState, Input, Label, Skeleton } from "@/components/tournament/ui";
-import { IconCheck } from "@/components/ui/icons";
+import { Input, Label, Skeleton } from "@/components/ui/kit";
+import { IconCheck, IconSearch } from "@/components/ui/icons";
 
 type Props = {
   /** uid ที่เลือกอยู่ — ผู้เรียกเป็นคนถือค่านี้ */
@@ -31,9 +31,45 @@ function stubProfile(uid: string): UserProfile {
   };
 }
 
-/** ชื่อที่เอาไว้โชว์ — ชื่อในเกมมาก่อน ตกลงมาเรื่อยๆ จนเหลือ uid */
+/** ชื่อที่เอาไว้โชว์ — ชื่อที่ตั้งในโปรไฟล์มาก่อน ตกลงมาเรื่อยๆ จนเหลือ uid */
 export function displayName(u: UserProfile): string {
   return u.gameName?.trim() || u.name?.trim() || u.email?.trim() || u.uid;
+}
+
+/**
+ * รูปโปรไฟล์ในแถวรายชื่อคน
+ * Avatar ของ SiteHeader รับ AuthUser ทั้งก้อน แต่แถวพวกนี้มีแค่ UserProfile
+ * ไม่มีรูป = อักษรตัวแรกบนพื้นเทา (วงดำทั้งคอลัมน์หนักตาเกินไปสำหรับรายการยาว)
+ */
+export function PersonAvatar({
+  name,
+  photo,
+  className = "h-10 w-10",
+}: {
+  name: string;
+  photo?: string | null;
+  className?: string;
+}) {
+  if (photo) {
+    return (
+      // static export ใช้ next/image ไม่ได้ และ no-referrer กันรูป Google โดน 429
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={photo}
+        alt=""
+        referrerPolicy="no-referrer"
+        className={`shrink-0 rounded-full bg-fill object-cover ${className}`}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden
+      className={`grid shrink-0 place-items-center rounded-full bg-fill font-bold text-muted ${className}`}
+    >
+      {(name.trim() || "?").slice(0, 1).toUpperCase()}
+    </span>
+  );
 }
 
 /**
@@ -82,16 +118,18 @@ export default function UserPicker({
   }, [pool, q]);
 
   const manual = (
-    <div className="mt-3">
-      <Input
-        value={value ?? ""}
-        placeholder="หรือวางรหัสผู้ใช้ (uid) เอง"
-        onChange={(e) => {
-          const v = e.target.value.trim();
-          onChange(v ? stubProfile(v) : null);
-        }}
-      />
-    </div>
+    <Input
+      value={value ?? ""}
+      placeholder="วางรหัสผู้ใช้ (uid)"
+      aria-label="รหัสผู้ใช้"
+      autoComplete="off"
+      spellCheck={false}
+      className="num mt-3"
+      onChange={(e) => {
+        const v = e.target.value.trim();
+        onChange(v ? stubProfile(v) : null);
+      }}
+    />
   );
 
   return (
@@ -100,88 +138,72 @@ export default function UserPicker({
 
       {/* กำลังโหลด — เห็นรูปร่างปลายทางก่อน */}
       {list === null ? (
-        <div className="space-y-2">
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="h-14 w-full" />
+        <div className="space-y-2" aria-busy="true">
+          <Skeleton className="h-12 w-full rounded-field" />
+          <Skeleton className="h-40 w-full rounded-field" />
         </div>
       ) : list.length === 0 ? (
         <>
-          <EmptyState
-            title="ยังไม่มีผู้ใช้ในระบบ"
-            description="ให้เขาสมัครบัญชีเข้ามาก่อน แล้วชื่อจะขึ้นในรายการนี้เอง"
-          />
+          <p className="text-sm text-muted">
+            ยังอ่านรายชื่อผู้ใช้ไม่ได้ หรือยังไม่มีใครล็อกอินเข้าเว็บ
+            ให้เขาล็อกอินก่อนแล้วชื่อจะขึ้นเอง หรือวางรหัสผู้ใช้ของเขาด้านล่าง
+          </p>
           {manual}
         </>
       ) : pool.length === 0 ? (
         <>
           <p className="text-sm text-muted">
-            ทุกคนในรายชื่อถูกเลือกไปหมดแล้ว
+            ทุกคนที่ล็อกอินเข้าเว็บมีสิทธิ์นี้อยู่แล้ว วางรหัสผู้ใช้ของคนใหม่ด้านล่างได้
           </p>
           {manual}
         </>
       ) : (
         <>
-          <Input
-            value={q}
-            placeholder="ค้นจากชื่อในเกม ชื่อ หรืออีเมล"
-            onChange={(e) => setQ(e.target.value)}
-            aria-label="ค้นหาผู้ใช้"
-          />
+          <label className="flex min-h-12 items-center gap-2.5 rounded-field bg-fill px-4 focus-within:bg-canvas focus-within:shadow-[inset_0_0_0_2px_var(--c-ink)]">
+            <IconSearch className="h-4 w-4 shrink-0 text-muted" />
+            <span className="sr-only">ค้นหาผู้ใช้</span>
+            <input
+              value={q}
+              placeholder="ค้นจากชื่อหรืออีเมล"
+              onChange={(e) => setQ(e.target.value)}
+              className="min-w-0 grow bg-transparent outline-none placeholder:text-faint"
+            />
+          </label>
 
           {rows.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
-              ไม่พบคนที่ตรงกับ “{q.trim()}”
+              ไม่มีใครชื่อหรืออีเมลตรงกับ “{q.trim()}” ลองพิมพ์แค่บางส่วน
             </p>
           ) : (
-            <ul className="no-scrollbar mt-2 max-h-72 space-y-1.5 overflow-y-auto pr-0.5">
+            <ul className="rows mt-2 max-h-72 overflow-y-auto overscroll-contain rounded-field border border-line">
               {rows.map((u) => {
                 const on = u.uid === value;
+                const name = displayName(u);
                 return (
                   <li key={u.uid}>
                     <button
                       type="button"
                       aria-pressed={on}
                       onClick={() => onChange(on ? null : u)}
-                      className={`tile flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
-                        on
-                          ? "border border-iris/45 bg-iris/10"
-                          : "hover-tile border border-transparent"
+                      className={`flex min-h-14 w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                        on ? "bg-fill" : "hover:bg-fill"
                       }`}
                     >
-                      <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-hair">
-                        {u.photo ? (
-                          // next/image ใช้ไม่ได้กับ static export — และต้องกัน 429 จากรูป Google
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={u.photo}
-                            alt=""
-                            referrerPolicy="no-referrer"
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <span className="font-display text-xs text-iris">
-                            {displayName(u).slice(0, 1).toUpperCase()}
-                          </span>
-                        )}
-                      </span>
+                      <PersonAvatar name={name} photo={u.photo} className="h-9 w-9 text-sm" />
 
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm text-ice">
-                          {displayName(u)}
+                        <span className={`block truncate ${on ? "font-semibold" : "font-medium"}`}>
+                          {name}
                         </span>
-                        {u.email && (
-                          <span className="block truncate text-xs text-muted">
+                        {u.email && u.email !== name && (
+                          <span className="block truncate text-sm text-muted">
                             {u.email}
                           </span>
                         )}
                       </span>
 
                       {on && (
-                        <IconCheck
-                          className="h-4 w-4 shrink-0 text-iris"
-                          strokeWidth={2}
-                        />
+                        <IconCheck className="h-5 w-5 shrink-0" strokeWidth={2.2} />
                       )}
                     </button>
                   </li>

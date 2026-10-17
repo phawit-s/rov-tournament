@@ -1,38 +1,38 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { setHashParams, useHashParam } from "@/hooks/useClient";
-import { useAllChannels, useChannel, useOwnChannels } from "@/hooks/useChannels";
+import { useChannel, useOwnChannels } from "@/hooks/useChannels";
 import { useSiteRole } from "@/hooks/useRole";
-import { recordActivity } from "@/lib/activity";
+import { studioHref } from "@/hooks/useStudioChannel";
 import { recordAudit } from "@/lib/audit";
 import { authStore } from "@/lib/backend/firebase";
-import {
-  setChannelDonationStatus,
-  expiryFrom,
-  watchChannelDonations,
-  type ChannelDonation,
-} from "@/lib/channel/donations";
 import {
   channelStore,
   createChannel,
   decideChannelSeed,
   emptyChannel,
-  markDonationAutoApproved,
+  findChannelByHandle,
   pushChannelAs,
 } from "@/lib/channel/store";
 import { normalizeHandle, type Channel } from "@/lib/channel/types";
+import { DEFAULT_SONG_CONFIG, type SongConfig } from "@/lib/song/types";
+import PageHead from "../studio/PageHead";
+import Button from "../ui/Button";
+import ImagePicker from "../ui/ImagePicker";
+import { SwitchRow } from "../ui/Switch";
+import { toast } from "../ui/Toast";
+import { EmptyState, Input, Label, NumberInput, Skeleton, Textarea } from "../ui/kit";
 
 /**
  * ของในหน้ากับสำเนาบนคลาวด์ตรงกันไหม
  *
- * ต้องเทียบทางเดียว — ไล่จากคีย์ของ "ในหน้า" ไปหาคลาวด์เท่านั้น
- * เพราะตอนเผยแพร่ pushChannelAs ใส่ isPublic กับ syncedAt เพิ่มให้เอง
- * และ setDoc ใช้ merge ของเก่าที่ถูกลบไปแล้วก็ยังค้างอยู่บนคลาวด์
- * ถ้าเทียบสองทางจะไม่มีวันตรงกัน แถบ "ยังไม่ได้เผยแพร่" ก็จะค้างตลอดเวลา
- *
+ * เทียบทางเดียว — ไล่จากคีย์ของ "ในหน้า" ไปหาคลาวด์เท่านั้น
+ * เพราะตอนบันทึก pushChannelAs ใส่ isPublic กับ syncedAt เพิ่มให้เอง และใช้ merge
+ * ของเก่าที่ถูกลบไปแล้วจึงค้างอยู่บนคลาวด์ (เช่น donate/member สมัยก่อน)
+ * ถ้าเทียบสองทาง แถบ "ยังไม่ได้บันทึก" จะค้างตลอดเวลา
  * ข้าม updatedAt/createdAt เพราะ updatedAt ขยับทุกครั้งที่พิมพ์ตัวอักษรเดียว
  */
 function matchesCloud(local: unknown, cloud: unknown): boolean {
@@ -55,269 +55,78 @@ function matchesCloud(local: unknown, cloud: unknown): boolean {
   }
   return local === cloud;
 }
-import { uid } from "@/lib/random";
-import { safeImageSrc } from "@/lib/safe";
-
-import { formatMoney } from "@/lib/tournament/prize";
-import { formatThaiDate } from "@/lib/tournament/share";
-import type { MemberTier } from "@/lib/tournament/types";
-import Button from "../ui/Button";
-import Figure, { FigureRow } from "../ui/Figure";
-import ImagePicker from "../ui/ImagePicker";
-import LinkRow from "../ui/LinkRow";
-import MiniBtn from "../ui/MiniBtn";
-import Panel, { PanelHeader } from "../ui/Panel";
-import Reveal from "../ui/Reveal";
-import PageHead from "../studio/PageHead";
-import Switch from "../ui/Switch";
-import Tabs from "../ui/Tabs";
-import SongQueuePanel from "../song/SongQueuePanel";
-import { toast } from "../ui/Toast";
-import { IconCheck, IconChevronDown } from "../ui/icons";
-import {
-  ArtShield,
-  Badge,
-  EmptyState,
-  Input,
-  Label,
-  NumberInput,
-  RegStatusBadge,
-  Skeleton,
-  Textarea,
-} from "../tournament/ui";
-
-const TIER_COLORS = ["169 155 255", "110 155 240", "196 130 255", "52 227 176"];
-
-const DAY = 86_400_000;
-
-/** อ้างอิงคงที่ ไม่งั้น effect ของ Figure จะ resubscribe ทุกเรนเดอร์ */
-const money = (n: number) => formatMoney(Math.round(n));
 
 /**
- * ส่วนของหน้าช่อง — แบ่งตาม "งานที่เข้ามาทำ" ไม่ใช่ตามชนิดข้อมูล
+ * ค่าที่ "มีผลทันที" ต้องเอาของบนคลาวด์มาทับร่างก่อนบันทึกเสมอ
  *
- * ของเดิมเป็นหน้าเดียวยาวสิบกว่าจอ เอาของที่แก้ปีละครั้ง (พร้อมเพย์ แพ็กเกจ
- * ลิงก์ Worker) วางปนกับของที่ต้องกดทุกวันตอนไลฟ์ (อนุมัติสลิป คิวเพลง)
- * ผลคือใบที่รอตรวจอยู่ลึกลงไปเจ็ดการ์ด ต้องเลื่อนผ่านฟอร์มทั้งชุดทุกครั้ง
- *
- * ชื่อส่วนอยู่ใน #tab= จึงบุ๊กมาร์กหน้าที่ใช้ทุกวันได้ตรงๆ
- * และปุ่มย้อนกลับของเบราว์เซอร์พาไปส่วนก่อนหน้าตามที่คนคาด
+ * เปิด/ปิดรับเพลง ป้ายไลฟ์ และเพลย์ลิสต์สำรอง ถูกแก้จากหน้าอื่นตรงลงคลาวด์
+ * (หน้าภาพรวม หน้าคิว ตัวเล่น) ระหว่างที่หน้านี้ถือร่างเก่าค้างไว้
+ * ถ้าบันทึกร่างทั้งก้อน ค่าพวกนั้นจะถูกย้อนกลับเงียบๆ — เช่นปิดรับเพลงไปแล้ว
+ * มากดบันทึกชื่อช่อง แล้วกลายเป็นเปิดรับใหม่โดยไม่มีใครตั้งใจ
  */
-/*
-  ส่วนของหน้าช่อง — ชุดเดียวกับเมนูลูกในแถบข้างของสตูดิโอ (components/studio/nav.ts)
-  แก้ที่ไหนต้องแก้อีกที่ให้ตรงกัน ไม่งั้นแถบข้างจะพาไปส่วนที่หน้านี้ไม่รู้จัก
-
-  "ผู้ดูแลระบบ" ถูกถอดออกจากหน้านี้แล้ว — ย้ายไปอยู่ที่ /studio/roles/
-  ซึ่งเป็นที่ที่ให้/ถอดสิทธิ์ทั้งหมด การมีสองทางเข้าไปแผงเดียวกันคือสาเหตุหนึ่ง
-  ที่หน้านี้เคยมีเมนูเยอะเกินจำเป็น
-*/
-type Section = "home" | "inbox" | "settings" | "songs";
-
-const SECTIONS: { key: Section; label: string }[] = [
-  { key: "home", label: "ภาพรวมช่อง" },
-  { key: "inbox", label: "สลิปโดเนท" },
-  { key: "settings", label: "ตั้งค่าช่อง" },
-  { key: "songs", label: "คิวขอเพลง" },
-];
-
-type Tab = "all" | "pending" | "approved" | "rejected";
-
-const TAB_LABEL: Record<Tab, string> = {
-  all: "ทั้งหมด",
-  pending: "รอตรวจ",
-  approved: "อนุมัติแล้ว",
-  rejected: "ปฏิเสธ",
-};
-
-/** สีขีดข้างแถว = สถานะใบนั้น (ระบบเดียวกับทั้งเว็บ) */
-const ROW_ST: Record<string, string> = {
-  pending: "var(--st-next)",
-  approved: "var(--st-win)",
-  rejected: "var(--st-live)",
-};
-
-type SlipCheck = NonNullable<ChannelDonation["slipCheck"]>;
-
-/**
- * ผลตรวจสลิปต่อใบ — สีเดียวกับระบบสถานะทั้งเว็บ
- * เขียวคือยืนยันกับธนาคารแล้ว แดงคือยอดไม่ตรง ทองคือยังไม่ได้ยืนยัน เทาคือระบบช่วยไม่ได้ ต้องดูเอง
- */
-const SLIP_META: Record<
-  SlipCheck,
-  { label: string; rgb: string; hex: string; tone: "plain" | "done" }
-> = {
-  verified: { label: "ตรวจแล้ว ยอดตรง", rgb: "52 227 176", hex: "var(--color-win)", tone: "done" },
-  mismatch: { label: "ยอดไม่ตรง", rgb: "255 91 122", hex: "var(--color-live)", tone: "plain" },
-  unique: {
-    label: "สลิปใหม่ ยังไม่ยืนยัน",
-    rgb: "169 155 255",
-    hex: "var(--color-iris)",
-    tone: "plain",
-  },
-  none: { label: "ไม่มี QR ตรวจด้วยตา", rgb: "126 130 153", hex: "var(--color-out)", tone: "plain" },
-  failed: { label: "ตรวจไม่สำเร็จ", rgb: "126 130 153", hex: "var(--color-out)", tone: "plain" },
-};
-
-/** อ้างอิงคงที่ ไม่งั้น setChannels([]) ตอน error จะทำให้รีเรนเดอร์ไม่จบ */
-
-/**
- * อนุมัติใบที่ระบบยืนยันแล้วให้อัตโนมัติ
- *
- * วางไว้นอกคอมโพเนนต์เพราะถูกเรียกจาก callback ของ onSnapshot
- * ถ้าอยู่ข้างในจะกลายเป็น dependency ของ effect แล้ว subscribe ใหม่ทุกเรนเดอร์
- * ลำดับสำคัญ: อนุมัติให้ผ่านก่อน แล้วค่อยติดธง ถ้าติดธงพลาดก็แค่ไม่มีป้าย ใบยังอนุมัติถูกต้อง
- */
-async function autoApproveOne(channelId: string, d: ChannelDonation): Promise<void> {
-  try {
-    await setChannelDonationStatus(channelId, d.id, "approved", {
-      expiresAt: d.kind === "member" && d.months ? expiryFrom(d.months) : undefined,
-    });
-    await markDonationAutoApproved(channelId, d.id);
-    recordActivity(
-      d.kind === "member" ? "member.approve" : "donation.approve",
-      `${d.name} · ${formatMoney(d.amount)}`,
-      { actor: "ระบบตรวจสลิป" },
-    );
-    void recordAudit("donation.approve", {
-      id: d.id,
-      name: d.name,
-      detail: "อนุมัติอัตโนมัติ · สลิปยืนยันแล้ว",
-    });
-    toast(`อนุมัติอัตโนมัติ ${d.name} · สลิปยืนยันแล้ว`, "success");
-  } catch {
-    /* ยิงไม่ผ่านก็ปล่อยให้ผู้จัดกดเอง ไม่ต้องรบกวนด้วย toast แดง */
-  }
-}
-
-type Stats = {
-  total: number;
-  last30: number;
-  active: number;
-  memberAll: number;
-  pending: number;
-  approvedCount: number;
-  rejected: number;
-};
-
-const NO_STATS: Stats = {
-  total: 0,
-  last30: 0,
-  active: 0,
-  memberAll: 0,
-  pending: 0,
-  approvedCount: 0,
-  rejected: 0,
-};
-
-/**
- * สรุปยอดจากใบที่มีอยู่ — เรียกตอนข้อมูลเปลี่ยนเท่านั้น ไม่ใช่ตอนเรนเดอร์
- * (Date.now ตอนเรนเดอร์ทำให้ผลลัพธ์ไม่คงที่ระหว่างรีเรนเดอร์)
- */
-function computeStats(list: ChannelDonation[]): Stats {
-  const now = Date.now();
-  const approved = list.filter((d) => d.status === "approved");
-  const memberAll = approved.filter((d) => d.kind === "member");
+function withLiveFields(draft: Channel, cloud: Channel | null): Channel {
+  if (!cloud) return draft;
+  const songs = { ...DEFAULT_SONG_CONFIG, ...draft.songs };
+  const cloudSongs = cloud.songs;
   return {
-    total: approved.reduce((s, d) => s + (d.amount || 0), 0),
-    last30: approved
-      .filter((d) => now - new Date(d.createdAt).getTime() <= 30 * DAY)
-      .reduce((s, d) => s + (d.amount || 0), 0),
-    active: memberAll.filter(
-      (d) => !d.expiresAt || new Date(d.expiresAt).getTime() > now,
-    ).length,
-    memberAll: memberAll.length,
-    pending: list.filter((d) => d.status === "pending").length,
-    approvedCount: approved.length,
-    rejected: list.filter((d) => d.status === "rejected").length,
+    ...draft,
+    live: { ...draft.live, isLive: cloud.live?.isLive ?? draft.live.isLive },
+    songs: {
+      ...songs,
+      enabled: cloudSongs?.enabled ?? songs.enabled,
+      filler: cloudSongs?.filler ?? songs.filler,
+      fillerMode: cloudSongs?.fillerMode ?? songs.fillerMode,
+    },
   };
 }
 
+/**
+ * ตั้งค่าช่อง — /studio/channel/
+ *
+ * แก้ในร่างก่อน (channelStore) แล้วค่อยกดบันทึกทีเดียว
+ * ร่างไม่ผูกกับช่องที่เปิดอยู่ในหน้าอื่น — ช่องมาจาก #c= เหมือนทุกหน้าในสตูดิโอ
+ */
 export default function ChannelSettings() {
-  useSyncExternalStore(
-    authStore.subscribe,
-    authStore.getSnapshot,
-    authStore.getServerSnapshot,
-  );
+  useSyncExternalStore(authStore.subscribe, authStore.getSnapshot, authStore.getServerSnapshot);
   const user = authStore.user();
 
   /* รุ่นของร่างในหน่วยความจำ — ตัวข้อมูลจริงอ่านด้วย channelStore.draftFor(id) */
-  useSyncExternalStore(
-    channelStore.subscribe,
-    channelStore.getSnapshot,
-    channelStore.getServerSnapshot,
-  );
+  useSyncExternalStore(channelStore.subscribe, channelStore.getSnapshot, channelStore.getServerSnapshot);
 
-  const { admin: isAdmin, uid: myUid } = useSiteRole();
+  const { admin, uid: myUid } = useSiteRole();
   const { channels: ownChannels, loaded: myLoaded } = useOwnChannels(myUid);
-  const { channels: allChannels } = useAllChannels(isAdmin);
-  const reduced = useReducedMotion();
-  const [donations, setDonations] = useState<ChannelDonation[]>([]);
-  const [stats, setStats] = useState<Stats>(NO_STATS);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<Tab>("all");
-  const [working, setWorking] = useState<string | null>(null);
-  // ใบที่เพิ่งอนุมัติ — วาบทองหนึ่งครั้งก่อนแถวจะย้ายกลุ่ม
-  const [flash, setFlash] = useState<string[]>([]);
-
-  /* ส่วนที่เปิดอยู่เก็บใน URL ไม่ใช่ใน state — รีเฟรชแล้วยังอยู่ที่เดิม
-     และแปะลิงก์ตรงเข้าหน้าสลิปให้คนที่ช่วยดูแลได้ */
-  const hashTab = useHashParam("tab");
-  const section: Section = SECTIONS.some((s) => s.key === hashTab)
-    ? (hashTab as Section)
-    : "home";
-  const goSection = (key: Section) => setHashParams({ tab: key });
 
   /*
-    ★ ช่องที่กำลังเปิดอยู่มาจาก URL ★
-
-    ของเดิมเก็บไว้ใน state ของคอมโพเนนต์ (ตัวแปร remote) แล้วเดาว่าค่าเริ่มต้น
-    คือ "ช่องแรกของเรา" ผลคือปัญหาที่รายงานเข้ามาสองข้อพร้อมกัน:
-
-      · การ์ดช่องในหน้าภาพรวมทุกใบลิงก์มาที่ /studio/channel/ เฉยๆ ไม่มีรหัสช่อง
-        กดจากช่องไหนก็มาโผล่ช่องเดียวกันหมด — "เข้าช่องอื่นได้บ้างไม่ได้บ้าง"
-        จริงๆ คือ "ไปโผล่ช่องที่แก้ล่าสุด" เพราะรายการเรียงตาม updatedAt
-      · สลับหน้าในสตูดิโอแล้วกลับมา state หาย ผู้ดูแลที่กำลังช่วยตั้งค่าช่องคนอื่น
-        เด้งกลับมาช่องตัวเองเงียบๆ แล้วแก้ต่อทับผิดใบ
-
-    ตอนนี้รหัสช่องอยู่ใน #c= : รีเฟรชได้ แชร์ลิงก์ให้ทีมงานได้ ปุ่มย้อนกลับ
-    ของเบราว์เซอร์พาไปช่องก่อนหน้าตามที่คนคาด และ "ช่องไหน" ไม่มีทางเดาผิด
+    ช่องที่เปิดอยู่มาจาก #c= — รีเฟรชได้ แชร์ลิงก์ได้ และ "ช่องไหน" ไม่มีทางเดาผิด
+    ไม่มี #c= = ช่องแรกของตัวเอง ถ้ายังไม่มีเลยใช้ uid เป็นชื่อเอกสารของ "ช่องแรก"
+    (ตรงกับกติกาเดิมที่ช่องแรกของบัญชีใช้ uid เป็นชื่อเอกสาร)
   */
   const hashChannel = useHashParam("c");
   const fallbackId = ownChannels[0]?.id ?? (user ? user.uid : null);
   const activeId = hashChannel || (myLoaded ? fallbackId : null);
 
-  /* สำเนาบนคลาวด์ของช่องที่เปิดอยู่ — ทั้งใช้เป็นต้นทางและใช้เทียบว่ามีอะไรค้าง */
+  /* สำเนาบนคลาวด์ของช่องที่เปิดอยู่ — ใช้เป็นต้นทางและใช้เทียบว่ามีอะไรค้าง */
   const { channel: live, loaded: liveLoaded } = useChannel(activeId);
-
   const channel = channelStore.draftFor(activeId);
-  const autoApprove = !!channel?.donate.autoApprove;
 
-  /* แก้ช่องของตัวเองได้เสมอ ช่องคนอื่นต้องเป็นผู้ดูแลที่ Firestore ยืนยันแล้ว
-     ดูจาก ownerUid ของช่อง ไม่ใช่จากชื่อเอกสาร เพราะช่องที่สองเป็นต้นไป
-     ชื่อเอกสารเป็นรหัสสุ่ม ไม่ได้เท่ากับ uid ของเจ้าของแล้ว */
+  /* แก้ช่องตัวเองได้เสมอ ช่องคนอื่นต้องเป็นผู้ดูแลที่ Firestore ยืนยันแล้ว
+     ดูจาก ownerUid ไม่ใช่ชื่อเอกสาร (ช่องที่สองขึ้นไปและช่องที่ถูกโอนมา ชื่อเอกสารไม่ใช่ uid) */
   const owned = !!channel && !!myUid && channel.ownerUid === myUid;
-  const canManage = owned || isAdmin;
+  const canManage = owned || admin;
   const editingOther = !!channel && !owned;
 
-  /* ช่องทั้งหมดที่คนนี้หยิบมาแก้ได้ — ผู้ดูแลได้ทุกช่อง คนอื่นได้เฉพาะของตัวเอง */
-  const switchable = isAdmin ? allChannels : ownChannels;
-
   /*
-    ยังไม่มีสำเนาในเครื่อง — ต้องดึงของจริงจากคลาวด์มาก่อน ห้ามสร้างโครงว่างทันที
-
-    ของเดิมสร้างโครงว่างเลยโดยไม่ถามคลาวด์ พอเปิดหน้านี้ในเครื่องใหม่
-    หรือหลังล้างข้อมูลเบราว์เซอร์ หน้าจะขึ้นช่องเปล่าที่ยังไม่มี handle ทั้งที่
-    บนคลาวด์มีช่องที่ตั้งค่าไว้ครบแล้ว — แล้วถ้าเผลอกด "เผยแพร่ช่อง" ตอนนั้น
-    ช่องจริงจะโดนทับด้วยของเปล่าทั้งใบ ทั้งพร้อมเพย์ แพ็กเกจ และเพลย์ลิสต์สำรอง
-
-    รอจนรู้ผลจากคลาวด์ก่อน (liveLoaded) ค่อยตัดสินใจ
+    ยังไม่มีร่าง — ดึงของจริงจากคลาวด์มาก่อน ห้ามสร้างโครงว่างทันที
+    ไม่งั้นเปิดหน้านี้ในเครื่องใหม่แล้วจะเห็นช่องเปล่า และถ้าเผลอกดบันทึก
+    ช่องจริงจะโดนทับด้วยของเปล่าทั้งใบ — รอจนรู้ผลจากคลาวด์ก่อน (liveLoaded)
   */
   useEffect(() => {
     if (!user || !activeId) return;
     const choice = decideChannelSeed({
       hasUser: true,
       hasLocal: !!channelStore.draftFor(activeId),
-      /* ปั้นโครงว่างได้เฉพาะ "ช่องแรกของตัวเอง" ซึ่งใช้ uid เป็นชื่อเอกสาร
+      /* ปั้นโครงว่างได้เฉพาะ "ช่องแรกของตัวเอง" ที่ใช้ uid เป็นชื่อเอกสาร
          รหัสอื่นที่คลาวด์ไม่รู้จัก = ลิงก์ผิดหรือช่องถูกลบ ไม่ใช่ช่องใหม่ */
       canCreate: activeId === user.uid,
       cloudLoaded: liveLoaded,
@@ -325,73 +134,17 @@ export default function ChannelSettings() {
     });
     if (choice === "use-cloud" && live) channelStore.set(activeId, live);
     else if (choice === "create-empty") {
-      channelStore.set(
-        activeId,
-        emptyChannel({ uid: user.uid, email: user.email }, activeId),
-      );
+      channelStore.set(activeId, emptyChannel({ uid: user.uid, email: user.email }, activeId));
     }
   }, [user, activeId, liveLoaded, live]);
 
-  /**
-   * สรุปยอด + อนุมัติอัตโนมัติ ทำใน callback ตอนข้อมูลมาถึง ไม่ใช่ตอนเรนเดอร์
-   * autoApprove กับ canManage อยู่ใน deps เลยไม่ต้องใช้ ref อ่านค่าล่าสุด
-   * (สลับสวิตช์ทีก็แค่ subscribe ใหม่รอบเดียว ไม่ได้ถี่พอให้เสียดาย)
-   */
-  useEffect(() => {
-    if (!activeId) return;
-    /* ใบที่ยิงอนุมัติอัตโนมัติไปแล้ว — onSnapshot ยิงซ้ำได้เรื่อยๆ ต้องกันเอง
-       ผูกกับรอบ subscribe นี้ สลับช่องเมื่อไหร่ก็เริ่มนับใหม่เองโดยไม่ต้องล้าง */
-    const autoDone = new Set<string>();
-    return watchChannelDonations(activeId, (list) => {
-      setDonations(list);
-      setStats(computeStats(list));
-      if (!autoApprove || !canManage) return;
-      for (const d of list) {
-        if (d.status !== "pending" || d.slipCheck !== "verified") continue;
-        if (autoDone.has(d.id)) continue;
-        autoDone.add(d.id);
-        void autoApproveOne(activeId, d);
-      }
-    });
-  }, [activeId, autoApprove, canManage]);
-
-  /* ใบของช่องเดิมต้องไม่ค้างอยู่ระหว่างรอ snapshot ชุดใหม่
-     ปรับ state ระหว่างเรนเดอร์ตามที่ React แนะนำ ไม่ใช่ setState ใน effect */
-  const [seenId, setSeenId] = useState(activeId);
-  if (seenId !== activeId) {
-    setSeenId(activeId);
-    if (donations.length) setDonations([]);
-    if (stats !== NO_STATS) setStats(NO_STATS);
-    if (tab !== "all") setTab("all");
-  }
-
-  /*
-    ไม่มีบัญชีผูกอยู่ — ต้องบอก ไม่ใช่คืนหน้าเปล่า
-
-    AuthGate กันไว้แล้วเฉพาะตอนที่เชื่อม Firebase อยู่ พอเป็นโหมดไม่มีคลาวด์
-    (หรือเข้ามาด้วยรหัสผู้จัดในเครื่อง) มันปล่อยผ่าน แล้วของเดิม return null
-    ตรงนี้ ผลคือหน้าขาวเปล่าซึ่งแยกไม่ออกจาก "เว็บพัง"
-  */
   if (!user) {
     return (
-      <div className="space-y-6">
-        <PageHead
-          eyebrow="Channel"
-          title="ช่องของคุณ"
-          description="ตั้งพร้อมเพย์ แพ็กเกจสมาชิก และลิงก์สำหรับสตรีมที่เดียว ใช้ได้กับทุกทัวร์"
-        />
-        <EmptyState
-          art={<ArtShield />}
-          title="ช่องผูกกับบัญชี ไม่ใช่กับเครื่อง"
-          description="ล็อกอินด้วยบัญชีสตรีมเมอร์ก่อนถึงจะตั้งค่าช่องและรับโดเนทได้ — เครื่องมือที่ทำงานในเบราว์เซอร์ (สุ่มทีม วงล้อ จับเวลา widget) ใช้ได้เลยไม่ต้องล็อกอิน"
-        />
-      </div>
+      <EmptyState
+        title="เข้าสู่ระบบก่อน"
+        description="ช่องผูกกับบัญชี เข้าสู่ระบบด้วยบัญชีสตรีมเมอร์แล้วค่อยตั้งค่าช่อง"
+      />
     );
-  }
-
-  /** สลับช่อง = เปลี่ยน URL ไม่ใช่เปลี่ยน state — ดูเหตุผลที่ activeId */
-  function selectChannel(next: Channel | null) {
-    setHashParams({ c: next ? next.id : null, tab: null });
   }
 
   /** เปิดช่องใหม่ให้ตัวเอง แล้วสลับไปแก้ช่องนั้นเลย */
@@ -404,912 +157,361 @@ export default function ChannelSettings() {
         `ช่องใหม่ ${ownChannels.length + 1}`,
       );
       channelStore.set(made.id, made);
-      selectChannel(made);
-      toast("เปิดช่องใหม่แล้ว — ตั้งชื่อช่อง (handle) ก่อนถึงจะเผยแพร่ได้", "success");
-      void recordAudit("channel.publish", {
-        id: made.id,
-        name: made.name,
-        detail: "เปิดช่องใหม่",
-      });
+      setHashParams({ c: made.id });
+      toast("เปิดช่องใหม่แล้ว ตั้งชื่อลิงก์ของช่องก่อนแล้วกดบันทึก", "success");
+      void recordAudit("channel.publish", { id: made.id, name: made.name, detail: "เปิดช่องใหม่" });
     } catch {
-      toast("เปิดช่องใหม่ไม่สำเร็จ", "error");
+      toast("เปิดช่องใหม่ไม่สำเร็จ บัญชีนี้อาจยังไม่ได้สิทธิ์สตรีมเมอร์", "error");
     } finally {
       setBusy(false);
     }
   }
 
-  /*
-    ยังหาช่องไม่เจอ — ต้องมีทางออกให้กด ไม่ใช่หน้าว่าง
-
-    ผู้ดูแลระบบไม่จำเป็นต้องมีช่องของตัวเองเลยสักช่อง หน้าที่ของเขาคือเข้าไป
-    ช่วยตั้งค่าช่องของคนอื่น แถบสลับช่องจึงต้องอยู่เหนือทางออกนี้เสมอ
-  */
   if (!activeId || !channel) {
-    if (!myLoaded || (activeId && !liveLoaded)) return <ChannelSkeleton />;
+    if (!myLoaded || (activeId && !liveLoaded)) return <SettingsSkeleton />;
     return (
-      <div className="space-y-6">
-        {switchable.length > 0 && (
-          <ChannelSwitcher
-            channels={switchable}
-            activeId=""
-            ownUid={user.uid}
-            admin={isAdmin}
-            onSelect={selectChannel}
-            onCreate={() => void addChannel()}
-            busy={busy}
-          />
-        )}
-
-        <PageHead
-          eyebrow="Channel"
-          title="ช่องของคุณ"
-          description="ตั้งพร้อมเพย์ แพ็กเกจสมาชิก และลิงก์สำหรับสตรีมที่เดียว ใช้ได้กับทุกทัวร์"
-        />
-        <Panel variant="feature" className="p-6 sm:p-7">
-          <PanelHeader
-            eyebrow="Channel"
-            title={hashChannel ? "ไม่พบช่องนี้" : "ยังไม่มีช่องของตัวเอง"}
-          />
-          <p className="text-sm leading-relaxed text-muted">
-            {hashChannel
-              ? "ลิงก์นี้ชี้ไปที่ช่องที่ไม่มีอยู่บนคลาวด์แล้ว — อาจถูกลบไปหรือคัดลอกรหัสมาไม่ครบ"
-              : "ช่องคือที่รวมทุกอย่างของคุณ — พร้อมเพย์สำหรับรับโดเนท แพ็กเกจสมาชิก คิวขอเพลง และลิงก์ widget ที่ใช้ได้ตลอดโดยไม่ต้องเปลี่ยนทุกครั้งที่จัดทัวร์ใหม่"}
-            {isAdmin && switchable.length > 0
-              ? " · ถ้าจะเข้าไปช่วยตั้งค่าช่องของคนอื่น เลือกจากแถบด้านบนได้เลย"
-              : ""}
-          </p>
-          <div className="mt-5 flex flex-wrap gap-2.5">
-            <Button loading={busy} onClick={() => void addChannel()}>
-              เปิดช่องของคุณ
-            </Button>
-            {hashChannel && (
-              <Button variant="ghost" onClick={() => selectChannel(null)}>
-                กลับไปช่องของคุณ
+      <div className="space-y-8">
+        <PageHead title="ตั้งค่าช่อง" />
+        <EmptyState
+          title={hashChannel ? "ไม่พบช่องนี้" : "ยังไม่มีช่องของตัวเอง"}
+          description={
+            hashChannel
+              ? "ลิงก์นี้ชี้ไปที่ช่องที่ไม่มีแล้ว อาจถูกลบหรือคัดลอกรหัสมาไม่ครบ"
+              : "เปิดช่องเพื่อรับคำขอเพลง คนดูจะขอเพลงผ่านลิงก์ของช่องคุณ"
+          }
+          action={
+            <div className="flex flex-wrap gap-2">
+              <Button loading={busy} onClick={() => void addChannel()}>
+                เปิดช่องของฉัน
               </Button>
-            )}
-          </div>
-        </Panel>
+              {hashChannel && (
+                <Button variant="ghost" onClick={() => setHashParams({ c: null })}>
+                  กลับไปช่องของฉัน
+                </Button>
+              )}
+            </div>
+          }
+        />
       </div>
     );
   }
 
-  const otherName = channel.name || channel.handle || "ช่องนี้";
-  /*
-    มีอะไรแก้ค้างไว้ไหม — เทียบของในหน้ากับสำเนาบนคลาวด์
-    หน้านี้ยาวมาก ปุ่มเผยแพร่อยู่บนสุดที่เดียว คนแก้ค่าท้ายหน้าแล้วปิดไปเลยก็มี
-    รู้ว่าค้างเมื่อไหร่ถึงจะเด้งแถบบันทึกขึ้นมาเตือนตรงที่มือกำลังทำงานอยู่ได้
-  */
+  return (
+    <Editor
+      key={activeId}
+      activeId={activeId}
+      channel={channel}
+      live={live}
+      canManage={canManage}
+      editingOther={editingOther}
+      busy={busy}
+      setBusy={setBusy}
+      onAddChannel={() => void addChannel()}
+    />
+  );
+}
+
+function Editor({
+  activeId,
+  channel,
+  live,
+  canManage,
+  editingOther,
+  busy,
+  setBusy,
+  onAddChannel,
+}: {
+  activeId: string;
+  channel: Channel;
+  live: Channel | null;
+  canManage: boolean;
+  editingOther: boolean;
+  busy: boolean;
+  setBusy: (v: boolean) => void;
+  onAddChannel: () => void;
+}) {
+  const reduced = useReducedMotion();
+  const user = authStore.user();
+  const [handleTaken, setHandleTaken] = useState<string | null>(null);
+
+  const name = channel.name || channel.handle || "ช่องนี้";
+  const songs: SongConfig = { ...DEFAULT_SONG_CONFIG, ...channel.songs };
   const neverPublished = !live;
   const dirty = !live || !matchesCloud(channel, live);
 
-  /* แก้ค่าลงร่างของ "ช่องที่เปิดอยู่" เท่านั้น — ร่างมีรหัสช่องกำกับอยู่แล้ว
-     จึงไม่ต้องมีทางแยกระหว่างช่องตัวเองกับช่องคนอื่นอีก */
+  /* แก้ลงร่างของ "ช่องที่เปิดอยู่" เท่านั้น — ร่างมีรหัสช่องกำกับอยู่แล้ว */
   const set = <K extends keyof Channel>(key: K, value: Channel[K]) => {
-    if (!activeId) return;
     channelStore.update(activeId, { [key]: value } as Partial<Channel>);
   };
-
-  const publish = async () => {
-    if (!channel.handle) {
-      toast("ตั้งชื่อช่อง (handle) ก่อนถึงจะเผยแพร่ได้", "error");
-      return;
-    }
-    setBusy(true);
-    try {
-      /*
-        เขียนกลับไปที่เอกสารเดิมเสมอ (activeId) ไม่ใช่ที่ชื่อเอกสาร = ownerUid
-
-        pushChannel() ของเดิมเลือกปลายทางจาก channel.ownerUid ซึ่งเท่ากับสมมติว่า
-        "ชื่อเอกสาร = uid เจ้าของ" — พอช่องถูกโอนมา สมมติฐานนั้นผิด แล้วการกด
-        เผยแพร่จะไปสร้างเอกสารใหม่ที่ชื่อ = uid เจ้าของใหม่ กลายเป็นช่องซ้ำสองใบ
-        โดยที่ลิงก์ทั้งหมดยังชี้ใบเก่า
-
-        แก้ช่องคนอื่นห้ามทับ ownerEmail ของเจ้าของด้วยอีเมลผู้ดูแล
-      */
-      await pushChannelAs(
-        editingOther ? channel : { ...channel, ownerEmail: user.email ?? undefined },
-        activeId,
-      );
-      toast(editingOther ? `เผยแพร่ช่อง ${otherName} แล้ว` : "เผยแพร่ช่องแล้ว", "success");
-      recordActivity("tournament.publish", `เผยแพร่ช่อง "${channel.name || channel.handle}"`, {
-        actor: user.name,
-      });
-      void recordAudit("channel.publish", {
-        id: activeId,
-        name: channel.name || channel.handle,
-      });
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "เผยแพร่ไม่สำเร็จ", "error");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const approve = async (d: ChannelDonation) => {
-    setWorking(d.id);
-    try {
-      await setChannelDonationStatus(activeId, d.id, "approved", {
-        expiresAt:
-          d.kind === "member" && d.months ? expiryFrom(d.months) : undefined,
-      });
-      recordActivity(
-        d.kind === "member" ? "member.approve" : "donation.approve",
-        `${d.name} · ${formatMoney(d.amount)}`,
-        { actor: user.name },
-      );
-      void recordAudit("donation.approve", { id: d.id, name: d.name });
-      toast(`อนุมัติ ${d.name} แล้ว · เด้งขึ้นจอ`, "success");
-      if (!reduced) {
-        setFlash((p) => [...p, d.id]);
-        window.setTimeout(
-          () => setFlash((p) => p.filter((x) => x !== d.id)),
-          1200,
-        );
-      }
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "อนุมัติไม่สำเร็จ", "error");
-    } finally {
-      setWorking(null);
-    }
-  };
-
-  const reject = async (d: ChannelDonation) => {
-    setWorking(d.id);
-    try {
-      await setChannelDonationStatus(activeId, d.id, "rejected");
-      recordActivity("donation.reject", `${d.name} · ${formatMoney(d.amount)}`, {
-        actor: user.name,
-      });
-      void recordAudit("donation.reject", { id: d.id, name: d.name });
-      toast(`ปฏิเสธ ${d.name} แล้ว`, "info");
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "ทำรายการไม่สำเร็จ", "error");
-    } finally {
-      setWorking(null);
-    }
-  };
+  const setSongs = (patch: Partial<SongConfig>) => set("songs", { ...songs, ...patch });
 
   const origin =
     typeof window !== "undefined"
       ? `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}`
       : "";
-  const supportUrl = `${origin}/c/#h=${channel.handle || activeId}`;
-  const alertUrl = `${origin}/widget/alert/#ch=${activeId}`;
 
-  const COUNT: Record<Tab, number> = {
-    all: donations.length,
-    pending: stats.pending,
-    approved: stats.approvedCount,
-    rejected: stats.rejected,
+  const save = async () => {
+    if (!user) return;
+    if (!channel.handle) {
+      toast("ตั้งชื่อลิงก์ของช่องก่อน แล้วค่อยบันทึก", "error");
+      return;
+    }
+    setBusy(true);
+    try {
+      /* ชื่อลิงก์ซ้ำกับช่องอื่น = ลิงก์ /song/#h= จะพาคนดูไปผิดช่อง ต้องกันไว้ */
+      const holder = await findChannelByHandle(channel.handle);
+      if (holder && holder.id !== activeId) {
+        setHandleTaken(channel.handle);
+        toast(`ชื่อลิงก์ ${channel.handle} มีช่องอื่นใช้แล้ว ลองชื่ออื่น`, "error");
+        return;
+      }
+      setHandleTaken(null);
+      /*
+        เขียนกลับไปที่เอกสารเดิมเสมอ (activeId) ไม่ใช่ที่ชื่อเอกสาร = ownerUid
+        ช่องที่ถูกโอนมาชื่อเอกสารไม่ใช่ uid เจ้าของ เดาผิดแล้วจะกลายเป็นช่องซ้ำสองใบ
+        แก้ช่องคนอื่นห้ามทับ ownerEmail ของเจ้าของด้วยอีเมลผู้ดูแล
+      */
+      const draft = withLiveFields(channel, live);
+      await pushChannelAs(
+        editingOther ? draft : { ...draft, ownerEmail: user.email ?? undefined },
+        activeId,
+      );
+      channelStore.set(activeId, draft);
+      toast(neverPublished ? "เปิดช่องแล้ว" : "บันทึกแล้ว", "success");
+      void recordAudit("channel.publish", { id: activeId, name: channel.name || channel.handle });
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ เช็คอินเทอร์เน็ตแล้วลองใหม่", "error");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  // เรียงเป็นกลุ่มในลิสต์เดียว เพื่อให้ layout ของ motion ย้ายแถวข้ามกลุ่มได้ลื่น
-  const order: Tab[] = tab === "all" ? ["pending", "approved", "rejected"] : [tab];
-  const sections = order
-    .map((key) => ({
-      key,
-      items: donations.filter((d) => d.status === key),
-    }))
-    .filter((s) => s.items.length > 0);
-
   return (
-    /* เว้นที่ท้ายหน้าไว้ให้แถบบันทึกลอย ไม่ให้มันทับเนื้อหาบรรทัดสุดท้าย */
-    <div className="space-y-6 pb-28">
-      {/* แถบสลับช่อง — ผู้ดูแลได้ทุกช่องในระบบ สตรีมเมอร์ได้เฉพาะช่องของตัวเอง
-          (โผล่ก็ต่อเมื่อมีมากกว่าหนึ่งช่องให้สลับจริงๆ) */}
-      <ChannelSwitcher
-        channels={switchable}
-        activeId={activeId}
-        ownUid={user.uid}
-        admin={isAdmin}
-        onSelect={selectChannel}
-        onCreate={() => void addChannel()}
-        busy={busy}
-      />
-
-      {editingOther && (
-        <div
-          className="tally flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl tile p-4"
-          style={{ ["--st"]: "var(--st-next)" } as CSSProperties}
-        >
-          <span className="slug" style={{ color: "rgb(var(--st-next))" }}>
-            โหมดผู้ดูแล
-          </span>
-          <p className="min-w-0 flex-1 text-sm text-ice/85">
-            กำลังแก้ช่องของ <strong className="text-iris">{otherName}</strong> —
-            สิ่งที่แก้จะไม่ทับช่องของคุณ ต้องกด &ldquo;เผยแพร่ช่อง&rdquo; ถึงจะบันทึกขึ้นคลาวด์
-          </p>
-          <MiniBtn onClick={() => selectChannel(null)}>กลับไปช่องของคุณ</MiniBtn>
-        </div>
-      )}
-
+    /* เว้นที่ท้ายหน้าไว้ให้แถบบันทึกที่ลอยอยู่ ไม่ให้ทับช่องสุดท้าย */
+    <div className="space-y-12 pb-32">
       <PageHead
-        eyebrow="Channel"
-        title={editingOther ? otherName : "ช่องของคุณ"}
-        description="ตั้งพร้อมเพย์ แพ็กเกจสมาชิก และลิงก์สำหรับสตรีมที่เดียว ใช้ได้กับทุกทัวร์"
-        meta={channel.handle ? `@${channel.handle}` : undefined}
-        action={
-          /* ไม่มีสิทธิ์แก้ช่องนี้ก็ไม่ต้องมีปุ่มให้กด — กดไปก็ได้แต่ error จากกติกา */
-          canManage ? (
-            <Button onClick={publish} loading={busy} variant={dirty ? "primary" : "outline"}>
-              {dirty ? "เผยแพร่ช่อง" : "เผยแพร่แล้ว"}
-            </Button>
-          ) : undefined
+        title="ตั้งค่าช่อง"
+        description={
+          editingOther
+            ? `คุณกำลังแก้ช่องของ ${name} ในฐานะผู้ดูแล`
+            : "หน้าตาของช่องและกติกาการขอเพลง กดบันทึกแล้วคนดูถึงจะเห็นค่าใหม่"
         }
       />
 
-      {/*
-        บนจอใหญ่ ส่วนของหน้านี้อยู่ในแถบข้างของสตูดิโอแล้ว (เมนูลูกใต้ "ช่องของฉัน")
-        จึงเหลือแถบนี้ไว้เฉพาะจอเล็กที่แถบข้างถูกพับเป็นลิ้นชัก —
-        ถ้าโชว์ทั้งสองที่ หน้าจอจะมีที่กดเปลี่ยนเรื่องสองชุดซ้อนกันจนอ่านไม่ออกว่าอันไหนคุมอะไร
-      */}
-      <div className="lg:hidden">
-        <Tabs
-          label="ส่วนของหน้าช่อง"
-          value={section}
-          onChange={goSection}
-          size="md"
-          grow
-          items={SECTIONS.map((s) => ({
-            key: s.key,
-            label: s.label,
-            // จุดทองที่แท็บสลิป = มีใบรอตรวจอยู่ เห็นได้โดยไม่ต้องเข้าไปดู
-            dot: s.key === "inbox" && stats.pending > 0 ? "169 155 255" : undefined,
-            count: s.key === "inbox" ? stats.pending || null : null,
-          }))}
-        />
-      </div>
-
-      {/* ================= ภาพรวม ================= */}
-      {section === "home" && (
-        <>
-          {/* สรุปเงินของช่อง — คำนวณจากใบที่มีอยู่ ไม่ต้องยิง API เพิ่ม */}
-          <Reveal>
-            <Panel variant="feature" className="p-6 sm:p-7">
-              <Panel.Header
-                eyebrow="Ledger"
-                title="ภาพรวมของช่อง"
-                action={
-                  <span className="slug slug-2 hidden sm:block">
-                    {donations.length} ใบทั้งหมด
-                  </span>
-                }
-              />
-              <FigureRow>
-                <Figure
-                  value={stats.total}
-                  fmt={money}
-                  label="อนุมัติแล้วรวม"
-                  ratio={stats.total > 0 ? 1 : 0}
-                />
-                <Figure
-                  value={stats.pending}
-                  label="รอตรวจ"
-                  suffix="ใบ"
-                  tone="platinum"
-                  className="sm:pl-6"
-                  ratio={
-                    donations.length > 0 ? stats.pending / donations.length : 0
-                  }
-                />
-                <Figure
-                  value={stats.active}
-                  label="สมาชิกที่ยังใช้ได้"
-                  suffix="คน"
-                  tone="platinum"
-                  className="sm:pl-6"
-                  ratio={stats.memberAll > 0 ? stats.active / stats.memberAll : 0}
-                />
-                <Figure
-                  value={stats.last30}
-                  fmt={money}
-                  label="ยอด 30 วันล่าสุด"
-                  className="sm:pl-6"
-                  ratio={stats.total > 0 ? stats.last30 / stats.total : 0}
-                />
-              </FigureRow>
-            </Panel>
-          </Reveal>
-
-          {/* ลิงก์ */}
-          <Reveal index={1}>
-            <Panel accent="110 155 240" className="p-6">
-              <Panel.Header eyebrow="Links" title="ลิงก์ของช่อง" count={2} />
-              <div className="space-y-2.5">
-                <LinkRow kind="public" label="หน้าสนับสนุน" url={supportUrl} />
-                <LinkRow
-                  kind="obs"
-                  label="Widget แจ้งเตือน"
-                  url={alertUrl}
-                  size="1280 × 720"
-                />
-              </div>
-              <p className="mt-4 text-xs text-muted">
-                ลิงก์ widget ใช้ได้ตลอด ไม่ต้องเปลี่ยนทุกครั้งที่จัดทัวร์ใหม่
-                แก้อะไรในหน้านี้แล้วอย่าลืมกด &ldquo;เผยแพร่ช่อง&rdquo;
-              </p>
-            </Panel>
-          </Reveal>
-
-          {/*
-            อะไรเปิดอยู่บ้าง — สรุปสวิตช์ทั้งช่องไว้ที่เดียว
-
-            ของเดิมสวิตช์สี่ตัวกระจายอยู่คนละการ์ด ห่างกันหลายจอ จะรู้ว่า
-            "ตอนนี้รับโดเนทอยู่ไหม" ต้องเลื่อนไปหาสวิตช์นั้นให้เจอก่อน
-            ตรงนี้ตอบให้ในบรรทัดเดียว พร้อมบอกด้วยว่าที่เปิดไว้ยังขาดอะไรอยู่
-          */}
-          <Reveal index={2}>
-            <Panel className="p-6">
-              <Panel.Header
-                eyebrow="Status"
-                title="ตอนนี้เปิดอะไรอยู่บ้าง"
-                action={
-                  <MiniBtn onClick={() => goSection("settings")}>ไปตั้งค่า</MiniBtn>
-                }
-              />
-              <div className="grid gap-2.5 sm:grid-cols-2">
-                <StatusLine
-                  on={channel.donate.enabled}
-                  label="รับโดเนท"
-                  detail={
-                    channel.donate.promptPayId
-                      ? `พร้อมเพย์ ${channel.donate.promptPayId}`
-                      : "ยังไม่ได้ใส่เลขพร้อมเพย์"
-                  }
-                />
-                <StatusLine
-                  on={channel.member.enabled}
-                  label="รับสมาชิก"
-                  detail={`${channel.member.tiers.length} แพ็กเกจ`}
-                />
-                <StatusLine
-                  on={!!channel.donate.autoApprove}
-                  label="อนุมัติสลิปอัตโนมัติ"
-                  detail={
-                    channel.donate.verifyEndpoint
-                      ? "ต่อกับตัวกลางตรวจสลิปแล้ว"
-                      : "ยังไม่มีลิงก์ตัวกลาง จะไม่อนุมัติให้เอง"
-                  }
-                />
-                <StatusLine
-                  on={channel.songs?.enabled === true}
-                  label="รับคำขอเพลง"
-                  detail={`กองสำรอง ${channel.songs?.filler?.length ?? 0} เพลง`}
-                />
-              </div>
-            </Panel>
-          </Reveal>
-        </>
-      )}
-
-      {/* ================= ตั้งค่าช่อง ================= */}
-      {section === "settings" && (
-        <>
-          {/* โปรไฟล์ */}
-          <Reveal index={2}>
-            <Panel className="p-6">
-              <Panel.Header eyebrow="Profile" title="โปรไฟล์" />
-
-              <div className="grid gap-5 lg:grid-cols-2">
-                <div className="space-y-4">
-                  <div>
-                    <Label hint="ใช้ในลิงก์ เช่น /c/#h=affarain — a-z 0-9 - _ เท่านั้น">
-                      ชื่อช่อง (handle)
-                    </Label>
-                    <Input
-                      value={channel.handle}
-                      onChange={(e) => set("handle", normalizeHandle(e.target.value))}
-                      placeholder="affarain"
-                      maxLength={24}
-                    />
-                  </div>
-                  <div>
-                    <Label>ชื่อที่แสดง</Label>
-                    <Input
-                      value={channel.name}
-                      onChange={(e) => set("name", e.target.value)}
-                      placeholder="AFFA RAIN"
-                      maxLength={40}
-                    />
-                  </div>
-                  <div>
-                    <Label>คำโปรย</Label>
-                    <Input
-                      value={channel.tagline ?? ""}
-                      onChange={(e) => set("tagline", e.target.value)}
-                      placeholder="ช่องจัดแข่งของเรา"
-                      maxLength={80}
-                    />
-                  </div>
-                  <div>
-                    <Label>ลิงก์ไลฟ์</Label>
-                    <Input
-                      value={channel.live.url}
-                      onChange={(e) =>
-                        set("live", { ...channel.live, url: e.target.value.trim() })
-                      }
-                      placeholder="https://www.tiktok.com/@affarain/live"
-                    />
-                    <label className="mt-2.5 flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-ice/85">
-                      <input
-                        type="checkbox"
-                        checked={channel.live.isLive}
-                        onChange={(e) =>
-                          set("live", { ...channel.live, isLive: e.target.checked })
-                        }
-                        className="h-4 w-4 accent-live"
-                      />
-                      ตอนนี้กำลังไลฟ์อยู่
-                    </label>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <ImagePicker
-                    label="รูปโปรไฟล์"
-                    value={channel.avatar}
-                    onChange={(v) => set("avatar", v)}
-                    shape="round"
-                    maxWidth={300}
-                    maxBytes={70_000}
-                  />
-                  <ImagePicker
-                    label="รูปปก"
-                    value={channel.cover}
-                    onChange={(v) => set("cover", v)}
-                    shape="wide"
-                  />
-                </div>
-              </div>
-            </Panel>
-          </Reveal>
-
-          {/* โดเนท */}
-          <Reveal index={3}>
-            <Panel className="p-6">
-              <Panel.Header
-                eyebrow="Donations"
-                title="รับโดเนท"
-                action={
-                  <Switch
-                    label="รับโดเนท"
-                    checked={channel.donate.enabled}
-                    onChange={(v) => set("donate", { ...channel.donate, enabled: v })}
-                  />
-                }
-              />
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <Label hint="เบอร์มือถือ / เลขบัตรประชาชน / e-wallet id">
-                    เลขพร้อมเพย์
-                  </Label>
-                  <Input
-                    value={channel.donate.promptPayId ?? ""}
-                    onChange={(e) =>
-                      set("donate", { ...channel.donate, promptPayId: e.target.value })
-                    }
-                    placeholder="0812345678"
-                  />
-                </div>
-                <div>
-                  <Label>ชื่อบัญชีที่จะโชว์</Label>
-                  <Input
-                    value={channel.donate.displayName ?? ""}
-                    onChange={(e) =>
-                      set("donate", { ...channel.donate, displayName: e.target.value })
-                    }
-                    placeholder="ชื่อผู้รับโอน"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <Label>ข้อความบนหน้าสนับสนุน</Label>
-                <Textarea
-                  rows={2}
-                  value={channel.donate.note ?? ""}
-                  onChange={(e) => set("donate", { ...channel.donate, note: e.target.value })}
-                />
-              </div>
-            </Panel>
-          </Reveal>
-
-          {/* ตรวจสลิป */}
-          <Reveal index={4}>
-            <Panel accent="52 227 176" className="p-6">
-              <Panel.Header
-                eyebrow="Verify"
-                title="ตรวจสลิปอัตโนมัติ"
-                action={
-                  <Switch
-                    label="อนุมัติอัตโนมัติเมื่อยืนยันผ่าน"
-                    checked={!!channel.donate.autoApprove}
-                    onChange={(v) => set("donate", { ...channel.donate, autoApprove: v })}
-                  />
-                }
-              />
-
-              <div>
-                <Label hint="ลิงก์ Worker ที่คุณ deploy เอง คีย์ของผู้ให้บริการอยู่ในนั้น ไม่ได้อยู่ในหน้าเว็บ">
-                  ลิงก์ตัวกลางตรวจสลิป
-                </Label>
-                <Input
-                  value={channel.donate.verifyEndpoint ?? ""}
-                  onChange={(e) =>
-                    set("donate", { ...channel.donate, verifyEndpoint: e.target.value.trim() })
-                  }
-                  placeholder="https://slip-check.your-worker.workers.dev"
-                />
-              </div>
-
-              <p className="mt-3 text-xs text-muted">
-                เว้นว่างไว้ก็ใช้งานได้ทันที ไม่ต้องตั้งอะไรเลย —
-                ระบบจะอ่าน QR บนสลิปแล้วตรวจให้แค่ว่าเป็นสลิปใบที่เคยส่งมาแล้วหรือเปล่า
-                ใส่ลิงก์เมื่อไหร่ถึงจะยืนยันกับธนาคารได้ว่าเงินเข้าจริงและยอดตรง
-              </p>
-
-              {channel.donate.autoApprove && !channel.donate.verifyEndpoint && (
-                <p
-                  className="mt-2 text-xs"
-                  style={{ color: "rgb(var(--st-next))" }}
-                >
-                  เปิดอนุมัติอัตโนมัติไว้แต่ยังไม่มีลิงก์ตัวกลาง
-                  ใบจะไม่ถูกอนุมัติเองเพราะยังไม่มีอะไรยืนยันยอดให้
-                </p>
-              )}
-
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                {(["verified", "mismatch", "unique", "none", "failed"] as SlipCheck[]).map(
-                  (k) => (
-                    <Badge key={k} rgb={SLIP_META[k].rgb} hex={SLIP_META[k].hex}>
-                      {SLIP_META[k].label}
-                    </Badge>
-                  ),
-                )}
-              </div>
-            </Panel>
-          </Reveal>
-
-          {/* สมาชิก */}
-          <Reveal index={5}>
-            <Panel className="p-6">
-              <Panel.Header
-                eyebrow="Membership"
-                title="แพ็กเกจสมาชิก"
-                count={channel.member.tiers.length}
-                action={
-                  <Switch
-                    label="เปิดรับสมาชิก"
-                    checked={channel.member.enabled}
-                    onChange={(v) => set("member", { ...channel.member, enabled: v })}
-                  />
-                }
-              />
-
-              <div className="space-y-3">
-                {channel.member.tiers.map((tier, index) => (
-                  <div
-                    key={tier.id}
-                    className="tally relative overflow-hidden rounded-xl tile p-4"
-                    style={{ ["--st"]: tier.rgb } as CSSProperties}
-                  >
-                    <div className="grid gap-3 sm:grid-cols-[auto_1fr_auto_auto]">
-                      <Input
-                        value={tier.badge ?? ""}
-                        onChange={(e) => updateTier(index, { badge: e.target.value })}
-                        className="w-14 text-center"
-                        maxLength={2}
-                        placeholder="★"
-                      />
-                      <Input
-                        value={tier.name}
-                        onChange={(e) => updateTier(index, { name: e.target.value })}
-                        placeholder="ชื่อแพ็กเกจ"
-                      />
-                      <NumberInput
-                        value={tier.pricePerMonth}
-                        onChange={(pricePerMonth) => updateTier(index, { pricePerMonth })}
-                        className="w-28"
-                        placeholder="ราคา"
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          set("member", {
-                            ...channel.member,
-                            tiers: channel.member.tiers.filter((_, i) => i !== index),
-                          })
-                        }
-                        className="cursor-pointer px-2 text-xs text-muted transition-colors hover:text-danger"
-                      >
-                        ลบ
-                      </button>
-                    </div>
-                    <Textarea
-                      rows={2}
-                      className="mt-3"
-                      value={tier.perks.join("\n")}
-                      onChange={(e) =>
-                        updateTier(index, {
-                          perks: e.target.value.split("\n").filter(Boolean).slice(0, 6),
-                        })
-                      }
-                      placeholder={"สิทธิพิเศษทีละบรรทัด"}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  set("member", {
-                    ...channel.member,
-                    tiers: [
-                      ...channel.member.tiers,
-                      {
-                        id: uid(),
-                        name: `แพ็กเกจ ${channel.member.tiers.length + 1}`,
-                        pricePerMonth: 99,
-                        rgb: TIER_COLORS[channel.member.tiers.length % TIER_COLORS.length],
-                        perks: [],
-                        badge: "★",
-                      } satisfies MemberTier,
-                    ],
-                  })
-                }
-                className="mt-4 cursor-pointer rounded-lg tile px-3 py-2 text-xs text-muted transition-colors hover:text-iris"
-              >
-                + เพิ่มแพ็กเกจ
-              </button>
-            </Panel>
-          </Reveal>
-        </>
-      )}
-
-      {/* ================= สลิปที่ส่งเข้ามา ================= */}
-      {section === "inbox" && (
-        <Reveal>
-          <Panel className="p-6">
-            <Panel.Header
-              eyebrow="Inbox"
-              title="สลิปที่ส่งเข้ามา"
-              count={donations.length}
-              action={
-                stats.pending > 0 ? (
-                  <span
-                    className="slug"
-                    style={{ color: "rgb(var(--st-next))" }}
-                  >
-                    {stats.pending} รอตรวจ
-                  </span>
-                ) : undefined
-              }
+      <Group title="หน้าช่อง" description="สิ่งที่คนดูเห็นบนหน้าขอเพลงกับหน้าแรก">
+        <div className="grid gap-6 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="ch-name">ชื่อช่อง</Label>
+            <Input
+              id="ch-name"
+              value={channel.name}
+              onChange={(e) => set("name", e.target.value)}
+              placeholder="Affarain"
+              maxLength={40}
             />
-
-            {donations.length === 0 ? (
-              <EmptyState
-                no="05"
-                art={<ArtShield />}
-                title="ยังไม่มีใครส่งสลิป"
-                /* ลิงก์ย้ายไปอยู่แท็บภาพรวมแล้ว ต้องบอกทางให้ตรง ไม่ใช่ "ด้านบน" */
-                description="เอาลิงก์หน้าสนับสนุนจากแท็บ “ภาพรวม” ไปแปะให้คนดู พอมีคนส่งสลิปเข้ามา ใบจะโผล่ตรงนี้ให้กดอนุมัติ"
-              />
-            ) : (
-              <>
-                <Tabs
-                  label="กรองใบตามสถานะ"
-                  className="mb-4"
-                  value={tab}
-                  onChange={setTab}
-                  items={(["all", "pending", "approved", "rejected"] as Tab[]).map(
-                    (k) => ({ key: k, label: TAB_LABEL[k], count: COUNT[k] }),
-                  )}
-                />
-
-                {sections.length === 0 ? (
-                  <EmptyState
-                    title={`ไม่มีใบที่ ${TAB_LABEL[tab]}`}
-                    description="ลองเลือกแท็บอื่นดู"
-                  />
-                ) : (
-                  <ul className="space-y-3">
-                    <AnimatePresence initial={false}>
-                      {sections.flatMap((sec) => [
-                        <motion.li
-                          key={`head-${sec.key}`}
-                          layout
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          className="flex items-center gap-3 pt-1"
-                        >
-                          <RegStatusBadge status={sec.key} />
-                          <span className="rule h-px flex-1" />
-                          <span className="num text-xs text-muted">
-                            {sec.items.length}
-                          </span>
-                        </motion.li>,
-                        ...sec.items.map((d) => (
-                          <motion.li
-                            key={d.id}
-                            layout
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.97 }}
-                            style={
-                              { ["--st"]: ROW_ST[d.status] ?? "var(--st-idle)" } as CSSProperties
-                            }
-                            className={`tally relative flex flex-wrap items-start gap-4 overflow-hidden rounded-xl tile p-4 ${
-                              d.status === "rejected" ? "state-out" : ""
-                            }`}
-                          >
-                            {flash.includes(d.id) && (
-                              <motion.span
-                                aria-hidden
-                                className="pointer-events-none absolute inset-0"
-                                initial={{ opacity: 0.65 }}
-                                animate={{ opacity: 0 }}
-                                transition={{ duration: 1.1, ease: "easeOut" }}
-                                style={{
-                                  background:
-                                    "radial-gradient(130% 100% at 0% 50%, rgb(var(--st-win)/.4), transparent 72%)",
-                                }}
-                              />
-                            )}
-
-                            {d.slip && (
-                              <a
-                                href={safeImageSrc(d.slip) ?? undefined}
-                                target="_blank"
-                                rel="noreferrer noopener"
-                                className="relative shrink-0"
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={safeImageSrc(d.slip) ?? ""}
-                                  alt="สลิป"
-                                  className="h-24 w-20 rounded-lg object-cover"
-                                />
-                              </a>
-                            )}
-
-                            <div className="relative min-w-0 flex-1">
-                              <div className="flex items-start justify-between gap-3">
-                                <p className="min-w-0 text-sm text-ice">
-                                  {d.name}
-                                  <span className="num ml-2 font-display text-iris">
-                                    {formatMoney(d.amount)}
-                                  </span>
-                                  {d.kind === "member" && (
-                                    <span className="num ml-2 text-xs text-muted">
-                                      สมาชิก {d.tierName} · {d.months} เดือน
-                                    </span>
-                                  )}
-                                </p>
-                                <RegStatusBadge status={d.status} />
-                              </div>
-
-                              {d.message && (
-                                <p className="mt-1 text-xs text-muted">“{d.message}”</p>
-                              )}
-                              <p className="num mt-1 text-xs text-muted/80">
-                                {formatThaiDate(d.createdAt)}
-                                {d.tournamentName && ` · สมทบทุน ${d.tournamentName}`}
-                                {d.slipBank && ` · ${d.slipBank}`}
-                              </p>
-
-                              {(d.slipCheck || d.autoApproved) && (
-                                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                  <SlipBadge
-                                    check={d.slipCheck}
-                                    amount={d.slipAmount}
-                                  />
-                                  {d.autoApproved && (
-                                    <Badge rgb="110 155 240" hex="var(--color-info)" tone="done">
-                                      อนุมัติอัตโนมัติ
-                                    </Badge>
-                                  )}
-                                </div>
-                              )}
-
-                              {d.status === "pending" && (
-                                <div className="mt-3 flex flex-wrap items-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="primary"
-                                    loading={working === d.id}
-                                    icon={<IconCheck className="h-3.5 w-3.5" />}
-                                    onClick={() => void approve(d)}
-                                  >
-                                    อนุมัติ · เด้งขึ้นจอ
-                                  </Button>
-                                  <MiniBtn
-                                    danger
-                                    disabled={working === d.id}
-                                    onClick={() => void reject(d)}
-                                  >
-                                    ปฏิเสธ
-                                  </MiniBtn>
-                                </div>
-                              )}
-                            </div>
-                          </motion.li>
-                        )),
-                      ])}
-                    </AnimatePresence>
-                  </ul>
-                )}
-              </>
+          </div>
+          <div>
+            <Label
+              htmlFor="ch-handle"
+              hint={
+                channel.handle
+                  ? `${origin.replace(/^https?:\/\//, "")}/song/#h=${channel.handle}`
+                  : "ภาษาอังกฤษตัวเล็ก ตัวเลข - และ _ เท่านั้น"
+              }
+            >
+              ชื่อลิงก์
+            </Label>
+            <Input
+              id="ch-handle"
+              value={channel.handle}
+              onChange={(e) => {
+                setHandleTaken(null);
+                set("handle", normalizeHandle(e.target.value));
+              }}
+              placeholder="affarain"
+              maxLength={24}
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={!!handleTaken && handleTaken === channel.handle}
+            />
+            {handleTaken === channel.handle && (
+              <p className="mt-1.5 text-sm text-danger">มีช่องอื่นใช้ชื่อนี้แล้ว ลองชื่ออื่น</p>
             )}
-          </Panel>
-        </Reveal>
-      )}
+          </div>
+          <div className="sm:col-span-2">
+            <Label htmlFor="ch-tagline" hint="ไม่ใส่ก็ได้ ใช้ตอนคนค้นหาช่องจากหน้าแรก">
+              คำอธิบายสั้นๆ
+            </Label>
+            <Input
+              id="ch-tagline"
+              value={channel.tagline ?? ""}
+              onChange={(e) => set("tagline", e.target.value)}
+              placeholder="ไลฟ์เกมทุกคืน ขอเพลงได้ตลอด"
+              maxLength={80}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <ImagePicker
+              label="รูปช่อง"
+              value={channel.avatar}
+              onChange={(v) => set("avatar", v)}
+              shape="round"
+              maxWidth={300}
+              maxBytes={70_000}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Label
+              htmlFor="ch-live"
+              hint="ปุ่ม “ดูไลฟ์” บนหน้าขอเพลงพาไปที่นี่ เปิดปิดป้ายไลฟ์ได้ที่หน้าภาพรวม"
+            >
+              ลิงก์ไลฟ์
+            </Label>
+            <Input
+              id="ch-live"
+              value={channel.live?.url ?? ""}
+              onChange={(e) => set("live", { ...channel.live, url: e.target.value.trim() })}
+              placeholder="https://www.tiktok.com/@affarain/live"
+              inputMode="url"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+        </div>
+      </Group>
 
-      {/* ================= ระบบขอเพลง =================
-          ตั้งค่าแล้วต้องกด "เผยแพร่ช่อง" เหมือนค่าอื่น ส่วนคิวเขียนทันที */}
-      {section === "songs" && (
-        <Reveal>
-          <SongQueuePanel
-            channelId={activeId ?? ""}
-            channel={channel}
-            onConfigChange={(songs) => set("songs", songs)}
+      <Group title="กติกาการขอเพลง" description="เปิดปิดรับเพลงได้ที่หน้าภาพรวมหรือหน้าคิว มีผลทันที">
+        <div className="grid gap-6 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="max-user" hint="นับเฉพาะเพลงที่ยังรออยู่ในคิว ว่างไว้ = ไม่จำกัด">
+              คนหนึ่งขอได้กี่เพลง
+            </Label>
+            <NumberInput
+              id="max-user"
+              value={songs.maxPerUser ?? 0}
+              onChange={(maxPerUser) => setSongs({ maxPerUser })}
+              max={99}
+              placeholder="ไม่จำกัด"
+            />
+          </div>
+          <div>
+            <Label htmlFor="max-queue" hint="คิวเต็มแล้วปิดรับชั่วคราวเอง ว่างไว้ = ไม่จำกัด">
+              คิวยาวสุดกี่เพลง
+            </Label>
+            <NumberInput
+              id="max-queue"
+              value={songs.maxQueue ?? 0}
+              onChange={(maxQueue) => setSongs({ maxQueue })}
+              max={999}
+              placeholder="ไม่จำกัด"
+            />
+          </div>
+        </div>
+        <SwitchRow
+          checked={!!songs.allowDuplicates}
+          onChange={(allowDuplicates) => setSongs({ allowDuplicates })}
+          label="ขอเพลงซ้ำกับที่อยู่ในคิวได้"
+          hint="ปิดไว้ = เพลงที่อยู่ในคิวแล้วขอซ้ำไม่ได้จนกว่าจะเล่นจบ"
+          className="mt-4 border-y border-line"
+        />
+        <div className="mt-6">
+          <Label htmlFor="song-note" hint="ขึ้นเหนือช่องขอเพลง เช่น ขอเพลงยาวไม่เกิน 5 นาที">
+            ข้อความถึงคนดู
+          </Label>
+          <Textarea
+            id="song-note"
+            rows={3}
+            value={songs.note ?? ""}
+            onChange={(e) => setSongs({ note: e.target.value.slice(0, 200) })}
+            placeholder={DEFAULT_SONG_CONFIG.note}
           />
-        </Reveal>
+        </div>
+      </Group>
+
+      <Group
+        title="ค้นหาเพลงในตัวเล่น"
+        description="ไม่ใส่ก็ได้ ไม่ใส่แล้วตัวเล่นจะมีแค่ช่องวางลิงก์ ไม่มีช่องค้นหา"
+      >
+        <Label htmlFor="search-endpoint">ลิงก์ Worker สำหรับค้นหา</Label>
+        <Input
+          id="search-endpoint"
+          value={songs.searchEndpoint ?? ""}
+          onChange={(e) => setSongs({ searchEndpoint: e.target.value.trim() })}
+          placeholder="https://xxxx.workers.dev"
+          inputMode="url"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <p className="mt-2 text-sm text-muted">
+          การค้นหาต้องใช้คีย์ YouTube Data API v3 ซึ่งฝังในหน้าเว็บไม่ได้ จึงอยู่ใน Worker
+          ตั้งคีย์ด้วยคำสั่ง <code className="rounded bg-fill px-1.5 py-0.5">wrangler secret put YT_API_KEY</code>{" "}
+          โควตาฟรีค้นได้ราววันละ 100 ครั้ง
+        </p>
+      </Group>
+
+      <Group title="ขอเพลงจากแชท TikTok" description="คนดูพิมพ์ !เพลง ชื่อเพลง ในแชทไลฟ์ แล้วเพลงเข้าคิวนี้เลย">
+        <p className="text-muted">
+          TikTok ไม่เปิดให้เว็บอ่านแชทตรงๆ ต้องรันโปรแกรมเล็กๆ บนเครื่องที่ไลฟ์คู่กันไปด้วย
+          วิธีตั้งอยู่ในโฟลเดอร์ <code className="rounded bg-fill px-1.5 py-0.5">bridge/</code> ของโปรเจกต์
+        </p>
+      </Group>
+
+      <Group title="เพลย์ลิสต์สำรอง" description="เพลงที่ตัวเล่นหยิบมาเปิดเองตอนไม่มีใครขอ ไลฟ์จะได้ไม่เงียบ">
+        <p className="text-muted">
+          {(songs.filler?.length ?? 0) > 0
+            ? `มี ${songs.filler?.length} เพลง จัดการได้ในตัวเล่น`
+            : "ยังไม่มีเพลงสำรอง เพิ่มได้ในตัวเล่น"}
+        </p>
+        <a
+          href={`/player/#ch=${activeId}`}
+          target="_blank"
+          rel="noopener"
+          className="mt-3 inline-flex min-h-11 items-center rounded-full bg-fill px-5 font-medium transition-colors hover:bg-fill-2"
+        >
+          เปิดตัวเล่น
+        </a>
+      </Group>
+
+      {!editingOther && (
+        <Group title="ช่องอื่น" description="บัญชีเดียวเปิดได้หลายช่อง แต่ละช่องมีคิวและลิงก์ของตัวเอง">
+          <Button variant="secondary" loading={busy} onClick={onAddChannel}>
+            เปิดอีกช่อง
+          </Button>
+          <p className="mt-2 text-sm text-muted">
+            สลับช่องได้จากตัวเลือกช่องในเมนู{" "}
+            <Link href={studioHref("/studio/", activeId)} className="underline">
+              กลับหน้าภาพรวม
+            </Link>
+          </p>
+        </Group>
       )}
 
-      {/* แถบบันทึกลอย — โผล่เฉพาะตอนมีของค้าง จะได้กดได้จากตรงไหนก็ได้ในหน้า */}
+      {/* แถบบันทึกลอย — โผล่เฉพาะตอนมีของค้าง กดได้จากตรงไหนก็ได้ในหน้า */}
       <AnimatePresence>
         {dirty && canManage && (
           <motion.div
-            initial={reduced ? false : { y: 80, opacity: 0 }}
+            initial={reduced ? false : { y: 40, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={reduced ? undefined : { y: 80, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 320, damping: 30 }}
-            /*
-              ลอยพ้นขอบจอจริงๆ ไม่ใช่แปะติดขอบ — แถบที่ชนขอบล่างอ่านเป็น
-              "แถบเครื่องมือของเบราว์เซอร์" ส่วนแถบที่ลอยขึ้นมาอ่านเป็น
-              "ของที่เพิ่งเด้งขึ้นมาบอกอะไรบางอย่าง" ซึ่งคือสิ่งที่มันเป็น
-
-              lg:pl-66 = ความกว้างแถบข้างของสตูดิโอ ไม่ชดเชยแล้วกล่องจะไป
-              อยู่กลางจอ ซึ่งเยื้องจากกลางเนื้อหาที่ตาเรากำลังอ่านอยู่
-            */
-            className="pointer-events-none fixed inset-x-0 bottom-[max(1.25rem,var(--sab))] z-40 px-4 lg:pl-66"
+            exit={reduced ? undefined : { y: 40, opacity: 0 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            /* lg:pl-64 = ความกว้างแถบข้างของสตูดิโอ ไม่ชดเชยแล้วแถบจะเยื้องจากกลางเนื้อหา */
+            className="pointer-events-none fixed inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 px-4 lg:pl-64"
           >
-            <div className="glass-panel pointer-events-auto mx-auto flex max-w-2xl flex-wrap items-center gap-x-4 gap-y-3 rounded-3xl py-3.5 pr-3.5 pl-5">
-              {/* จุดสถานะเต้นเบาๆ — บอกว่ายังค้างอยู่ ไม่ใช่ป้ายนิ่งที่อ่านผ่านไปแล้วลืม */}
-              <span className="relative grid h-2.5 w-2.5 shrink-0 place-items-center">
-                <span
-                  className="absolute inset-0 animate-ping rounded-full opacity-60"
-                  style={{ background: "rgb(var(--st-next))" }}
-                />
-                <span
-                  className="relative h-2.5 w-2.5 rounded-full"
-                  style={{ background: "rgb(var(--st-next))" }}
-                />
-              </span>
-
+            <div className="pointer-events-auto mx-auto flex max-w-2xl flex-wrap items-center gap-x-4 gap-y-3 rounded-sheet bg-paper py-3 pr-3 pl-5 shadow-float ring-1 ring-line">
               <div className="min-w-0 flex-1">
-                <p className="font-display text-sm leading-tight text-ice">
-                  {neverPublished ? "ช่องนี้ยังไม่เคยเผยแพร่" : "มีการแก้ที่ยังไม่ได้เผยแพร่"}
+                <p className="font-semibold">
+                  {neverPublished ? "ช่องนี้ยังไม่ได้เปิด" : "มีการแก้ที่ยังไม่ได้บันทึก"}
                 </p>
-                <p className="mt-1 truncate text-xs leading-tight text-muted">
+                <p className="truncate text-sm text-muted">
                   {channel.handle
                     ? editingOther
-                      ? `กดแล้วค่าจะขึ้นช่องของ ${otherName}`
-                      : "คนดูกับ widget จะเห็นค่าใหม่หลังกดปุ่มนี้"
-                    : "ตั้งชื่อช่อง (handle) ก่อนถึงจะเผยแพร่ได้"}
+                      ? `บันทึกแล้วจะขึ้นที่ช่องของ ${name}`
+                      : "คนดูจะเห็นค่าใหม่หลังบันทึก"
+                    : "ตั้งชื่อลิงก์ของช่องก่อนถึงจะบันทึกได้"}
                 </p>
               </div>
-
-              <Button
-                onClick={publish}
-                loading={busy}
-                disabled={!channel.handle}
-                className="shrink-0 rounded-2xl"
-              >
-                เผยแพร่ช่อง
+              <Button onClick={() => void save()} loading={busy} disabled={!channel.handle}>
+                {neverPublished ? "เปิดช่อง" : "บันทึก"}
               </Button>
             </div>
           </motion.div>
@@ -1317,303 +519,35 @@ export default function ChannelSettings() {
       </AnimatePresence>
     </div>
   );
-
-  // ผ่าน set() เสมอ ไม่งั้นตอนผู้ดูแลแก้ช่องคนอื่นจะไปเขียนทับช่องตัวเองในเครื่อง
-  function updateTier(index: number, value: Partial<MemberTier>) {
-    if (!channel) return;
-    set("member", {
-      ...channel.member,
-      tiers: channel.member.tiers.map((t, i) =>
-        i === index ? { ...t, ...value } : t,
-      ),
-    });
-  }
 }
 
-/**
- * หนึ่งบรรทัดสรุปว่าระบบย่อยนี้เปิดอยู่ไหม และที่เปิดไว้ยังขาดอะไร
- *
- * ตัว detail สำคัญพอๆ กับป้ายเปิด/ปิด — "เปิดรับโดเนทแต่ยังไม่ใส่เลขพร้อมเพย์"
- * คือสถานะที่พังเงียบที่สุดของหน้านี้ ตรงที่มันดูเหมือนเปิดใช้งานได้แล้ว
- */
-function StatusLine({
-  on,
-  label,
-  detail,
+/** กลุ่มการตั้งค่า — หัวข้อซ้าย เนื้อหาขวาบนจอกว้าง ซ้อนกันบนมือถือ */
+function Group({
+  title,
+  description,
+  children,
 }: {
-  on: boolean;
-  label: string;
-  detail: ReactNode;
+  title: string;
+  description?: string;
+  children: ReactNode;
 }) {
   return (
-    <div
-      className="tally flex items-center gap-3 rounded-xl tile p-3.5"
-      style={{ ["--st"]: on ? "var(--st-win)" : "var(--st-idle)" } as CSSProperties}
-    >
-      <div className="min-w-0 flex-1">
-        <p className="text-sm text-ice">{label}</p>
-        <p className="mt-0.5 truncate text-xs text-muted">{detail}</p>
+    <section className="grid gap-4 border-t border-line pt-8 md:grid-cols-[14rem_minmax(0,1fr)] md:gap-10">
+      <div>
+        <h2 className="text-lg font-bold">{title}</h2>
+        {description && <p className="mt-1 text-sm text-muted">{description}</p>}
       </div>
-      <Badge
-        rgb={on ? "52 227 176" : "126 130 153"}
-        tone={on ? "done" : "plain"}
-      >
-        {on ? "เปิด" : "ปิด"}
-      </Badge>
-    </div>
+      <div className="min-w-0">{children}</div>
+    </section>
   );
 }
 
-/** ป้ายผลตรวจสลิป — ยอดไม่ตรงต้องบอกด้วยว่าอ่านได้เท่าไหร่ ผู้จัดจะได้ตัดสินใจเองได้ */
-function SlipBadge({
-  check,
-  amount,
-}: {
-  check?: SlipCheck;
-  amount?: number | null;
-}) {
-  if (!check) return null;
-  const meta = SLIP_META[check];
-  return (
-    <Badge rgb={meta.rgb} hex={meta.hex} tone={meta.tone}>
-      {meta.label}
-      {check === "mismatch" && typeof amount === "number" && (
-        <span className="num opacity-80">· สลิป {formatMoney(amount)}</span>
-      )}
-    </Badge>
-  );
-}
-
-/**
- * แถบสลับช่องของผู้ดูแลระบบ
- *
- * ช่องตัวเองอยู่หัวแถวเสมอ แม้ยังไม่เคยเผยแพร่ขึ้นคลาวด์ (จะยังไม่มีใน channels)
- * แถวเลื่อนแนวนอนแทน dropdown เพราะบนมือถือกดง่ายกว่าและเห็นรูปช่องไปด้วย
- */
-/**
- * แถบสลับช่อง — เมนูดึงลงพร้อมช่องค้นหา ไม่ใช่แถวชิปที่ต้องเลื่อนหา
- *
- * ผู้ดูแลระบบมีช่องทั้งระบบให้เลือก ซึ่งโตขึ้นเรื่อยๆ ตามจำนวนสตรีมเมอร์
- * แถวชิปแนวนอนของเดิมอ่านได้แค่สามสี่ใบแรก ที่เหลือซ่อนอยู่หลังขอบจอ
- * โดยไม่มีอะไรบอกว่ายังมีต่อ — เป็นสาเหตุตรงๆ ที่รู้สึกว่า "เข้าช่องคนอื่นไม่ได้"
- */
-function ChannelSwitcher({
-  channels,
-  activeId,
-  ownUid,
-  admin,
-  onSelect,
-  onCreate,
-  busy,
-}: {
-  channels: Channel[];
-  activeId: string;
-  ownUid: string;
-  admin: boolean;
-  onSelect: (c: Channel | null) => void;
-  onCreate: () => void;
-  busy: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-
-  /*
-    แยกด้วย ownerUid อย่างเดียว ไม่แตะชื่อเอกสารเลย
-
-    ช่องที่โอนให้คนอื่นไปแล้วยังใช้ชื่อเอกสารเดิม (= uid ของเจ้าของเดิม)
-    ถ้าใช้ชื่อเอกสารตัดสิน มันจะถูกป้ายว่า "ของคุณ" ทั้งที่ไม่ใช่แล้ว
-  */
-  const mine = channels.filter((c) => c.ownerUid === ownUid);
-  const others = channels.filter((c) => c.ownerUid !== ownUid);
-  const active = channels.find((c) => c.id === activeId) ?? null;
-
-  const needle = q.trim().toLocaleLowerCase("th");
-  const match = (c: Channel) =>
-    !needle ||
-    (c.name ?? "").toLocaleLowerCase("th").includes(needle) ||
-    (c.handle ?? "").toLocaleLowerCase("th").includes(needle) ||
-    c.id.toLowerCase().includes(needle);
-
-  const groups = [
-    { key: "mine", title: "ช่องของคุณ", items: mine.filter(match) },
-    { key: "others", title: "ช่องของคนอื่น", items: others.filter(match) },
-  ].filter((g) => g.items.length > 0);
-
-  /* มีช่องเดียวและไม่ใช่ผู้ดูแล = ไม่มีอะไรให้สลับ ซ่อนไปเลยดีกว่ากินที่ */
-  if (!admin && channels.length <= 1) return null;
-
-  return (
-    <div className="relative">
-      <div className="tile flex flex-wrap items-center gap-2 rounded-xl p-2">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          className="hover-tile flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-3 py-1.5 text-left transition-colors"
-        >
-          <ChannelAvatar
-            name={active?.name || active?.handle || "?"}
-            avatar={active?.avatar}
-          />
-          <span className="min-w-0 flex-1">
-            <span className="slug slug-2 block leading-none">
-              {admin ? "กำลังแก้ช่อง" : "ช่องของคุณ"}
-            </span>
-            <span className="mt-1 block truncate font-display text-sm text-ice">
-              {active
-                ? active.name || (active.handle ? `@${active.handle}` : active.id.slice(0, 10))
-                : "เลือกช่อง"}
-            </span>
-          </span>
-          <span className="num shrink-0 text-eyebrow text-muted">
-            {channels.length} ช่อง
-          </span>
-          <IconChevronDown
-            className={`h-4 w-4 shrink-0 text-muted transition-transform ${
-              open ? "rotate-180" : ""
-            }`}
-          />
-        </button>
-
-        <button
-          type="button"
-          onClick={onCreate}
-          disabled={busy}
-          className="hover-tile flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-hair px-3.5 font-display text-xs text-muted transition-colors hover:text-iris disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          + เปิดช่องใหม่
-        </button>
-      </div>
-
-      <AnimatePresence>
-        {open && (
-          <>
-            {/* คลิกนอกเมนูแล้วปิด — ปุ่มเต็มจอชั้นล่างสุด ไม่ใช่ effect ที่ผูก
-                listener ทั้งเอกสารไว้ตลอดเวลาที่หน้านี้เปิดอยู่ */}
-            <button
-              type="button"
-              aria-label="ปิดรายการช่อง"
-              onClick={() => setOpen(false)}
-              className="fixed inset-0 z-40 cursor-default"
-            />
-            <motion.div
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-              className="surface absolute top-full right-0 left-0 z-50 mt-2 overflow-hidden rounded-2xl shadow-lift-3"
-            >
-              {channels.length > 6 && (
-                <div className="border-b border-hair p-2.5">
-                  <Input
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                    placeholder="ค้นหาชื่อช่องหรือ handle"
-                    autoFocus
-                  />
-                </div>
-              )}
-
-              <div className="max-h-80 overflow-y-auto p-1.5">
-                {groups.length === 0 && (
-                  <p className="p-4 text-center text-xs text-muted">
-                    ไม่เจอช่องที่ตรงกับคำค้น
-                  </p>
-                )}
-                {groups.map((g) => (
-                  <div key={g.key} className="mb-1 last:mb-0">
-                    <p className="slug px-3 pt-2 pb-1.5">
-                      {g.title}
-                      <span className="num ml-1.5 opacity-60">{g.items.length}</span>
-                    </p>
-                    {g.items.map((c) => (
-                      <ChannelRow
-                        key={c.id}
-                        channel={c}
-                        active={c.id === activeId}
-                        onClick={() => {
-                          setOpen(false);
-                          setQ("");
-                          onSelect(c);
-                        }}
-                      />
-                    ))}
-                  </div>
-                ))}
-              </div>
-
-              {admin && others.length === 0 && (
-                <p className="border-t border-hair px-4 py-3 text-xs leading-relaxed text-muted">
-                  ช่องของคนอื่นจะโผล่ที่นี่ก็ต่อเมื่อเจ้าของช่องนั้นกดเผยแพร่เองอย่างน้อยหนึ่งครั้ง
-                </p>
-              )}
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function ChannelAvatar({ name, avatar }: { name: string; avatar?: string }) {
-  const src = avatar ? safeImageSrc(avatar) : null;
-  if (src) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={src}
-        alt=""
-        className="h-9 w-9 shrink-0 rounded-full object-cover"
-      />
-    );
-  }
-  return (
-    <span className="tile grid h-9 w-9 shrink-0 place-items-center rounded-full font-display text-xs text-iris">
-      {(name || "?").slice(0, 1).toUpperCase()}
-    </span>
-  );
-}
-
-function ChannelRow({
-  channel,
-  active,
-  onClick,
-}: {
-  channel: Channel;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={active}
-      aria-current={active ? "true" : undefined}
-      className={`flex w-full min-h-12 items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors ${
-        active ? "bg-iris/12 text-iris" : "hover-tile text-ice/85"
-      } ${active ? "cursor-default" : "cursor-pointer"}`}
-    >
-      <ChannelAvatar name={channel.name || channel.handle || "?"} avatar={channel.avatar} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm">
-          {channel.name || "ยังไม่ตั้งชื่อ"}
-        </span>
-        <span className="num block truncate text-eyebrow text-muted">
-          {channel.handle ? `@${channel.handle}` : "ยังไม่ตั้ง handle"}
-        </span>
-      </span>
-      {active && <IconCheck className="h-4 w-4 shrink-0" strokeWidth={2} />}
-    </button>
-  );
-}
-
-/** โครงหน้ารอตอนยังไม่รู้ว่ามีช่องหรือยัง — ดีกว่าจอว่างที่แยกไม่ออกจาก "พัง" */
-function ChannelSkeleton() {
+function SettingsSkeleton() {
   return (
     <div className="space-y-6" aria-busy="true" aria-label="กำลังอ่านช่องของคุณ">
       <Skeleton className="h-10 w-56" />
-      <Skeleton className="h-3 w-96 max-w-full" />
-      <Skeleton className="h-64 w-full rounded-2xl" />
+      <Skeleton className="h-4 w-96 max-w-full" />
+      <Skeleton className="h-64 w-full rounded-sheet" />
     </div>
   );
 }

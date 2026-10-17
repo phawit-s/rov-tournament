@@ -355,3 +355,42 @@ export const LANE_ICON: Record<string, ComponentType<IconProps>> = {
   abyss: LaneAbyss,
   support: LaneSupport,
 };
+
+/* ---- ชุดที่เพิ่มตอนรื้อเป็นเว็บขอเพลง ---- */
+
+/** ตั้งค่า — แถบเลื่อนสามเส้น */
+export const IconSliders = ({ className, strokeWidth }: IconProps) =>
+  base(
+    <>
+      <path d="M4 7h9m4 0h3M4 17h3m4 0h9M4 12h13m3 0h0" />
+      <circle cx="15" cy="7" r="2" />
+      <circle cx="9" cy="17" r="2" />
+      <circle cx="18.5" cy="12" r="1.5" />
+    </>,
+    className,
+    strokeWidth,
+  );
+
+/** คิว — รายการที่ต่อแถวกัน */
+export const IconQueue = ({ className, strokeWidth }: IconProps) =>
+  base(
+    <>
+      <path d="M4 6.5h16M4 12h11M4 17.5h7" />
+      <path d="m16.5 15 3.5 2.5-3.5 2.5z" fill="currentColor" />
+    </>,
+    className,
+    strokeWidth,
+  );
+
+export const IconPlus = ({ className, strokeWidth }: IconProps) =>
+  base(<path d="M12 5v14M5 12h14" />, className, strokeWidth);
+
+export const IconArrowUp = ({ className, strokeWidth }: IconProps) =>
+  base(<path d="M12 19V5m0 0-6 6m6-6 6 6" />, className, strokeWidth);
+
+export const IconArrowDown = ({ className, strokeWidth }: IconProps) =>
+  base(<path d="M12 5v14m0 0-6-6m6 6 6-6" />, className, strokeWidth);
+
+/** ดันขึ้นหัวคิว */
+export const IconToTop = ({ className, strokeWidth }: IconProps) =>
+  base(<path d="M5 4.5h14M12 20V9m0 0-5 5m5-5 5 5" />, className, strokeWidth);

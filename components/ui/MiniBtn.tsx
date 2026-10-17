@@ -5,20 +5,14 @@ import { safeUrl } from "@/lib/safe";
 import { toast } from "./Toast";
 import { IconCheck, IconCopy, IconExternal } from "./icons";
 
-/**
- * ปุ่มรองขนาดเล็ก — ใช้กับงานที่ไม่ใช่ทางเดินหลักของการ์ด
- *
- * เคยมีสำเนาของปุ่มนี้อยู่สามไฟล์ (หน้าช่อง · คิวเพลง · แผงคลาวด์) ซึ่งค่อยๆ
- * เพี้ยนออกจากกันทีละนิดจนความสูงไม่เท่ากันเวลามาอยู่แถวเดียวกัน
- * ทางเดินหลักยังเป็น <Button> เหมือนเดิม ตัวนี้คือ "ทางเลือกรอง" เท่านั้น
- */
-const TONE = {
-  plain: "border-hair text-muted hover:text-iris",
-  danger: "border-danger/25 text-danger/90 hover:bg-danger/10",
-};
-
+/* ปุ่มเล็กพื้นเทา — สูง 36px ใช้ในแถวรายการกับแถบเครื่องมือ */
 const SHAPE =
-  "inline-flex min-h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors";
+  "inline-flex min-h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-colors";
+
+const TONE = {
+  plain: "bg-fill text-ink hover:bg-fill-2",
+  danger: "bg-fill text-danger hover:bg-fill-2",
+};
 
 export default function MiniBtn({
   children,
@@ -41,16 +35,15 @@ export default function MiniBtn({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`${SHAPE} ${
-        danger ? TONE.danger : TONE.plain
-      } disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      aria-label={title}
+      className={`${SHAPE} ${danger ? TONE.danger : TONE.plain} disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
     >
       {children}
     </button>
   );
 }
 
-/** ทรงเดียวกับ MiniBtn แต่เป็นลิงก์ออกนอกเว็บ — เปิดแท็บใหม่เสมอ */
+/** ลิงก์ออกนอกเว็บหน้าตาเดียวกับ MiniBtn — เปิดแท็บใหม่เสมอ */
 export function MiniLink({
   href,
   children,
@@ -69,19 +62,13 @@ export function MiniLink({
       rel="noreferrer noopener"
       className={`${SHAPE} ${TONE.plain} ${className}`}
     >
-      <IconExternal className="h-3 w-3" />
+      <IconExternal className="h-3.5 w-3.5" />
       {children}
     </a>
   );
 }
 
-/**
- * ปุ่มคัดลอกข้อความ
- *
- * รวมไว้ที่เดียวเพราะทั้งเว็บมีที่ต้องคัดลอกลิงก์อยู่เกือบสิบจุด แล้วแต่ละจุด
- * เขียน state "คัดลอกแล้ว" กับ setTimeout ของตัวเอง ซึ่งลืมเคลียร์ตอน unmount
- * กันทุกที่ (กดคัดลอกแล้วปิดกล่องทันทีจะได้ warning เรื่อง setState หลัง unmount)
- */
+/** ปุ่มคัดลอก — เปลี่ยนเป็น "คัดลอกแล้ว" ชั่วครู่ ให้รู้ว่ากดติด */
 export function CopyBtn({
   text,
   label = "คัดลอก",
@@ -92,7 +79,6 @@ export function CopyBtn({
   text: string;
   label?: string;
   done?: string;
-  /** null = ไม่ต้องเด้ง toast (ใช้ตอนมีปุ่มคัดลอกหลายอันเรียงกันในหน้าเดียว) */
   toastText?: string | null;
   className?: string;
 }) {
@@ -111,7 +97,7 @@ export function CopyBtn({
       className={className}
       onClick={() => {
         void navigator.clipboard.writeText(text).catch(() => {
-          toast("คัดลอกไม่สำเร็จ — เบราว์เซอร์ไม่ให้สิทธิ์คลิปบอร์ด", "error");
+          toast("คัดลอกไม่ได้ — เบราว์เซอร์ไม่ให้สิทธิ์คลิปบอร์ด ลองกดค้างที่ลิงก์แล้วคัดลอกเอง", "error");
         });
         setCopied(true);
         if (toastText) toast(toastText, "success", 1600);
@@ -120,9 +106,9 @@ export function CopyBtn({
       }}
     >
       {copied ? (
-        <IconCheck className="h-3 w-3" strokeWidth={2} />
+        <IconCheck className="h-3.5 w-3.5" strokeWidth={2.2} />
       ) : (
-        <IconCopy className="h-3 w-3" />
+        <IconCopy className="h-3.5 w-3.5" />
       )}
       {copied ? done : label}
     </MiniBtn>

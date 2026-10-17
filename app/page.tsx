@@ -1,10 +1,10 @@
 import AppShell from "@/components/AppShell";
-import Landing from "@/components/landing/Landing";
+import ChannelDirectory from "@/components/song/ChannelDirectory";
 
 export default function Home() {
   return (
     <AppShell>
-      <Landing />
+      <ChannelDirectory />
     </AppShell>
   );
 }

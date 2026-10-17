@@ -9,13 +9,15 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import { useHashParam } from "@/hooks/useClient";
 import { useSiteRole } from "@/hooks/useRole";
+import { stageStyle, useArtPalette } from "@/hooks/useSong";
 import { authStore } from "@/lib/backend/firebase";
 import { watchAllChannels, watchChannel, watchMyChannels } from "@/lib/channel/store";
 import type { Channel } from "@/lib/channel/types";
-import { safeImageSrc } from "@/lib/safe";
+import { safeImageSrc, safeUrl } from "@/lib/safe";
 import {
   claimPlayerLock,
   playerInstanceId,
@@ -34,26 +36,32 @@ import {
   watchSongQueue,
 } from "@/lib/song/store";
 import { formatClock } from "@/lib/song/progress";
-import { thumbUrl, watchUrl } from "@/lib/song/youtube";
+import { watchUrl } from "@/lib/song/youtube";
 import { YT_STATE, loadYouTubeApi, type YTPlayer } from "@/lib/song/yt-api";
 import type { FillerTrack, SongRequest } from "@/lib/song/types";
 import Button from "../ui/Button";
-import MiniBtn, { MiniLink } from "../ui/MiniBtn";
-import Panel, { PanelHeader } from "../ui/Panel";
-import { PageHeading } from "../ui/Reveal";
+import Cover from "../ui/Cover";
 import { toast } from "../ui/Toast";
 import {
+  IconArrowDown,
+  IconArrowUp,
   IconChevronDown,
+  IconClose,
+  IconExternal,
+  IconMore,
+  IconMusic,
   IconMute,
   IconPause,
   IconPlay,
   IconSearch,
   IconSkip,
+  IconToTop,
   IconTrash,
   IconVolume,
 } from "../ui/icons";
-import { Badge, EmptyState, Input, Skeleton } from "../tournament/ui";
+import { Badge, EmptyState, Skeleton } from "../ui/kit";
 import SongConsole from "./SongConsole";
+import { EqBars } from "./Stage";
 
 /**
  * ตัวเล่นเพลงตามคิว — เดินเอง ไม่ต้องมีใครกด
@@ -570,7 +578,10 @@ export function SongPlayerCore({
 
   const togglePause = () => {
     const p = playerRef.current;
-    if (!p) return;
+    /* แท็บที่ไม่ได้ถือสิทธิ์เล่น (อีกแท็บเล่นอยู่) ห้ามสั่งเล่นเอง
+       ไม่งั้นเสียงจากสองแท็บซ้อนกันออกไลฟ์ — ต้องกด "ย้ายมาเล่นที่นี่" ก่อน
+       (ข้าม/ลบยังกดได้ เพราะแค่เปลี่ยนคิวกลาง แท็บที่เล่นอยู่จะตามเอง) */
+    if (!p || !active) return;
     // จำเจตนาไว้ ไม่งั้นตัวปรับให้ตรงกับคิวจะสั่งเล่นต่อทับทันที
     manualPauseRef.current = !paused;
     if (paused) p.playVideo();
@@ -747,46 +758,48 @@ export function SongPlayerCore({
     );
   }, [filler, fillerQ]);
 
-  const stage = (
-    <div className="relative aspect-video w-full overflow-hidden bg-black">
+  /* สีของเวทีดูดมาจากปกเพลงที่กำลังเล่น (docs/DESIGN.md ข้อ 1) ไม่มีเพลง = เทาเรียบ */
+  const palette = useArtPalette(playing?.videoId);
+  const fillerOn = fillerMode !== "off" && !!filler?.length;
+
+  /* ความยาวคลิปมาช้ากว่าตัวคลิปเสมอ ระหว่างที่ยังไม่รู้ให้แถบว่างไว้ ไม่ใช่ 0:00 ค้าง */
+  const known = len > 0;
+  const sliderMax = known ? Math.round(len) : 1;
+  const sliderAt = known ? Math.min(Math.round(at), sliderMax) : 0;
+  const youtube = playing ? safeUrl(playing.url) : null;
+
+  /*
+    จอวิดีโอ — แผ่นบังทุกแผ่นอยู่ "ในกรอบวิดีโอ" ไม่ใช่ทับทั้งเวที
+    กรอบจึงสูงเท่าเดิมทุกสถานะ หน้าไม่กระโดดตอนเปลี่ยนสถานะ
+    แผ่นบังใช้สีพื้นของธีม (ขาว/ดำ) ปุ่มข้างในจึงใช้ปุ่มชุดเดียวกับทั้งเว็บได้
+  */
+  const video = (
+    <div className="@container relative aspect-video w-full overflow-hidden rounded-art bg-black">
       {/* ตัวเล่นต้องอยู่ใน DOM ตลอด ไม่งั้นสร้าง player ใหม่ทุกครั้งที่เปลี่ยนเพลง */}
       <div ref={mountRef} className="absolute inset-0" />
 
-      {/* ทึบเกือบสนิท ไม่ใช่โปร่ง 70% — ข้างหลังคือจอเปล่าของ YouTube ที่มีปุ่มเล่น
+      {/* ทึบสนิท ไม่ใช่โปร่ง — ข้างหลังคือจอเปล่าของ YouTube ที่มีปุ่มเล่น
           สีแดงดวงใหญ่อยู่กลางจอ ถ้าปล่อยให้เห็นลางๆ มันจะทับข้อความพอดี
-          แล้วดูเหมือนมีอะไรค้างรอให้กด ทั้งที่ตรงนั้นกดไปก็ไม่มีอะไรเกิดขึ้น */}
+          แล้วดูเหมือนมีอะไรค้างรอให้กด ทั้งที่ตรงนั้นกดไปก็ไม่มีอะไรเกิดขึ้น
+          (ข้อความว่าคิวว่าง/กำลังเริ่มเพลงอยู่ใต้จอ ตรงที่ชื่อเพลงจะขึ้น) */}
       {!playing && !apiError && active && (
-        <div className="absolute inset-0 grid place-items-center bg-black/92 px-6 text-center">
-          <div>
-            <p className="slug">รอเพลง</p>
-            <p className="mt-2 text-sm text-muted">
-              {fillerMode !== "off" && filler?.length
-                ? "กำลังหยิบเพลงจากกองสำรองมาเล่น…"
-                : "คิวว่างอยู่ — มีคนขอเพลงเข้ามาเมื่อไหร่ ตัวเล่นจะเริ่มเองทันที"}
-            </p>
-          </div>
+        <div className="absolute inset-0 grid place-items-center bg-canvas text-faint" aria-hidden>
+          <IconMusic className="h-10 w-10" strokeWidth={1.4} />
         </div>
       )}
 
       {/* อีกแท็บถือสิทธิ์เล่นอยู่ — แท็บนี้เงียบไว้ กันเสียงซ้อน */}
       {!active && !apiError && (
-        <div className="absolute inset-0 grid place-items-center bg-black/85 px-6 text-center">
-          <div>
-            <p className="slug">อีกหน้าต่างกำลังเล่นอยู่</p>
-            <p className="mx-auto mt-2 max-w-xs text-sm text-muted">
-              ปิดเสียงตรงนี้ไว้ไม่ให้ซ้อนกัน — คิวยังเดินตามปกติจากหน้าต่างนั้น
-            </p>
-            {/* ต้องผ่าน takeOver ของตัวคุมล็อก ไม่ใช่ setLock เอง
-                ไม่งั้นสถานะข้างในโมดูลกับบนจอจะไม่ตรงกัน แล้วสองแท็บจะเล่นซ้อน */}
-            <Button
-              size="sm"
-              className="mt-4"
-              onClick={() => lockRef.current?.takeOver()}
-            >
-              ย้ายมาเล่นที่นี่
-            </Button>
-          </div>
-        </div>
+        <Veil
+          title="อีกหน้าต่างกำลังเล่นอยู่"
+          body="หน้าต่างนี้ปิดเสียงไว้ไม่ให้ซ้อนกัน คิวยังเดินต่อจากหน้าต่างนั้นตามปกติ"
+        >
+          {/* ต้องผ่าน takeOver ของตัวคุมล็อก ไม่ใช่ setLock เอง
+              ไม่งั้นสถานะข้างในโมดูลกับบนจอจะไม่ตรงกัน แล้วสองแท็บจะเล่นซ้อน */}
+          <Button className="mt-4" onClick={() => lockRef.current?.takeOver()}>
+            ย้ายมาเล่นที่นี่
+          </Button>
+        </Veil>
       )}
 
       {/*
@@ -795,140 +808,140 @@ export function SongPlayerCore({
         ซ่อนตอน blocked เพราะกรณีนั้นไม่ใช่ความผิดของคลิป กดเริ่มแล้วเล่นได้
       */}
       {failed && !blocked && playing && active && !apiError && (
-        <div className="absolute inset-x-0 bottom-0 grid place-items-center bg-black/88 px-6 py-5 text-center backdrop-blur-sm">
-          <p className="font-display text-sm text-ice">คลิปนี้เล่นในเว็บอื่นไม่ได้</p>
-          <p className="mt-1 max-w-md text-xs leading-relaxed text-muted">
-            เจ้าของคลิปปิดการฝังไว้ ต้องไปดูในเว็บ YouTube เท่านั้น
-          </p>
-          <Button size="sm" variant="ghost" onClick={() => void skip()} className="mt-3">
+        <Veil
+          tone="danger"
+          title="เล่นคลิปนี้ไม่ได้"
+          body="เจ้าของคลิปอาจปิดการเล่นนอก YouTube ไว้ หรือคลิปถูกลบไปแล้ว กดข้ามแล้วตัวเล่นจะไปเพลงถัดไป เพลงนี้ยังอยู่ในประวัติ"
+        >
+          <Button className="mt-4" onClick={() => void skip()}>
             ข้ามเพลงนี้
           </Button>
-        </div>
+        </Veil>
       )}
 
-      {/* แผ่นแตะครั้งเดียว โผล่เฉพาะตอนเบราว์เซอร์ไม่ยอมให้เล่นเอง */}
+      {/* แผ่นแตะครั้งเดียว โผล่เฉพาะตอนเบราว์เซอร์ไม่ยอมให้เล่นเอง
+          กดได้ทั้งกรอบ ไม่ต้องเล็งปุ่ม */}
       {blocked && playing && active && !apiError && (
         <button
           type="button"
           onClick={start}
-          className="absolute inset-0 grid cursor-pointer place-items-center bg-black/85 px-6 text-center backdrop-blur-sm"
+          className="absolute inset-0 flex cursor-pointer overflow-y-auto bg-canvas p-5 text-center"
         >
-          <span>
-            <span
-              className="mx-auto grid h-16 w-16 place-items-center rounded-full"
-              style={{ background: "rgb(var(--st-live) / 0.9)" }}
-            >
-              <svg viewBox="0 0 24 24" className="ml-1 h-7 w-7 fill-black" aria-hidden>
-                <path d="M8 5v14l11-7z" />
-              </svg>
+          <span className="m-auto block max-w-sm">
+            <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-ink text-onink @md:h-20 @md:w-20">
+              <IconPlay className="ml-1 h-7 w-7 @md:h-9 @md:w-9" />
             </span>
-            <span className="mt-4 block font-display text-base text-ice">
-              แตะครั้งเดียวเพื่อเริ่ม
-            </span>
-            <span className="mx-auto mt-1.5 block max-w-xs text-xs text-muted">
-              เบราว์เซอร์ไม่ยอมให้เล่นเสียงเองจนกว่าจะมีคนแตะหน้านี้สักครั้ง
-              หลังจากนี้เดินเองยาว ไม่ต้องกดอีก
+            <span className="mt-3 block text-lg font-bold">แตะเพื่อเริ่มเล่น</span>
+            <span className="mt-1 hidden text-sm text-muted @[20rem]:block">
+              เบราว์เซอร์ไม่ให้เล่นเสียงเองจนกว่าจะมีคนแตะหน้านี้สักครั้ง
+              แตะครั้งเดียว หลังจากนั้นเพลงเดินเองยาว ไม่ต้องกดอีก
             </span>
           </span>
         </button>
       )}
 
       {apiError && (
-        <div className="absolute inset-0 grid place-items-center bg-black/85 p-6 text-center">
-          <div>
-            <p className="slug" style={{ color: "rgb(var(--st-live))" }}>
-              โหลดตัวเล่นไม่ได้
-            </p>
-            <p className="mt-2 max-w-sm text-sm text-muted">
-              ตัวบล็อกโฆษณาหรือส่วนขยายบางตัวบล็อกสคริปต์ของ YouTube ไว้ —
-              ปิดเฉพาะเว็บนี้แล้วรีเฟรช
-            </p>
-          </div>
-        </div>
+        <Veil
+          tone="danger"
+          essential
+          title="โหลดตัวเล่น YouTube ไม่ได้"
+          body="ตัวบล็อกโฆษณาหรือส่วนขยายบางตัวบล็อกสคริปต์ของ YouTube ไว้ ปิดตัวบล็อกเฉพาะเว็บนี้แล้วรีเฟรชหน้า"
+        />
       )}
     </div>
   );
 
-  /* ความยาวคลิปมาช้ากว่าตัวคลิปเสมอ ระหว่างที่ยังไม่รู้ให้แถบว่างไว้ ไม่ใช่ 0:00 ค้าง */
-  const known = len > 0;
-  const sliderMax = known ? Math.round(len) : 1;
-  const sliderAt = known ? Math.min(Math.round(at), sliderMax) : 0;
+  /* สถานะสั้นๆ เหนือชื่อเพลง — แถบเสียงเต้นเฉพาะตอนที่หน้าต่างนี้ส่งเสียงอยู่จริง */
+  const status = !active ? (
+    <span>เล่นอยู่ในหน้าต่างอื่น</span>
+  ) : blocked ? (
+    <span>รอแตะเพื่อเริ่มเล่น</span>
+  ) : failed ? (
+    <span className="text-danger">เล่นคลิปนี้ไม่ได้</span>
+  ) : paused ? (
+    <span>หยุดชั่วคราว</span>
+  ) : (
+    <span className="inline-flex items-center gap-2">
+      <EqBars />
+      กำลังเล่น
+    </span>
+  );
 
-  const controls = (
-    <>
-      {/* ---------- เพลงที่กำลังเล่น ---------- */}
-      {playing ? (
-        <>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge rgb="255 91 122" tone="live">
-              กำลังเล่น
-            </Badge>
-            {playing.source === "filler" && (
-              <span className="slug slug-2">เพลงสำรอง</span>
-            )}
-            {playing.source === "tiktok" && (
-              <span className="slug slug-2">จากแชท TikTok</span>
-            )}
-          </div>
-          <h2
-            className={`mt-2 font-display leading-snug font-light text-ice ${
-              compact ? "text-base" : "text-xl"
-            }`}
-          >
-            {playing.title}
-          </h2>
-          <p className="mt-1 truncate text-sm text-muted">
-            {playing.author}
-            {playing.source !== "filler" && ` · ขอโดย ${playing.byName}`}
-          </p>
-          {playing.message && (
-            <p className="mt-2 text-sm text-iris/80">
-              &ldquo;{playing.message}&rdquo;
-            </p>
-          )}
-        </>
-      ) : (
-        <>
-          <span className="slug slug-2">ว่างอยู่</span>
-          <p className="mt-1.5 text-sm text-muted">
-            {queued.length > 0 ? "กำลังเริ่มเพลงถัดไป…" : "ยังไม่มีใครขอเพลงเข้ามา"}
-          </p>
-        </>
-      )}
-
-      {/* ---------- แถบเวลา ----------
-          เป็น input[type=range] จริง เลื่อนหาจุดในเพลงได้ และกดลูกศรจาก
-          คีย์บอร์ดได้ในตัว ไม่ต้องเขียนตัวลากเอง */}
-      <div className="mt-4">
-        <input
-          type="range"
-          min={0}
-          max={sliderMax}
-          value={sliderAt}
-          disabled={!playing || !known}
-          onChange={(e) => seek(Number(e.target.value))}
-          className="w-full disabled:opacity-45"
-          style={{ ["--fill" as string]: known ? sliderAt / sliderMax : 0 }}
-          aria-label="ตำแหน่งในเพลง"
-        />
-        <div className="mt-1 flex items-baseline justify-between">
-          <span className="num text-xs text-muted">
-            {known ? formatClock(at) : "—"}
-          </span>
-          {/* เวลาที่เหลือคือตัวเลขที่คนคุมไลฟ์ต้องใช้จริง ไม่ใช่ความยาวคลิป */}
-          <span className="num text-xs text-muted/75">
-            {known ? `เหลือ ${formatClock(Math.max(0, len - at))}` : ""}
-          </span>
-        </div>
+  const nowPlaying = playing ? (
+    <div key={playing.id} className="rise-in min-w-0">
+      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+        {status}
+        {playing.source === "filler" && <Badge>เพลงสำรอง</Badge>}
+        {playing.source === "tiktok" && <Badge>จากแชท TikTok</Badge>}
       </div>
+      <h2
+        className={`mt-2 line-clamp-2 font-bold wrap-break-word ${
+          compact ? "text-title" : "text-title sm:text-headline"
+        }`}
+      >
+        {playing.title}
+      </h2>
+      {playing.author && <p className="mt-1 truncate text-muted">{playing.author}</p>}
+      {playing.source !== "filler" && (
+        <p className="mt-1 truncate text-sm text-muted">
+          ขอโดย <span className="font-medium text-ink">{playing.byName}</span>
+        </p>
+      )}
+      {playing.message && (
+        <p className="mt-3 max-w-prose wrap-break-word text-ink/80">&ldquo;{playing.message}&rdquo;</p>
+      )}
+    </div>
+  ) : (
+    <div className="min-w-0">
+      <p className="text-title font-bold">
+        {queued.length > 0
+          ? "กำลังเริ่มเพลงถัดไป"
+          : fillerOn
+            ? "กำลังหยิบเพลงสำรองมาเล่น"
+            : "คิวว่าง"}
+      </p>
+      <p className="mt-1 text-muted">
+        {queued.length > 0
+          ? queued[0].title
+          : fillerOn
+            ? "เพลงสำรองจะเล่นไปเรื่อยๆ จนกว่าจะมีคนขอเพลงเข้ามา"
+            : "มีคนขอเพลงเข้ามาเมื่อไหร่ ตัวเล่นจะเริ่มเองทันที"}
+      </p>
+    </div>
+  );
 
-      {/* ---------- ปุ่มควบคุม ---------- */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+  /* ---------- แถบเวลา ----------
+     เป็น input[type=range] จริง เลื่อนหาจุดในเพลงได้ และกดลูกศรจาก
+     คีย์บอร์ดได้ในตัว ไม่ต้องเขียนตัวลากเอง (ตัวที่เห็นเป็นแค่ภาพวาดทับ ดู Slider) */
+  const progress = (
+    <div className="mt-4">
+      <Slider
+        label="ตำแหน่งในเพลง"
+        value={sliderAt}
+        max={sliderMax}
+        disabled={!playing || !known}
+        onChange={seek}
+      />
+      <div className="num -mt-1.5 flex items-baseline justify-between px-2 text-xs text-muted">
+        <span>{known ? formatClock(at) : "—"}</span>
+        {/* เวลาที่เหลือคือตัวเลขที่คนคุมไลฟ์ต้องใช้จริง ไม่ใช่ความยาวคลิป */}
+        <span>{known ? `เหลือ ${formatClock(Math.max(0, len - at))}` : ""}</span>
+      </div>
+    </div>
+  );
+
+  /* ปุ่มบนเวทีใช้พื้นโปร่งจากสีตัวหนังสือ ไม่ใช่เทาทึบ — เข้ากับสีปกทุกเพลงและทั้งสองธีม */
+  const onStage =
+    "cursor-pointer bg-ink/8 transition-[background-color,transform] duration-150 hover:bg-ink/14 active:scale-95 disabled:cursor-not-allowed disabled:opacity-35 disabled:active:scale-100";
+
+  const transport = (
+    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-4">
+      <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={togglePause}
-          disabled={!playing}
-          aria-label={paused ? "เล่นต่อ" : "หยุดชั่วคราว"}
+          disabled={!playing || !active}
+          aria-label={playing && !paused ? "หยุดชั่วคราว" : "เล่นต่อ"}
           title={
             compact
               ? paused
@@ -938,107 +951,142 @@ export function SongPlayerCore({
                 ? "เล่นต่อ (Space)"
                 : "หยุดชั่วคราว (Space)"
           }
-          className="grid h-12 w-12 shrink-0 cursor-pointer place-items-center rounded-full accent-fill text-onaccent shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_12px_34px_-18px_rgba(169,155,255,0.9)] transition-all duration-200 hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:bg-none disabled:text-muted disabled:shadow-none disabled:ring-1 disabled:ring-[rgb(var(--hair)/var(--hair-a))]"
+          className={`grid shrink-0 cursor-pointer place-items-center rounded-full bg-ink text-onink transition-[opacity,transform] duration-150 hover:opacity-85 active:scale-95 disabled:cursor-not-allowed disabled:opacity-35 disabled:active:scale-100 ${
+            compact ? "h-14 w-14" : "h-16 w-16"
+          }`}
         >
           {/* ไม่มีเพลงอยู่ก็ต้องเป็นรูปสามเหลี่ยมเล่น ไม่ใช่รูปหยุด
               ปุ่มหยุดบนตัวเล่นที่ไม่ได้เล่นอะไรอยู่อ่านได้ว่า "กำลังเล่นอยู่" */}
           {playing && !paused ? (
-            <IconPause className="h-5 w-5" />
+            <IconPause className="h-7 w-7" />
           ) : (
-            <IconPlay className="ml-0.5 h-5 w-5" />
+            <IconPlay className="ml-1 h-7 w-7" />
           )}
         </button>
 
-        <MiniBtn
+        <button
+          type="button"
           disabled={!playing}
           onClick={() => void skip()}
+          aria-label="ข้ามเพลงนี้"
           title={compact ? "ข้ามเพลงนี้" : "ข้ามเพลงนี้ (N)"}
+          className={`grid h-13 w-13 shrink-0 place-items-center rounded-full text-ink ${onStage}`}
         >
-          <IconSkip className="h-3.5 w-3.5" />
-          ข้าม
-        </MiniBtn>
-
-        {/* ข้าม = เก็บไว้ในประวัติ ดึงกลับมาต่อคิวได้
-            ลบทิ้ง = หายถาวร ไว้ใช้กับของที่ไม่อยากให้ค้างอยู่ในระบบเลย */}
-        <MiniBtn danger disabled={!playing} onClick={() => void dropPlaying()}>
-          <IconTrash className="h-3.5 w-3.5" />
-          ลบทิ้ง
-        </MiniBtn>
-
-        {playing && <MiniLink href={playing.url}>YouTube</MiniLink>}
-
-        <div className="ml-auto flex min-w-45 flex-1 items-center gap-1.5 sm:flex-none">
-          <button
-            type="button"
-            onClick={toggleMute}
-            aria-label={muted ? "เปิดเสียง" : "ปิดเสียง"}
-            title={compact ? undefined : muted ? "เปิดเสียง (M)" : "ปิดเสียง (M)"}
-            className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg text-muted transition-colors hover:bg-iris/12 hover:text-iris"
-          >
-            {muted || volume === 0 ? (
-              <IconMute className="h-4 w-4" />
-            ) : (
-              <IconVolume className="h-4 w-4" />
-            )}
-          </button>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={volume}
-            onChange={(e) => setVolume(Number(e.target.value))}
-            className={`min-w-0 flex-1 ${muted ? "opacity-45" : ""}`}
-            style={{ ["--fill" as string]: volume / 100 }}
-            aria-label="ระดับเสียง"
-          />
-          <span className="num w-7 shrink-0 text-right text-xs text-muted">
-            {volume}
-          </span>
-        </div>
+          <IconSkip className="h-6 w-6" />
+        </button>
       </div>
 
-      {/* ---------- เพลงถัดไป + คีย์ลัด ---------- */}
-      {!compact && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-hair pt-3">
-          <p className="min-w-0 truncate text-xs text-muted">
-            {queued[0] ? (
-              <>
-                <span className="slug slug-2 mr-2">ถัดไป</span>
-                {queued[0].title}
-              </>
-            ) : (
-              "ไม่มีเพลงต่อคิว"
-            )}
-          </p>
-          <p className="flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-muted/80">
-            <Key>Space</Key> เล่น/หยุด
-            <Key>N</Key> ข้าม
-            <Key>M</Key> ปิดเสียง
-            <Key>↑↓</Key> เสียง
-          </p>
-        </div>
-      )}
-    </>
+      <div className="flex flex-wrap items-center gap-2">
+        {/* ข้าม = เก็บไว้ในประวัติ ดึงกลับมาต่อคิวได้
+            ลบทิ้ง = หายถาวร ไว้ใช้กับของที่ไม่อยากให้ค้างอยู่ในระบบเลย */}
+        <button
+          type="button"
+          disabled={!playing}
+          onClick={() => void dropPlaying()}
+          title="ลบเพลงนี้ทิ้งถาวร ไม่เก็บไว้ในประวัติ"
+          className={`inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-sm font-medium text-danger ${onStage}`}
+        >
+          <IconTrash className="h-4 w-4" />
+          ลบทิ้ง
+        </button>
+
+        {youtube && (
+          <a
+            href={youtube}
+            target="_blank"
+            rel="noreferrer noopener"
+            className={`inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-sm font-medium text-ink ${onStage}`}
+          >
+            <IconExternal className="h-4 w-4" />
+            เปิดใน YouTube
+          </a>
+        )}
+      </div>
+
+      <div className="flex w-full items-center gap-1 sm:ml-auto sm:w-64">
+        <button
+          type="button"
+          onClick={toggleMute}
+          aria-label={muted ? "เปิดเสียง" : "ปิดเสียง"}
+          title={compact ? undefined : muted ? "เปิดเสียง (M)" : "ปิดเสียง (M)"}
+          className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full text-ink transition-colors hover:bg-ink/8"
+        >
+          {muted || volume === 0 ? (
+            <IconMute className="h-5 w-5" />
+          ) : (
+            <IconVolume className="h-5 w-5" />
+          )}
+        </button>
+        <Slider
+          label="ระดับเสียง"
+          value={volume}
+          max={100}
+          dim={muted}
+          onChange={setVolume}
+          className="min-w-0 flex-1"
+        />
+        <span className="num w-8 shrink-0 text-right text-sm text-muted">{volume}</span>
+      </div>
+    </div>
+  );
+
+  const stage = (
+    <section
+      aria-label="เพลงที่กำลังเล่น"
+      className={`min-w-0 rounded-stage p-3 ${compact ? "sm:p-4" : "sm:p-5 lg:col-start-1 lg:row-start-1"}`}
+      style={stageStyle(palette, !!playing)}
+    >
+      {video}
+      <div className="px-1 pt-5 pb-1 sm:px-2">
+        {nowPlaying}
+        {progress}
+        {transport}
+
+        {/* ---------- เพลงถัดไป + คีย์ลัด ---------- */}
+        {!compact && (
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-ink/10 pt-4">
+            <p className="min-w-0 flex-1 truncate text-sm text-muted">
+              {queued[0] ? (
+                <>
+                  ถัดไป <span className="font-medium text-ink">{queued[0].title}</span>
+                </>
+              ) : (
+                "ไม่มีเพลงต่อคิว"
+              )}
+            </p>
+            {/* คีย์ลัดใช้ได้เฉพาะคนที่มีคีย์บอร์ด จอเล็กไม่ต้องเห็น */}
+            <p className="hidden shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted md:flex">
+              <span>
+                <Key>Space</Key> เล่น/หยุด
+              </span>
+              <span>
+                <Key>N</Key> ข้าม
+              </span>
+              <span>
+                <Key>M</Key> ปิดเสียง
+              </span>
+              <span>
+                <Key>↑↓</Key> เสียง
+              </span>
+            </p>
+          </div>
+        )}
+      </div>
+    </section>
   );
 
   /* ---------- ฝังในหน้าอื่น ---------- */
-  if (compact) {
-    return (
-      <div className="overflow-hidden rounded-2xl border border-hair">
-        {stage}
-        <div className="p-5">{controls}</div>
-      </div>
-    );
-  }
+  if (compact) return stage;
 
-  /* ---------- หน้าเต็ม ----------
-     items-start ไม่งั้นการ์ดขวาจะถูกยืดให้สูงเท่าตัวเล่นแล้วเหลือพื้นที่ว่างโล่ง */
+  /*
+    ---------- หน้าเต็ม ----------
+    คืนเป็นสองก้อนให้กริดของหน้า /player/ จัดวาง: เวทีอยู่คอลัมน์ซ้ายแถวแรก
+    คิวอยู่คอลัมน์ขวาคร่อมทุกแถว คอนโซลของหน้าแม่จึงต่อใต้เวทีได้
+    โดยที่คิวยังเกาะอยู่ข้างๆ (บนจอแคบเรียงลงมา: เวที คิว คอนโซล)
+  */
   return (
-    <div className="grid gap-5 lg:grid-cols-[1.45fr_1fr] lg:items-start">
-      <Panel variant="feature" className="overflow-hidden p-0">
-        {stage}
-        <div className="p-5">{controls}</div>
-      </Panel>
+    <>
+      {stage}
 
       {/*
         แถบขวาเกาะอยู่กับที่ตอนเลื่อนหน้า และมีรางเลื่อนของตัวเองบนจอกว้าง
@@ -1047,30 +1095,25 @@ export function SongPlayerCore({
         พอเลื่อนลงไปหาเพลงในคอนโซล คิวที่กำลังจะถึงก็หายไปจากจอด้วย
         ทั้งที่นั่นคือสิ่งที่ต้องเห็นตลอดเวลาระหว่างไลฟ์
       */}
-      <div className="space-y-4 lg:sticky lg:top-19 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto lg:pr-1">
-        <Panel className="p-5">
-          <PanelHeader
-            eyebrow="Queue"
-            title="คิวถัดไป"
-            count={queued.length}
-            action={
-              queued.length > 0 ? (
-                <span className="slug slug-2">กดที่เพลงเพื่อเล่นเลย</span>
-              ) : undefined
-            }
-          />
-
-          {!ready && !apiError && <Skeleton className="h-16 w-full" />}
+      <aside className="min-w-0 lg:sticky lg:top-22 lg:col-start-2 lg:row-span-full lg:-mx-2 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:px-2 lg:pb-2">
+        <section aria-labelledby="player-queue-title">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 id="player-queue-title" className="text-title font-bold">
+              คิวถัดไป
+              <span className="num ml-2 font-normal text-muted">{queued.length}</span>
+            </h2>
+            {queued.length > 0 && <p className="text-sm text-muted">กดเพลงเพื่อเล่นทันที</p>}
+          </div>
 
           {queued.length === 0 ? (
-            <p className="text-sm text-muted">
-              ยังไม่มีใครขอเพลง —{" "}
-              {fillerMode === "off" || !filler?.length
-                ? "เปิดเพลย์ลิสต์สำรองไว้จะได้ไม่เงียบ"
-                : "ระบบจะหยิบจากกองสำรองข้างล่างมาเล่นให้เอง"}
+            <p className="mt-3 text-muted">
+              ยังไม่มีใครขอเพลง{" "}
+              {fillerOn
+                ? "ตัวเล่นจะหยิบจากเพลงสำรองมาเล่นให้เอง"
+                : "ตั้งเพลงสำรองไว้ที่แท็บเพลงสำรอง ไลฟ์จะได้ไม่เงียบ"}
             </p>
           ) : (
-            <ul className="space-y-2">
+            <ol className="rows @container mt-3">
               {queued.map((s, i) => {
                 /* เลื่อนได้เฉพาะในกลุ่มเดียวกัน เพลงที่คนขอกับเพลงสำรองอยู่คนละชั้น
                    ปุ่มจึงต้องดูจากตำแหน่งในกลุ่ม ไม่ใช่ตำแหน่งในคิวรวม */
@@ -1086,15 +1129,13 @@ export function SongPlayerCore({
                       title={s.title}
                       sub={
                         s.source === "filler"
-                          ? "จากเพลย์ลิสต์สำรอง"
-                          : `ขอโดย ${s.byName}${
-                              s.source === "tiktok" ? " · TikTok" : ""
-                            }`
+                          ? "เพลงสำรอง"
+                          : s.source === "tiktok"
+                            ? `ขอโดย ${s.byName} ผ่าน TikTok`
+                            : `ขอโดย ${s.byName}`
                       }
                       onClick={() => void playNow(s)}
-                      onMove={(dir) =>
-                        void moveSongInQueue(channelId, queued, s.id, dir)
-                      }
+                      onMove={(dir) => void moveSongInQueue(channelId, queued, s.id, dir)}
                       onRemove={() => void removeSongRequest(channelId, s.id)}
                       canUp={seat > 0}
                       canDown={seat < group.length - 1}
@@ -1102,63 +1143,67 @@ export function SongPlayerCore({
                   </motion.li>
                 );
               })}
-            </ul>
+            </ol>
           )}
 
           {done.length > 0 && (
-            <p className="mt-4 text-xs text-muted">เล่นจบแล้ว {done.length} เพลง</p>
+            <p className="mt-4 text-sm text-muted">เล่นจบแล้ว {done.length} เพลง</p>
           )}
-        </Panel>
+        </section>
 
-        {/* ---------- กองสำรอง ----------
+        {/* ---------- เพลงสำรอง ----------
             พับไว้เป็นค่าเริ่มต้น กางเมื่ออยากเลือกเพลงเอง
             มีช่องค้นหาเมื่อกองใหญ่ — เลื่อนหาในกองร้อยเพลงระหว่างไลฟ์ไม่ไหว */}
         {!!filler?.length && (
-          <Panel variant="quiet" className="p-5">
+          <section aria-labelledby="player-filler-title" className="mt-8 border-t border-line pt-3">
             <button
               type="button"
               onClick={() => setOpenFiller((v) => !v)}
               aria-expanded={openFiller}
-              className="flex min-h-11 w-full cursor-pointer items-center gap-3 text-left"
+              aria-controls="player-filler-list"
+              className="flex min-h-12 w-full cursor-pointer items-center gap-3 text-left"
             >
-              <span className="slug slug-2 shrink-0">
-                {fillerMode === "off" ? "กองสำรอง (ปิดอยู่)" : "กองสำรอง"}
+              <span id="player-filler-title" className="min-w-0 flex-1 text-lg font-bold">
+                เพลงสำรอง
+                <span className="num ml-2 font-normal text-muted">{filler.length}</span>
               </span>
-              <span className="rule h-px flex-1" />
-              <span className="num shrink-0 text-xs text-muted">{filler.length}</span>
+              {fillerMode === "off" && <Badge>ปิดอยู่</Badge>}
               <IconChevronDown
-                className={`h-4 w-4 shrink-0 text-muted transition-transform duration-300 ${
+                className={`h-5 w-5 shrink-0 text-muted transition-transform duration-200 ${
                   openFiller ? "rotate-180" : ""
                 }`}
               />
             </button>
 
-            <p className="mt-2 text-xs leading-relaxed text-muted">
+            <p className="text-sm text-muted">
               {fillerMode === "off"
-                ? "โหมดสำรองปิดอยู่ ระบบจะไม่หยิบมาเล่นเอง แต่กดเลือกเพลงเองได้"
+                ? "ตัวเล่นจะไม่หยิบมาเล่นเอง แต่กดเลือกเพลงไปต่อคิวได้"
                 : fillerMode === "shuffle"
-                  ? "โหมดสุ่ม — บอกล่วงหน้าไม่ได้ว่าเพลงไหนจะมา กดเลือกเองได้"
-                  : "โหมดตามลำดับ — เพลงที่ติดป้ายคือเพลงที่จะมาเป็นตัวถัดไป"}
+                  ? "สุ่มเล่นตอนคิวว่าง บอกล่วงหน้าไม่ได้ว่าเพลงไหนจะมา กดเลือกเพลงไปต่อคิวเองได้"
+                  : "เล่นตามลำดับตอนคิวว่าง เพลงที่ติดป้าย “ถัดไป” คือเพลงที่จะมาต่อ"}
             </p>
 
             {openFiller && (
-              <>
+              <div id="player-filler-list" className="mt-4">
                 {filler.length > 8 && (
-                  <div className="relative mt-3">
-                    <IconSearch className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-                    <Input
+                  <label className="flex min-h-11 items-center gap-2.5 rounded-full bg-fill px-4">
+                    <IconSearch className="h-4 w-4 shrink-0 text-muted" />
+                    <span className="sr-only">ค้นในเพลงสำรอง</span>
+                    <input
                       value={fillerQ}
                       onChange={(e) => setFillerQ(e.target.value)}
-                      placeholder="ค้นในกองสำรอง"
-                      className="w-full pl-9"
+                      placeholder="ค้นชื่อเพลงหรือชื่อช่อง"
+                      className="min-w-0 grow bg-transparent outline-none placeholder:text-faint"
                     />
-                  </div>
+                  </label>
                 )}
 
                 {shownFiller.length === 0 ? (
-                  <p className="mt-3 text-xs text-muted">ไม่เจอเพลงที่ตรงกับคำค้นนี้</p>
+                  <p className="mt-3 text-sm text-muted">
+                    ไม่เจอเพลงสำรองที่มีคำว่า &ldquo;{fillerQ.trim()}&rdquo;
+                  </p>
                 ) : (
-                  <ul className="mt-3 space-y-2">
+                  <ol className="rows @container mt-2">
                     {shownFiller.map((t) => (
                       <li key={t.videoId}>
                         <QueueRow
@@ -1173,13 +1218,109 @@ export function SongPlayerCore({
                         />
                       </li>
                     ))}
-                  </ul>
+                  </ol>
                 )}
-              </>
+              </div>
             )}
-          </Panel>
+          </section>
         )}
+      </aside>
+    </>
+  );
+}
+
+/* =========================================================================
+   ชิ้นส่วนของตัวเล่น
+   ========================================================================= */
+
+/**
+ * แผ่นบังในกรอบวิดีโอ — บอกสถานะที่ทำให้ตัวเล่นยังไม่ส่งเสียง
+ *
+ * จอเล็ก (กรอบแคบกว่า 20rem) ซ่อนคำอธิบาย เหลือหัวข้อกับปุ่ม ไม่งั้นล้นกรอบ
+ * ยกเว้นแผ่นที่ไม่มีปุ่ม (essential) คำอธิบายคือทางแก้ทางเดียว ต้องโชว์เสมอ
+ * จัดกลางด้วย m-auto ในกล่องเลื่อนได้ ล้นเมื่อไหร่ยังเลื่อนขึ้นไปอ่านหัวได้
+ */
+function Veil({
+  title,
+  body,
+  tone,
+  essential = false,
+  children,
+}: {
+  title: string;
+  body?: ReactNode;
+  tone?: "danger";
+  essential?: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="absolute inset-0 flex overflow-y-auto bg-canvas p-5 text-center">
+      <div className="m-auto max-w-sm">
+        <p className={`text-lg font-bold ${tone === "danger" ? "text-danger" : ""}`}>{title}</p>
+        {body && (
+          <p className={`mt-1 text-sm text-muted ${essential ? "" : "hidden @[20rem]:block"}`}>
+            {body}
+          </p>
+        )}
+        {children}
       </div>
+    </div>
+  );
+}
+
+/**
+ * แถบเลื่อน (เวลาในเพลง / ระดับเสียง)
+ *
+ * ตัวที่รับนิ้ว/เมาส์/คีย์บอร์ดคือ input[type=range] ของจริงที่โปร่งใสวางทับ
+ * ส่วนที่เห็นเป็นรางบางกับจุดกลมที่วาดเอง หน้าตาจึงเหมือนกันทุกเบราว์เซอร์และทั้งสองธีม
+ * รางวาดหดเข้าข้างละ 8px ให้ตรงกับระยะที่จุดของ range จริงวิ่งได้ (ครึ่งหนึ่งของจุด)
+ * กล่องสูง 44px ให้แตะโดนง่าย แม้รางที่เห็นจะบางแค่ 6px
+ */
+function Slider({
+  label,
+  value,
+  max,
+  onChange,
+  disabled = false,
+  dim = false,
+  className = "",
+}: {
+  label: string;
+  value: number;
+  max: number;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+  /** จางลงแต่ยังเลื่อนได้ — ระดับเสียงตอนกดปิดเสียงไว้ */
+  dim?: boolean;
+  className?: string;
+}) {
+  const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
+  return (
+    <div
+      className={`relative h-11 rounded-full has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-ink ${
+        disabled ? "opacity-40" : dim ? "opacity-50" : ""
+      } ${className}`}
+    >
+      <span className="absolute inset-x-2 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-ink/15">
+        <span className="absolute inset-y-0 left-0 rounded-full bg-ink" style={{ width: `${pct}%` }} />
+        {!disabled && (
+          <span
+            aria-hidden
+            className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink"
+            style={{ left: `${pct}%` }}
+          />
+        )}
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={max}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        aria-label={label}
+        className="absolute inset-0 m-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+      />
     </div>
   );
 }
@@ -1187,7 +1328,7 @@ export function SongPlayerCore({
 /** ปุ่มคีย์บอร์ดในคำอธิบายคีย์ลัด */
 function Key({ children }: { children: ReactNode }) {
   return (
-    <kbd className="num rounded-md border border-hair px-1.5 py-0.5 font-display text-eyebrow text-ice/70">
+    <kbd className="num mr-1 inline-grid min-w-6 place-items-center rounded-thumb border border-ink/15 px-1.5 font-sans text-xs font-medium text-ink">
       {children}
     </kbd>
   );
@@ -1218,9 +1359,9 @@ function AcceptToggle({
     setBusy(true);
     try {
       await setSongsEnabled(channelId, !open);
-      toast(open ? "ปิดรับคิวแล้ว" : "เปิดรับคิวแล้ว", "success", 1800);
+      toast(open ? "ปิดรับเพลงแล้ว" : "เปิดรับเพลงแล้ว", "success", 1800);
     } catch {
-      toast("เปลี่ยนไม่สำเร็จ — ต้องเป็นเจ้าของช่องถึงจะแก้ได้", "error");
+      toast("เปลี่ยนไม่สำเร็จ ต้องล็อกอินด้วยบัญชีเจ้าของช่องถึงจะแก้ได้", "error");
     } finally {
       setBusy(false);
     }
@@ -1228,16 +1369,15 @@ function AcceptToggle({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Badge rgb={open ? "52 227 176" : "126 130 153"} tone={open ? "live" : "plain"}>
-        {open ? "เปิดรับคิวอยู่" : "ปิดรับคิวแล้ว"}
-      </Badge>
-      <Button
-        size="sm"
-        variant={open ? "danger" : "primary"}
-        loading={busy}
-        onClick={() => void flip()}
-      >
-        {open ? "ปิดรับคิว" : "เปิดรับคิว"}
+      {open ? (
+        <Badge tone="open" dot>
+          เปิดรับเพลงอยู่
+        </Badge>
+      ) : (
+        <Badge>ปิดรับเพลงอยู่</Badge>
+      )}
+      <Button variant={open ? "danger" : "primary"} loading={busy} onClick={() => void flip()}>
+        {open ? "ปิดรับเพลง" : "เปิดรับเพลง"}
       </Button>
     </div>
   );
@@ -1246,6 +1386,11 @@ function AcceptToggle({
 /**
  * แถวเพลงในคิว — กดได้ทั้งแถวเพื่อเล่นเพลงนั้นทันที
  * เป็น button ทั้งใบ ไม่ใช่ปุ่มเล็กมุมขวา จะได้กดง่ายตอนรีบระหว่างไลฟ์
+ *
+ * ปุ่มเลื่อนลำดับ/เอาออกวางเรียงท้ายแถวเมื่อรายการกว้างพอ (≥ 26rem)
+ * ถ้าแคบกว่านั้น (มือถือ คอลัมน์แคบ) ปุ่มทั้งชุดพับไว้หลังปุ่ม "…"
+ * ไม่งั้นปุ่มสี่ปุ่มขนาดนิ้วแตะจะเบียดชื่อเพลงจนเหลือไม่กี่ตัวอักษร
+ * ต้องมี @container อยู่ที่รายการชั้นนอก (ดู <ol> ของคิว)
  */
 function QueueRow({
   no,
@@ -1272,111 +1417,136 @@ function QueueRow({
   onRemove?: () => void;
   canUp?: boolean;
   canDown?: boolean;
+  /** เพลงที่ยังไม่ได้เข้าคิว (กองสำรอง) — เลขลำดับเบาลง */
   dim?: boolean;
   marked?: boolean;
   /** ข้อความบอกว่ากดแล้วเกิดอะไร — คิวกับกองสำรองทำคนละอย่าง */
   hint?: string;
 }) {
+  const [tools, setTools] = useState(false);
+  const hasTools = !!(onMove || onRemove);
+
+  /* inline = ชุดที่เรียงท้ายแถว — เครื่องที่ใช้เมาส์ได้ปุ่มเล็กลง (เล็งได้แม่นอยู่แล้ว)
+     ชื่อเพลงในคอลัมน์คิวจะได้ไม่ถูกเบียดเหลือไม่กี่ตัวอักษร จอสัมผัสยังได้ 44px เต็ม */
+  const buttons = (inline: boolean) => {
+    const size = inline ? "pointer-fine:h-9 pointer-fine:w-8" : "";
+    return (
+      <>
+        {onMove && (
+          <>
+            <RowBtn
+              label="ดันขึ้นหัวคิว"
+              disabled={!canUp}
+              onClick={() => onMove("top")}
+              className={size}
+            >
+              <IconToTop className="h-4.5 w-4.5" />
+            </RowBtn>
+            <RowBtn
+              label="เลื่อนขึ้น"
+              disabled={!canUp}
+              onClick={() => onMove("up")}
+              className={size}
+            >
+              <IconArrowUp className="h-4.5 w-4.5" />
+            </RowBtn>
+            <RowBtn
+              label="เลื่อนลง"
+              disabled={!canDown}
+              onClick={() => onMove("down")}
+              className={size}
+            >
+              <IconArrowDown className="h-4.5 w-4.5" />
+            </RowBtn>
+          </>
+        )}
+        {onRemove && (
+          <RowBtn label="เอาออกจากคิว" onClick={onRemove} danger className={size}>
+            <IconClose className="h-4.5 w-4.5" />
+          </RowBtn>
+        )}
+      </>
+    );
+  };
+
   /* ปุ่มซ้อนในปุ่มไม่ได้ ตัวแถวจึงเป็น div แล้วให้ส่วนเนื้อหาเป็นปุ่มกดเล่น
      ส่วนปุ่มเลื่อนลำดับวางเป็นพี่น้องข้างๆ */
   return (
-    <div
-      className={`hover-tile tile group flex items-center gap-1 rounded-xl pr-1.5 transition-colors ${
-        marked ? "ring-1 ring-iris/45" : ""
-      }`}
-    >
-      <button
-        type="button"
-        onClick={onClick}
-        title={hint}
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-xl p-2.5 text-left"
-      >
-        <span
-          className={`fig text-outline w-6 shrink-0 text-center text-lg ${
-            dim ? "opacity-60" : ""
-          }`}
+    <div className="group py-1">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={onClick}
+          title={hint}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-field py-2 pr-2 pl-1 text-left transition-colors hover:bg-fill"
         >
-          {no}
-        </span>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={thumbUrl(videoId, "mq")}
-          alt=""
-          referrerPolicy="no-referrer"
-          loading="lazy"
-          onError={(e) => {
-            e.currentTarget.style.visibility = "hidden";
-          }}
-          className="h-9 w-16 shrink-0 rounded object-cover"
-        />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm text-ice">{title}</span>
-          <span className="block truncate text-xs text-muted">{sub}</span>
-        </span>
-        {marked && <span className="slug slug-2 shrink-0 text-iris">ถัดไป</span>}
-      </button>
+          <span
+            className={`num w-6 shrink-0 text-center text-muted ${dim ? "font-normal" : "font-semibold"}`}
+          >
+            {no}
+          </span>
+          <Cover videoId={videoId} size="sm" className="w-16" />
+          <span className="min-w-0 flex-1">
+            <span className="line-clamp-2 leading-snug font-medium wrap-break-word">{title}</span>
+            <span className="mt-0.5 block truncate text-sm text-muted">{sub}</span>
+          </span>
+          {marked && <Badge tone="ink">ถัดไป</Badge>}
+        </button>
 
-      {/* จอสัมผัสไม่มี hover — ปุ่มที่จางรอ hover เท่ากับปุ่มที่มองไม่เห็นบนมือถือ
-          จึงโชว์เต็มบนจอเล็ก แล้วค่อยจางรอ hover เฉพาะจอที่มีเมาส์จริง */}
-      {(onMove || onRemove) && (
-        <div className="flex shrink-0 items-center gap-0.5 transition-opacity sm:opacity-40 sm:group-hover:opacity-100">
-          {onMove && (
-            <>
-              <MoveBtn
-                label="ขึ้นบนสุด"
-                disabled={!canUp}
-                onClick={() => onMove("top")}
-              >
-                ⤒
-              </MoveBtn>
-              <MoveBtn label="เลื่อนขึ้น" disabled={!canUp} onClick={() => onMove("up")}>
-                ↑
-              </MoveBtn>
-              <MoveBtn
-                label="เลื่อนลง"
-                disabled={!canDown}
-                onClick={() => onMove("down")}
-              >
-                ↓
-              </MoveBtn>
-            </>
-          )}
-          {onRemove && (
-            <MoveBtn label="เอาออกจากคิว" disabled={false} onClick={onRemove} danger>
-              ✕
-            </MoveBtn>
-          )}
-        </div>
+        {hasTools && (
+          <>
+            {/* จอสัมผัสไม่มี hover — ปุ่มที่จางรอ hover เท่ากับปุ่มที่มองไม่เห็นบนมือถือ
+                จึงจางรอเฉพาะเครื่องที่มีเมาส์จริง (pointer: fine) */}
+            <div className="hidden shrink-0 items-center transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-40 @[26rem]:flex">
+              {buttons(true)}
+            </div>
+            <RowBtn
+              label={tools ? "ซ่อนปุ่มจัดลำดับ" : "เลื่อนลำดับหรือเอาออก"}
+              onClick={() => setTools((v) => !v)}
+              expanded={tools}
+              className="@[26rem]:hidden"
+            >
+              <IconMore className="h-5 w-5" />
+            </RowBtn>
+          </>
+        )}
+      </div>
+
+      {hasTools && tools && (
+        <div className="flex justify-end gap-1 pb-1 @[26rem]:hidden">{buttons(false)}</div>
       )}
     </div>
   );
 }
 
-function MoveBtn({
+function RowBtn({
   label,
-  disabled,
+  disabled = false,
   onClick,
   children,
   danger = false,
+  expanded,
+  className = "",
 }: {
   label: string;
-  disabled: boolean;
+  disabled?: boolean;
   onClick: () => void;
   children: ReactNode;
   danger?: boolean;
+  expanded?: boolean;
+  className?: string;
 }) {
   return (
     <button
       type="button"
       title={label}
       aria-label={label}
+      aria-expanded={expanded}
       disabled={disabled}
       onClick={onClick}
-      className={`grid h-8 w-7 cursor-pointer place-items-center rounded-lg text-sm text-muted transition-colors disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-muted ${
-        danger
-          ? "hover:bg-danger/12 hover:text-danger"
-          : "hover:bg-iris/12 hover:text-iris"
-      }`}
+      className={`grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-colors disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted ${
+        danger ? "hover:bg-fill hover:text-danger" : "hover:bg-fill hover:text-ink"
+      } ${className}`}
     >
       {children}
     </button>
@@ -1397,8 +1567,7 @@ export default function SongPlayer() {
     authStore.getServerSnapshot,
   );
   const user = authStore.user();
-  const { role } = useSiteRole();
-  const admin = role === "admin";
+  const { admin } = useSiteRole();
   const uid = user && !user.anonymous ? user.uid : null;
 
   /*
@@ -1456,57 +1625,76 @@ export default function SongPlayer() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* คำอธิบายยาวๆ ย้ายไปอยู่ในกล่องที่พับได้ข้างล่าง
+    <div>
+      {/* หัวหน้าสั้นที่สุดเท่าที่ทำได้ — คำอธิบายยาวๆ ย้ายไปอยู่ในกล่องที่พับได้ข้างล่าง
 
           หน้านี้เป็นหน้าที่เปิดค้างไว้ทั้งไลฟ์ ไม่ใช่หน้าที่เข้ามาอ่าน —
           ย่อหน้าสี่บรรทัดตรงหัวจึงกินที่ของตัวเล่นไปเปล่าๆ ทุกวินาทีหลังอ่านจบรอบแรก */}
-      <PageHeading
-        no="09"
-        eyebrow="Player"
-        title={channel?.name ? `คิวของ ${channel.name}` : "เล่นเพลงตามคิว"}
-        description="เดินเอง — มีคนขอเพลงเข้ามาก็เล่นเลย เพลงจบก็ต่อให้เอง"
-        meta={
-          /* ทางกลับไปหน้าเลือกช่อง — โผล่เฉพาะคนที่มีให้เลือกจริงมากกว่าหนึ่งช่อง */
-          admin || mine.length > 1 ? (
-            <MiniBtn
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+        <div className="min-w-0">
+          <h1 className="text-headline font-bold wrap-break-word">
+            {channel?.name ? `คิวของ ${channel.name}` : "เล่นเพลงตามคิว"}
+          </h1>
+          <p className="mt-1.5 max-w-prose text-muted">
+            มีคนขอเพลงเข้ามาก็เล่นเลย เพลงจบก็ต่อเพลงถัดไปเอง
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* ทางกลับไปหน้าเลือกช่อง — โผล่เฉพาะคนที่มีให้เลือกจริงมากกว่าหนึ่งช่อง */}
+          {(admin || mine.length > 1) && (
+            <Button
+              variant="secondary"
               onClick={() => {
                 window.location.hash = "";
               }}
             >
               เปลี่ยนช่อง
-            </MiniBtn>
-          ) : undefined
-        }
-        action={<AcceptToggle channelId={channelId} channel={channel} />}
-      />
-      <SongPlayerCore
-        channelId={channelId}
-        filler={channel?.songs?.filler}
-        fillerMode={channel?.songs?.fillerMode ?? "off"}
-        onUnplayable={(videoId, code) => {
-          /*
-            เพลงสำรองที่ฝังไม่ได้ = ขยะในกองที่เราใส่เอง เขี่ยออกถาวร
-            ถ้าไม่เอาออก โหมดสุ่มจะวนกลับมาเจอใบเดิมค้างซ้ำที่เดิมไม่จบ
-            (กองจริงของช่องนี้มี 37 จาก 89 เพลงที่เจ้าของปิดการฝัง)
-          */
-          const list = channel?.songs?.filler ?? [];
-          const gone = list.find((t) => t.videoId === videoId);
-          if (!gone) return;
-          void saveFillerList(
-            channelId,
-            list.filter((t) => t.videoId !== videoId),
-          ).then(() =>
-            toast(
-              `"${gone.title.slice(0, 26)}" เจ้าของปิดการฝัง (รหัส ${code}) — เอาออกจากกองแล้ว`,
-              "info",
-              5000,
-            ),
-          );
-        }}
-      />
-      <SongConsole channelId={channelId} channel={channel} />
-      <SetupNote />
+            </Button>
+          )}
+          <AcceptToggle channelId={channelId} channel={channel} />
+        </div>
+      </header>
+
+      {/*
+        กริดหลัก — จอกว้าง: ซ้าย = เวที แล้วต่อด้วยคอนโซล / ขวา = คิว (เกาะจอ)
+        จอแคบ: เวที คิว คอนโซล เรียงลงมาตามลำดับใน DOM
+        SongPlayerCore คืนเวทีกับคิวเป็นสองก้อนแยกกันให้กริดนี้วางเอง
+        แถวสุดท้ายเป็น 1fr ให้ช่องว่างส่วนเกิน (ตอนคิวยาวกว่าฝั่งซ้าย) ไปกองท้ายสุด
+        ไม่ไปถ่างระยะระหว่างเวทีกับคอนโซล
+        items-start ไม่งั้นแต่ละก้อนจะถูกยืดให้สูงเท่าแถวแล้วเหลือพื้นที่ว่างโล่ง
+        (และคิวที่ถูกยืดจะเกาะจอแบบ sticky ไม่ได้)
+      */}
+      <div className="mt-6 grid gap-x-10 gap-y-10 sm:mt-8 lg:grid-cols-[minmax(0,1fr)_26rem] lg:grid-rows-[auto_1fr] lg:items-start xl:grid-cols-[minmax(0,1fr)_30rem]">
+        <SongPlayerCore
+          channelId={channelId}
+          filler={channel?.songs?.filler}
+          fillerMode={channel?.songs?.fillerMode ?? "off"}
+          onUnplayable={(videoId, code) => {
+            /*
+              เพลงสำรองที่ฝังไม่ได้ = ขยะในกองที่เราใส่เอง เขี่ยออกถาวร
+              ถ้าไม่เอาออก โหมดสุ่มจะวนกลับมาเจอใบเดิมค้างซ้ำที่เดิมไม่จบ
+              (กองจริงของช่องนี้มี 37 จาก 89 เพลงที่เจ้าของปิดการฝัง)
+            */
+            const list = channel?.songs?.filler ?? [];
+            const gone = list.find((t) => t.videoId === videoId);
+            if (!gone) return;
+            void saveFillerList(
+              channelId,
+              list.filter((t) => t.videoId !== videoId),
+            ).then(() =>
+              toast(
+                `เอา "${gone.title.slice(0, 26)}" ออกจากเพลงสำรองแล้ว เจ้าของคลิปปิดการฝังไว้ (รหัส ${code})`,
+                "info",
+                5000,
+              ),
+            );
+          }}
+        />
+        <div className="min-w-0 space-y-10 lg:col-start-1 lg:row-start-2">
+          <SongConsole channelId={channelId} channel={channel} />
+          <SetupNote />
+        </div>
+      </div>
     </div>
   );
 }
@@ -1561,98 +1749,113 @@ function ChannelPicker({
   }, [found]);
 
   return (
-    <div className="space-y-6">
-      <PageHeading
-        no="09"
-        eyebrow="Player"
-        title="จะเล่นคิวของช่องไหน"
-        description={
-          admin
-            ? "คุณเป็นผู้ดูแลระบบ จึงเปิดคิวของช่องไหนก็ได้ — เลือกช่องก่อนแล้วค่อยเข้าตัวเล่น"
-            : "เลือกช่องที่จะเปิดตัวเล่นให้"
-        }
-      />
+    <div className="max-w-3xl">
+      <h1 className="text-headline font-bold">จะเล่นคิวของช่องไหน</h1>
+      <p className="mt-1.5 max-w-prose text-muted">
+        {admin
+          ? "คุณเป็นผู้ดูแลระบบ เปิดคิวของช่องไหนก็ได้ เลือกช่องแล้วตัวเล่นจะเปิดขึ้นมา"
+          : "เลือกช่องที่จะเปิดตัวเล่น"}
+      </p>
 
       {admin && list.length > 8 && (
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="ค้นหาจากชื่อช่องหรือ @handle"
-        />
+        <label className="mt-6 flex min-h-11 w-full items-center gap-2.5 rounded-full bg-fill px-4 sm:w-80">
+          <IconSearch className="h-4 w-4 shrink-0 text-muted" />
+          <span className="sr-only">ค้นหาช่อง</span>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="ชื่อช่องหรือ @handle"
+            className="min-w-0 grow bg-transparent outline-none placeholder:text-faint"
+          />
+        </label>
       )}
 
-      {!ready ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-20 w-full rounded-2xl" />
-          ))}
-        </div>
-      ) : sorted.length === 0 ? (
-        <EmptyState
-          title={q ? "ไม่เจอช่องที่ตรงกับที่ค้นหา" : "ยังไม่มีช่องให้เล่น"}
-          description={
-            q
-              ? "ลองค้นด้วยคำที่สั้นลง"
-              : admin
-                ? "ช่องจะโผล่ที่นี่หลังมีเจ้าของกดเผยแพร่ครั้งแรก"
-                : "ตั้งค่าช่องของคุณให้เสร็จก่อน แล้วเปิดระบบขอเพลงในหน้าช่อง"
-          }
-          action={
-            !admin ? (
-              <a href="/studio/channel/" className="font-display text-sm text-iris hover:underline">
-                ไปตั้งค่าช่อง →
-              </a>
-            ) : undefined
-          }
-        />
-      ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {sorted.map((c) => {
-            const on = !!c.songs?.enabled;
-            return (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  /* เก็บช่องที่เลือกไว้ใน #ch= จะได้คั่นหน้าไว้เปิดตรงคราวหน้าได้ */
-                  onClick={() => {
-                    window.location.hash = `ch=${c.id}`;
-                  }}
-                  className="tile hover-tile flex w-full cursor-pointer items-center gap-3 rounded-2xl p-4 text-left transition-colors"
+      <div className="mt-6">
+        {!ready ? (
+          <div className="rows" aria-busy="true">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center gap-4 py-3.5">
+                <Skeleton className="h-12 w-12 shrink-0 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-1/3" />
+                  <Skeleton className="h-3.5 w-1/4" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : sorted.length === 0 ? (
+          <EmptyState
+            title={q ? `ไม่เจอช่องที่มีคำว่า "${q.trim()}"` : "ยังไม่มีช่องให้เล่น"}
+            description={
+              q
+                ? "ลองพิมพ์แค่บางส่วนของชื่อช่อง หรือชื่อหลัง @"
+                : admin
+                  ? "ช่องจะขึ้นที่นี่หลังเจ้าของช่องบันทึกการตั้งค่าครั้งแรก"
+                  : "ตั้งค่าช่องของคุณให้เสร็จก่อน แล้วกลับมาเปิดตัวเล่นที่นี่"
+            }
+            action={
+              !admin ? (
+                <Link
+                  href="/studio/channel/"
+                  className="inline-flex min-h-11 items-center rounded-full bg-ink px-5 font-medium text-onink transition-opacity hover:opacity-85"
                 >
-                  {c.avatar ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={safeImageSrc(c.avatar) ?? ""}
-                      alt=""
-                      loading="lazy"
-                      className="h-11 w-11 shrink-0 rounded-xl object-cover"
-                    />
-                  ) : (
-                    <span className="sunken grid h-11 w-11 shrink-0 place-items-center rounded-xl font-display text-sm text-iris">
-                      {(c.name || c.handle || "?").slice(0, 1).toUpperCase()}
-                    </span>
-                  )}
+                  ไปตั้งค่าช่อง
+                </Link>
+              ) : undefined
+            }
+          />
+        ) : (
+          <ul className="rows -mx-3">
+            {sorted.map((c) => {
+              const on = !!c.songs?.enabled;
+              const avatar = c.avatar ? safeImageSrc(c.avatar) : null;
+              return (
+                <li key={c.id} className="py-1">
+                  <button
+                    type="button"
+                    /* เก็บช่องที่เลือกไว้ใน #ch= จะได้คั่นหน้าไว้เปิดตรงคราวหน้าได้ */
+                    onClick={() => {
+                      window.location.hash = `ch=${c.id}`;
+                    }}
+                    className="flex min-h-16 w-full cursor-pointer items-center gap-4 rounded-field px-3 py-2.5 text-left transition-colors hover:bg-fill"
+                  >
+                    {avatar ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={avatar}
+                        alt=""
+                        loading="lazy"
+                        className="h-12 w-12 shrink-0 rounded-full bg-fill object-cover"
+                      />
+                    ) : (
+                      <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-fill text-lg font-bold text-muted">
+                        {(c.name || c.handle || "?").slice(0, 1).toUpperCase()}
+                      </span>
+                    )}
 
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-display text-sm text-ice">
-                      {c.name || c.handle || c.id}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">
+                        {c.name || c.handle || c.id}
+                      </span>
+                      <span className="mt-0.5 block truncate text-sm text-muted">
+                        {c.handle ? `@${c.handle}` : c.id}
+                      </span>
                     </span>
-                    <span className="num mt-0.5 block truncate text-xs text-muted">
-                      {c.handle ? `@${c.handle}` : c.id}
-                    </span>
-                  </span>
 
-                  {on ? (
-                    <Badge rgb="52 227 176">เปิดคิว</Badge>
-                  ) : (
-                    <Badge rgb="126 130 153">ปิดคิว</Badge>
-                  )}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                    {on ? (
+                      <Badge tone="open" dot>
+                        เปิดรับเพลง
+                      </Badge>
+                    ) : (
+                      <Badge>ปิดรับเพลง</Badge>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
@@ -1667,39 +1870,45 @@ function SetupNote() {
   const [open, setOpen] = useState(false);
 
   return (
-    <Panel variant="quiet" className="p-5">
+    <section className="rounded-sheet bg-fill px-5 sm:px-6">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex min-h-11 w-full cursor-pointer items-center gap-3 text-left"
+        aria-controls="player-setup-note"
+        className="flex min-h-14 w-full cursor-pointer items-center gap-3 text-left"
       >
-        <span className="slug slug-2 shrink-0">เอาเสียงเข้าไลฟ์ยังไง</span>
-        <span className="rule h-px flex-1" />
+        <span className="min-w-0 flex-1 font-bold">เอาเสียงเข้าไลฟ์ยังไง</span>
         <IconChevronDown
-          className={`h-4 w-4 shrink-0 text-muted transition-transform duration-300 ${
+          className={`h-5 w-5 shrink-0 text-muted transition-transform duration-200 ${
             open ? "rotate-180" : ""
           }`}
         />
       </button>
 
       {open && (
-        <div className="mt-3 space-y-2 text-sm leading-relaxed text-muted">
+        <div id="player-setup-note" className="max-w-prose space-y-3 pb-5 text-muted">
           <p>
-            เปิดหน้านี้ใน<strong className="text-ice/85">เบราว์เซอร์ปกติ</strong>ที่ล็อกอิน
-            YouTube Premium ไว้ แล้วดึงเสียงเข้า OBS ทาง Desktop Audio
+            เปิดหน้านี้ใน<strong className="font-semibold text-ink">เบราว์เซอร์ปกติ</strong>
+            ที่ล็อกอิน YouTube Premium ไว้ แล้วดึงเสียงเข้า OBS ทาง Desktop Audio
             หรือจับหน้าต่างนี้เป็น Window Capture
           </p>
           <p>
-            อย่าเอาลิงก์หน้านี้ไปใส่ Browser Source ของ OBS —
+            อย่าเอาลิงก์หน้านี้ไปใส่ Browser Source ของ OBS
             ตรงนั้นมีคุกกี้แยกของตัวเอง ไม่ได้ล็อกอิน YouTube จึงมีโฆษณาคั่นกลางเพลง
           </p>
           <p>
-            ถ้าอยากให้คนดูเห็นว่ากำลังเล่นเพลงอะไร ใช้ widget เพลงที่หน้า Widget
+            ถ้าอยากให้คนดูเห็นว่ากำลังเล่นเพลงอะไร ใช้ widget เพลงจากหน้า{" "}
+            <Link
+              href="/studio/widgets/"
+              className="font-medium text-ink underline underline-offset-2"
+            >
+              ลิงก์สำหรับ OBS
+            </Link>{" "}
             ซึ่งเป็นคนละลิงก์กับหน้านี้
           </p>
         </div>
       )}
-    </Panel>
+    </section>
   );
 }

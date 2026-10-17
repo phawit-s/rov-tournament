@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  updateDoc,
   collection,
   doc,
   getDocs,
@@ -358,31 +359,28 @@ export function watchMyChannels(
   );
 }
 
-/**
- * ติดธงว่าใบนี้ระบบอนุมัติเอง ไม่ใช่คนกด
- *
- * setChannelDonationStatus เขียนเฉพาะฟิลด์สถานะ ธงนี้เลยต้องเขียนแยกอีกครั้ง
- * เรียกหลังอนุมัติสำเร็จเสมอ ถ้าอนุมัติพลาดจะได้ไม่มีใบ pending ที่ติดธงค้างไว้
- */
-export async function markDonationAutoApproved(
-  channelId: string,
-  donationId: string,
-): Promise<void> {
-  const db = getDb();
-  if (!db) return;
-  await setDoc(
-    doc(db, COL, channelId, "donations", donationId),
-    { autoApproved: true },
-    { merge: true },
-  );
-}
-
-/** หาช่องจาก handle (ใช้ตอนเปิดลิงก์ /c/#h=affarain) */
+/** หาช่องจาก handle (ใช้ตอนเปิดลิงก์ /song/#h=affarain) */
 export async function findChannelByHandle(handle: string): Promise<Channel | null> {
   const db = getDb();
   if (!db || !handle) return null;
   const snap = await getDocs(
     query(collection(db, COL), where("handle", "==", handle.toLowerCase()), limit(1)),
   );
-  return snap.empty ? null : (snap.docs[0].data() as Channel);
+  // id จากชื่อเอกสารเชื่อถือได้กว่าฟิลด์ในตัวเอกสาร (เอกสารเก่าบางใบไม่มีฟิลด์ id)
+  return snap.empty ? null : { ...(snap.docs[0].data() as Channel), id: snap.docs[0].id };
+}
+
+/**
+ * ตั้งป้าย "ไลฟ์อยู่" — มีผลทันที ไม่ผ่านร่างของหน้าตั้งค่า
+ *
+ * เปิดปิดระหว่างไลฟ์ ต้องขึ้นที่หน้าแรกกับหน้าขอเพลงเดี๋ยวนั้น
+ * แตะเฉพาะฟิลด์นี้ (พาธแบบจุด) ไม่ทับค่าอื่นของช่อง
+ */
+export async function setChannelLive(channelId: string, isLive: boolean): Promise<void> {
+  const db = getDb();
+  if (!db || !channelId) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
+  await updateDoc(doc(db, COL, channelId), {
+    "live.isLive": isLive,
+    updatedAt: new Date().toISOString(),
+  });
 }

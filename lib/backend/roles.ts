@@ -3,6 +3,7 @@
 import {
   collection,
   deleteDoc,
+  writeBatch,
   doc,
   onSnapshot,
   setDoc,
@@ -213,10 +214,20 @@ export async function grantStreamer(
   );
 }
 
+/**
+ * ถอนสิทธิ์สตรีมเมอร์ — ลบใบคำขอเดิมทิ้งไปด้วยในทีเดียว
+ *
+ * ถ้าเหลือใบที่ "อนุมัติแล้ว" ค้างไว้ คนนั้นจะเห็นการ์ด "อนุมัติแล้ว เข้าสตูดิโอ"
+ * ตลอดไป ทั้งที่กดเข้าไม่ได้แล้ว และยื่นใหม่ก็ไม่ได้ (กติกาห้ามแก้ใบที่อนุมัติแล้ว)
+ * ลบใบทิ้ง = เขากลับไปเห็นฟอร์มขอสิทธิ์ตามปกติ
+ */
 export async function revokeStreamer(uid: string): Promise<void> {
   const db = getDb();
   if (!db) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
-  await deleteDoc(doc(db, STREAMERS, uid));
+  const batch = writeBatch(db);
+  batch.delete(doc(db, STREAMERS, uid));
+  batch.delete(doc(db, REQUESTS, uid));
+  await batch.commit();
 }
 
 /* ---------------- คำขอเป็นสตรีมเมอร์ ---------------- */

@@ -1,30 +1,28 @@
 "use client";
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { adminClaimStore } from "@/lib/backend/admin";
 import { authStore } from "@/lib/backend/firebase";
 import { watchUsers, type UserProfile } from "@/lib/backend/users";
-import { useAccess } from "@/hooks/useAdmin";
-import Panel, { PanelHeader } from "@/components/ui/Panel";
+import { useSiteRole } from "@/hooks/useRole";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { toast } from "@/components/ui/Toast";
-import { IconCheck, IconCopy } from "@/components/ui/icons";
-import { EmptyState } from "@/components/tournament/ui";
-import UserPicker, { displayName } from "./UserPicker";
+import { IconCopy } from "@/components/ui/icons";
+import { Badge, EmptyState } from "@/components/ui/kit";
+import UserPicker, { PersonAvatar, displayName } from "./UserPicker";
 
 /**
  * รายชื่อผู้ดูแลระบบ — เพิ่ม/ถอดสิทธิ์ได้จากหน้าเว็บ ไม่ต้องเข้า Firebase Console
- * โชว์เฉพาะคนที่ Firestore ยืนยันสิทธิ์แล้ว (โหมดรหัสในเครื่องแตะตรงนี้ไม่ได้)
+ * โชว์เฉพาะคนที่ Firestore ยืนยันสิทธิ์แล้ว
  *
  * แยกไส้ในออกมาเป็นอีก component เพื่อไม่ให้คนที่ไม่ใช่ผู้ดูแล
  * ไปเปิด listener รายชื่อผู้ใช้ทิ้งไว้เปล่าๆ แล้วโดนกติกาปฏิเสธ
  */
 export default function AdminTeamPanel() {
-  const access = useAccess();
-  // โหมดรหัสในเครื่องไม่มีสิทธิ์แตะข้อมูลบนคลาวด์ ไม่ต้องโชว์ให้สับสน
-  if (access !== "verified") return null;
+  const { admin } = useSiteRole();
+  if (!admin) return null;
   return <TeamPanel />;
 }
 
@@ -39,6 +37,7 @@ function TeamPanel() {
     authStore.getSnapshot,
     authStore.getServerSnapshot,
   );
+  const calm = useReducedMotion();
 
   const me = authStore.user();
   const roster = adminClaimStore.roster();
@@ -46,8 +45,12 @@ function TeamPanel() {
   const [picked, setPicked] = useState<UserProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  /* แยกจาก removing — ชื่อในกล่องยืนยันต้องค้างอยู่ระหว่างที่กล่องกำลังปิด */
+  const [confirming, setConfirming] = useState(false);
   const [copied, setCopied] = useState(false);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  /** ตัวเลือกคนกางเฉพาะตอนจะเพิ่ม — รายชื่อผู้ใช้ทั้งระบบยาวเกินจะวางค้างไว้ */
+  const [adding, setAdding] = useState(false);
 
   // ดึงรายชื่อทั้งหมดครั้งเดียว แล้วจับคู่กับ roster เอง
   // (ยิง getProfile ทีละคนจะกลายเป็นคำขอเป็นสิบตอนผู้ดูแลเยอะ)
@@ -67,55 +70,66 @@ function TeamPanel() {
     try {
       await adminClaimStore.addAdmin(picked.uid, displayName(picked));
       setPicked(null);
-      toast("เพิ่มผู้ดูแลแล้ว", "success");
+      setAdding(false);
+      toast("เพิ่มเป็นผู้ดูแลแล้ว", "success");
     } catch {
-      toast("เพิ่มไม่สำเร็จ — ลองใหม่อีกครั้ง", "error");
+      toast("เพิ่มไม่สำเร็จ เช็กอินเทอร์เน็ตแล้วลองอีกครั้ง", "error");
     } finally {
       setBusy(false);
     }
   };
 
+  const removingName = (() => {
+    if (!removing) return "";
+    const profile = byUid.get(removing);
+    if (profile) return displayName(profile);
+    return roster.find((r) => r.uid === removing)?.label ?? "";
+  })();
+
   return (
-    <Panel className="p-6 sm:p-7">
-      <PanelHeader
-        eyebrow="Access"
-        title="ผู้ดูแลระบบ"
-        count={roster.length || undefined}
-      />
+    <section aria-labelledby="admins-title">
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0">
+          <h2 id="admins-title" className="text-title font-bold">
+            ผู้ดูแลระบบ
+            {roster.length > 0 && (
+              <span className="num ml-2 font-normal text-muted">{roster.length}</span>
+            )}
+          </h2>
+          <p className="mt-1 max-w-prose text-muted">
+            คนในรายชื่อนี้เปิดได้ทุกหน้าในสตูดิโอ อนุมัติสตรีมเมอร์ และแก้ช่องของทุกคน
+            สิทธิ์ตรวจที่เซิร์ฟเวอร์ ไม่ใช่ในเบราว์เซอร์
+          </p>
+        </div>
+        {!adding && (
+          <Button variant="secondary" onClick={() => setAdding(true)}>
+            เพิ่มผู้ดูแล
+          </Button>
+        )}
+      </div>
 
-      <p className="text-sm leading-relaxed text-muted">
-        คนที่อยู่ในรายชื่อนี้เปิดเมนูหลังบ้านได้ทุกหน้า
-        สิทธิ์ถูกตรวจที่ฝั่งเซิร์ฟเวอร์ ไม่ใช่ในเบราว์เซอร์
-      </p>
-
-      {/* รหัสผู้ใช้ของตัวเอง เอาไว้ส่งให้คนอื่นเพิ่มให้ */}
-      {me && (
-        <div className="tile mt-5 rounded-xl p-4">
-          <p className="slug slug-2">รหัสผู้ใช้ของคุณ</p>
-          <div className="mt-2 flex items-center gap-2">
-            <code className="num min-w-0 flex-1 truncate text-xs text-ice">
-              {me.uid}
-            </code>
-            <button
-              type="button"
+      {adding && (
+        <div className="mt-6 max-w-xl">
+          <UserPicker
+            label="เลือกคนที่จะเป็นผู้ดูแล"
+            hint="เลือกจากคนที่เคยล็อกอินเข้าเว็บแล้ว"
+            value={picked?.uid ?? null}
+            onChange={setPicked}
+            exclude={roster.map((r) => r.uid)}
+          />
+          <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row">
+            <Button
+              variant="ghost"
               onClick={() => {
-                void navigator.clipboard
-                  .writeText(me.uid)
-                  .then(() => {
-                    setCopied(true);
-                    toast("คัดลอกแล้ว", "success");
-                  })
-                  .catch(() => toast("คัดลอกไม่สำเร็จ", "error"));
+                setAdding(false);
+                setPicked(null);
               }}
-              aria-label="คัดลอกรหัสผู้ใช้"
-              className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-lg text-iris transition-colors hover:bg-iris/10"
             >
-              {copied ? (
-                <IconCheck className="h-4 w-4" strokeWidth={2} />
-              ) : (
-                <IconCopy className="h-4 w-4" />
-              )}
-            </button>
+              ยกเลิก
+            </Button>
+            <Button loading={busy} disabled={!picked} onClick={() => void add()}>
+              เพิ่มเป็นผู้ดูแล
+            </Button>
           </div>
         </div>
       )}
@@ -124,56 +138,45 @@ function TeamPanel() {
       <div className="mt-6">
         {roster.length === 0 ? (
           <EmptyState
-            title="ยังไม่มีผู้ดูแลเพิ่มเติม"
-            description="ตอนนี้มีแค่บัญชีเจ้าของเว็บที่กำหนดไว้ใน firestore.rules"
+            title="ยังไม่มีผู้ดูแลคนอื่น"
+            description="ตอนนี้มีแค่บัญชีเจ้าของเว็บที่ตั้งไว้ใน firestore.rules กด “เพิ่มผู้ดูแล” เพื่อให้คนอื่นช่วยอนุมัติคำขอ"
           />
         ) : (
-          <ul className="space-y-2">
+          <ul className="rows">
             <AnimatePresence initial={false}>
               {roster.map((entry) => {
                 const profile = byUid.get(entry.uid);
                 // ไม่มีโปรไฟล์ (ยังไม่เคยล็อกอิน/อ่านไม่ได้) ค่อยใช้ชื่อที่เก็บไว้ตอนเพิ่ม
                 const name = profile ? displayName(profile) : entry.label;
+                const sub = profile?.email ?? entry.uid;
                 return (
                   <motion.li
                     key={entry.uid}
-                    layout
-                    initial={{ opacity: 0, y: 8 }}
+                    layout={!calm}
+                    initial={{ opacity: 0, y: calm ? 0 : 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="tile flex items-center gap-3 rounded-xl px-4 py-3"
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                    className="flex items-center gap-3 py-3"
                   >
-                    <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-hair">
-                      {profile?.photo ? (
-                        // static export ใช้ next/image ไม่ได้ · no-referrer กันรูป Google โดน 429
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={profile.photo}
-                          alt=""
-                          referrerPolicy="no-referrer"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="font-display text-xs text-iris">
-                          {name.slice(0, 1).toUpperCase()}
-                        </span>
-                      )}
-                    </span>
+                    <PersonAvatar name={name} photo={profile?.photo} />
 
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-ice">{name}</p>
-                      <p className="truncate text-xs text-muted">
-                        {profile?.email ?? entry.uid}
-                      </p>
+                      <p className="truncate font-medium">{name}</p>
+                      {sub !== name && (
+                        <p className="truncate text-sm text-muted">{sub}</p>
+                      )}
                     </div>
 
                     {entry.uid === me?.uid ? (
-                      <span className="slug slug-2 shrink-0">คุณ</span>
+                      <Badge tone="ink">คุณ</Badge>
                     ) : (
                       <Button
-                        size="sm"
                         variant="danger"
-                        onClick={() => setRemoving(entry.uid)}
+                        onClick={() => {
+                          setRemoving(entry.uid);
+                          setConfirming(true);
+                        }}
                       >
                         ถอดสิทธิ์
                       </Button>
@@ -186,42 +189,47 @@ function TeamPanel() {
         )}
       </div>
 
-      {/* ---- เพิ่มคนใหม่ ---- */}
-      <div className="mt-6 border-t border-hair pt-5">
-        <UserPicker
-          label="เพิ่มผู้ดูแล"
-          hint="เลือกจากคนที่เคยล็อกอินเข้าเว็บแล้ว"
-          value={picked?.uid ?? null}
-          onChange={setPicked}
-          exclude={roster.map((r) => r.uid)}
-        />
-        <div className="mt-3 flex justify-end">
+      {/* รหัสผู้ใช้ของตัวเอง เอาไว้ส่งให้ผู้ดูแลคนอื่นตอนรายชื่อผู้ใช้ไม่ขึ้น */}
+      {me && (
+        <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-5">
+          <span className="text-sm text-muted">รหัสผู้ใช้ของคุณ</span>
+          <code className="num max-w-full min-w-0 truncate text-sm">{me.uid}</code>
           <Button
-            loading={busy}
-            disabled={!picked}
-            className="w-full sm:w-auto"
-            onClick={() => void add()}
+            variant="secondary"
+            success={copied}
+            icon={<IconCopy className="h-4 w-4" />}
+            onClick={() => {
+              void navigator.clipboard
+                .writeText(me.uid)
+                .then(() => {
+                  setCopied(true);
+                  toast("คัดลอกรหัสผู้ใช้แล้ว", "success");
+                })
+                .catch(() =>
+                  toast("คัดลอกไม่ได้ เบราว์เซอร์ไม่ให้สิทธิ์คลิปบอร์ด ลากคลุมรหัสแล้วคัดลอกเอง", "error"),
+                );
+            }}
           >
-            เพิ่ม
+            {copied ? "คัดลอกแล้ว" : "คัดลอก"}
           </Button>
         </div>
-      </div>
+      )}
 
       <ConfirmDialog
-        open={!!removing}
+        open={confirming && !!removing}
         tone="danger"
-        title="ถอดสิทธิ์ผู้ดูแลคนนี้?"
-        description="เขาจะเปิดเมนูหลังบ้านไม่ได้อีก และแก้ข้อมูลบนคลาวด์ไม่ได้ทันที"
+        title={removingName ? `ถอดสิทธิ์ผู้ดูแลของ ${removingName}?` : "ถอดสิทธิ์ผู้ดูแลคนนี้?"}
+        description="เขาจะเข้าหน้าของผู้ดูแลไม่ได้ และแก้ช่องของคนอื่นไม่ได้ทันที"
         confirmText="ถอดสิทธิ์"
         onConfirm={() => {
           if (!removing) return;
           adminClaimStore
             .removeAdmin(removing)
-            .then(() => toast("ถอดสิทธิ์แล้ว", "success"))
-            .catch(() => toast("ถอดสิทธิ์ไม่สำเร็จ", "error"));
+            .then(() => toast("ถอดสิทธิ์ผู้ดูแลแล้ว", "success"))
+            .catch(() => toast("ถอดสิทธิ์ไม่สำเร็จ เช็กอินเทอร์เน็ตแล้วลองอีกครั้ง", "error"));
         }}
-        onClose={() => setRemoving(null)}
+        onClose={() => setConfirming(false)}
       />
-    </Panel>
+    </section>
   );
 }

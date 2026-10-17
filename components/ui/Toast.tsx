@@ -3,13 +3,14 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { uid } from "@/lib/random";
 import { useHydrated } from "@/hooks/useClient";
+import { IconCheck } from "./icons";
 
 type Tone = "success" | "error" | "info";
 type Item = { id: string; text: string; tone: Tone; ttl: number };
 
 let items: Item[] = [];
+let seq = 0;
 const listeners = new Set<() => void>();
 const EMPTY: Item[] = [];
 
@@ -28,9 +29,9 @@ export const toastStore = {
   getServerSnapshot: () => EMPTY,
 };
 
-/** แจ้งผลสั้นๆ ที่ไม่ดันเลย์เอาต์ — ใช้แทน <p> สถานะที่เคยแทรกอยู่ในฟอร์ม */
+/** แจ้งผลสั้นๆ ที่ไม่ดันเลย์เอาต์ ลอยขึ้นจากขอบล่างกลางจอ */
 export function toast(text: string, tone: Tone = "info", ttl = 2600) {
-  const id = uid();
+  const id = `t${++seq}`;
   items = [...items, { id, text, tone, ttl }];
   emit();
   setTimeout(() => {
@@ -39,13 +40,7 @@ export function toast(text: string, tone: Tone = "info", ttl = 2600) {
   }, ttl);
 }
 
-const GLYPH: Record<Tone, { mark: string; color: string }> = {
-  success: { mark: "✓", color: "rgb(var(--st-win))" },
-  error: { mark: "✕", color: "var(--color-danger)" },
-  info: { mark: "◆", color: "var(--color-iris)" },
-};
-
-/** วางครั้งเดียวใน AppShell */
+/** วางครั้งเดียวในเปลือกของหน้า */
 export default function ToastHost() {
   const hydrated = useHydrated();
   const list = useSyncExternalStore(
@@ -57,41 +52,29 @@ export default function ToastHost() {
   if (!hydrated) return null;
 
   return createPortal(
-    <div className="pointer-events-none fixed bottom-[calc(1rem+var(--sab))] left-1/2 z-90 flex w-[min(92vw,26rem)] -translate-x-1/2 flex-col items-center gap-2">
+    <div
+      className="pointer-events-none fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-90 flex w-[min(92vw,26rem)] -translate-x-1/2 flex-col items-center gap-2"
+      aria-live="polite"
+    >
       <AnimatePresence initial={false}>
-        {list.map((t) => {
-          const g = GLYPH[t.tone];
-          return (
-            <motion.div
-              key={t.id}
-              layout
-              initial={{ opacity: 0, y: 16, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 8, scale: 0.97 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-              className="surface glass-panel hairline-top pointer-events-auto relative w-full overflow-hidden rounded-xl px-4 py-3"
-              role="status"
-            >
-              <span className="flex items-center gap-2.5">
-                <span
-                  className="font-display text-sm leading-none"
-                  style={{ color: g.color }}
-                  aria-hidden
-                >
-                  {g.mark}
-                </span>
-                <span className="text-sm text-ice">{t.text}</span>
-              </span>
-
-              <motion.span
-                className="absolute inset-x-0 bottom-0 h-px origin-left bg-[linear-gradient(90deg,rgb(var(--accent)/.7),transparent)]"
-                initial={{ scaleX: 1 }}
-                animate={{ scaleX: 0 }}
-                transition={{ duration: t.ttl / 1000, ease: "linear" }}
-              />
-            </motion.div>
-          );
-        })}
+        {list.map((t) => (
+          <motion.div
+            key={t.id}
+            layout
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            className="pointer-events-auto flex max-w-full items-center gap-2.5 rounded-full bg-ink px-5 py-3 text-[0.94rem] text-onink shadow-float"
+            role={t.tone === "error" ? "alert" : "status"}
+          >
+            {t.tone === "success" && <IconCheck className="h-4 w-4 shrink-0" strokeWidth={2.4} />}
+            {t.tone === "error" && (
+              <span className="h-2 w-2 shrink-0 rounded-full bg-live" aria-hidden />
+            )}
+            <span className="min-w-0">{t.text}</span>
+          </motion.div>
+        ))}
       </AnimatePresence>
     </div>,
     document.body,

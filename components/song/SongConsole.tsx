@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { authStore } from "@/lib/backend/firebase";
 import type { Channel } from "@/lib/channel/types";
 import { safeImageSrc } from "@/lib/safe";
@@ -12,11 +12,12 @@ import { addSongToQueue, watchSongQueue } from "@/lib/song/store";
 import { DEFAULT_SONG_CONFIG, type FillerTrack, type SongRequest } from "@/lib/song/types";
 import { lookupVideo, thumbUrl, videoIdFrom, watchUrl } from "@/lib/song/youtube";
 import type { YoutubeInfo } from "@/lib/song/youtube";
-import Button from "../ui/Button";
-import Panel from "../ui/Panel";
+import Button, { Spinner } from "../ui/Button";
+import Cover from "../ui/Cover";
 import Tabs from "../ui/Tabs";
 import { toast } from "../ui/Toast";
-import { EmptyState, Input, Skeleton } from "../tournament/ui";
+import { IconCheck, IconClose, IconPlus } from "../ui/icons";
+import { Badge, EmptyState, Input, Skeleton } from "../ui/kit";
 
 const EMPTY: SongRequest[] = [];
 const LOOKUP_DELAY = 450;
@@ -55,36 +56,67 @@ export default function SongConsole({
     );
 
   return (
-    <Panel className="p-5 sm:p-6">
+    <section aria-label="ใส่เพลงและตั้งเพลงสำรอง">
+      {/* *:min-h-11 — ยืดทุกช่องของแท็บให้สูง 44px แตะด้วยนิ้วได้ (ตัวแท็บเองสูง 36px) */}
       <Tabs
         label="เครื่องมือของสตรีมเมอร์"
-        className="mb-5"
+        grow={false}
+        className="w-fit max-w-full *:min-h-11"
         value={tab}
         onChange={setTab}
         items={[
-          { key: "add", label: "ใส่เพลงเอง" },
+          { key: "add", label: "ใส่เพลง" },
           { key: "history", label: "ประวัติ", count: done.length || null },
-          { key: "filler", label: "เพลย์ลิสต์สำรอง", count: filler.length || null },
+          { key: "filler", label: "เพลงสำรอง", count: filler.length || null },
         ]}
       />
 
-      {tab === "add" && (
-        <AddSong channelId={channelId} searchEndpoint={songs.searchEndpoint?.trim()} />
-      )}
+      <div className="mt-6">
+        {tab === "add" && (
+          <AddSong channelId={channelId} searchEndpoint={songs.searchEndpoint?.trim()} />
+        )}
 
-      {tab === "history" && (
-        <History channelId={channelId} done={done} />
-      )}
+        {tab === "history" && <History channelId={channelId} done={done} />}
 
-      {tab === "filler" && (
-        <Filler
-          channelId={channelId}
-          tracks={filler}
-          mode={songs.fillerMode ?? "off"}
-          canEdit={!!channel}
-        />
+        {tab === "filler" && (
+          <Filler
+            channelId={channelId}
+            tracks={filler}
+            mode={songs.fillerMode ?? "off"}
+            canEdit={!!channel}
+          />
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** หัวข้อของแต่ละกลุ่มในแท็บ — หนา แล้วตามด้วยคำอธิบายสั้นสีรอง */
+function BlockTitle({
+  children,
+  hint,
+  htmlFor,
+  id,
+}: {
+  children: ReactNode;
+  hint?: ReactNode;
+  /** ใส่เมื่อหัวข้อนี้คือชื่อของช่องกรอก */
+  htmlFor?: string;
+  id?: string;
+}) {
+  return (
+    <div className="mb-3">
+      {htmlFor ? (
+        <label htmlFor={htmlFor} id={id} className="block text-lg font-bold">
+          {children}
+        </label>
+      ) : (
+        <h3 id={id} className="text-lg font-bold">
+          {children}
+        </h3>
       )}
-    </Panel>
+      {hint && <p className="mt-1 max-w-prose text-sm text-muted">{hint}</p>}
+    </div>
   );
 }
 
@@ -103,6 +135,7 @@ function LinkBox({
   actionLabel: string;
   onPick: (info: YoutubeInfo) => Promise<void> | void;
 }) {
+  const inputId = useId();
   const [link, setLink] = useState("");
   const [info, setInfo] = useState<YoutubeInfo | null>(null);
   const [state, setState] = useState<"none" | "loading" | "invalid" | "missing" | "ok">(
@@ -163,53 +196,52 @@ function LinkBox({
   };
 
   return (
-    <div className="space-y-3">
-      <div>
-        <p className="mb-2 text-sm font-medium text-ice/85">{label}</p>
-        <Input
-          value={link}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="https://www.youtube.com/watch?v=..."
-          inputMode="url"
-          autoComplete="off"
-          spellCheck={false}
-          aria-invalid={state === "invalid" || state === "missing"}
-        />
-        <p className="mt-2 text-xs text-muted">{hint}</p>
+    <div>
+      <BlockTitle htmlFor={inputId} hint={hint}>
+        {label}
+      </BlockTitle>
+      <Input
+        id={inputId}
+        value={link}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="วางลิงก์ YouTube"
+        inputMode="url"
+        autoComplete="off"
+        spellCheck={false}
+        aria-invalid={state === "invalid" || state === "missing"}
+        aria-describedby={`${inputId}-status`}
+      />
+
+      <div id={`${inputId}-status`} aria-live="polite" className="mt-3 empty:hidden">
+        {state === "invalid" && (
+          <p className="text-sm text-danger">
+            ลิงก์นี้ไม่ใช่ลิงก์ YouTube ลองก๊อปจากปุ่มแชร์ของคลิปอีกครั้ง
+          </p>
+        )}
+        {state === "missing" && (
+          <p className="text-sm text-danger">หาคลิปนี้ไม่เจอ อาจถูกลบหรือตั้งเป็นส่วนตัวไว้</p>
+        )}
+        {state === "loading" && (
+          <div className="flex items-center gap-3">
+            <Skeleton className="aspect-video w-24 shrink-0 rounded-thumb" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-4 w-4/5" />
+              <Skeleton className="h-3.5 w-2/5" />
+            </div>
+          </div>
+        )}
+        {state === "ok" && info && (
+          <div className="flex items-center gap-3">
+            <Cover videoId={info.videoId} size="sm" className="w-24" />
+            <div className="min-w-0 flex-1">
+              <p className="line-clamp-2 leading-snug font-medium">{info.title}</p>
+              <p className="mt-0.5 truncate text-sm text-muted">{info.author}</p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {state === "invalid" && (
-        <p className="text-xs text-danger">ลิงก์ไม่ถูกต้อง วางลิงก์ YouTube หรือไอดีคลิป</p>
-      )}
-      {state === "missing" && (
-        <p className="text-xs text-danger">หาคลิปนี้ไม่เจอ อาจถูกลบหรือตั้งเป็นส่วนตัว</p>
-      )}
-      {state === "loading" && (
-        <div className="sunken flex items-center gap-3 rounded-xl p-3">
-          <Skeleton className="aspect-video w-24 shrink-0 rounded-lg" />
-          <div className="min-w-0 flex-1 space-y-2">
-            <Skeleton className="h-3.5 w-4/5 rounded-md" />
-            <Skeleton className="h-3 w-2/5 rounded-md" />
-          </div>
-        </div>
-      )}
-      {state === "ok" && info && (
-        <div className="sunken flex items-center gap-3 rounded-xl p-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={safeImageSrc(thumbUrl(info.videoId, "mq")) ?? ""}
-            alt=""
-            loading="lazy"
-            className="aspect-video w-24 shrink-0 rounded-lg object-cover"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="line-clamp-2 text-sm leading-snug text-ice">{info.title}</p>
-            <p className="mt-1 truncate text-xs text-muted">{info.author}</p>
-          </div>
-        </div>
-      )}
-
-      <Button onClick={go} disabled={!info} loading={busy} className="w-full sm:w-auto">
+      <Button onClick={go} disabled={!info} loading={busy} className="mt-4 w-full sm:w-auto">
         {actionLabel}
       </Button>
     </div>
@@ -227,6 +259,7 @@ function AddSong({
   channelId: string;
   searchEndpoint?: string;
 }) {
+  const searchId = useId();
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -267,14 +300,14 @@ function AddSong({
     } catch (err) {
       console.error("ใส่เพลงเข้าคิวไม่สำเร็จ", err);
       toast(
-        `ใส่คิวไม่สำเร็จ — ${err instanceof Error ? err.message : err}`,
+        `ใส่คิวไม่สำเร็จ ลองกดอีกครั้ง (${err instanceof Error ? err.message : err})`,
         "error",
         7000,
       );
       return;
     }
     if (!newId) {
-      toast("ใส่คิวไม่สำเร็จ — ต่อฐานข้อมูลไม่ติด ลองรีเฟรชหน้าแล้วลองใหม่", "error", 7000);
+      toast("ใส่คิวไม่สำเร็จ ต่อฐานข้อมูลไม่ติด รีเฟรชหน้าแล้วลองใหม่", "error", 7000);
       return;
     }
 
@@ -297,86 +330,103 @@ function AddSong({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-10">
       {/* ---------- ค้นหา ---------- */}
       {searchEndpoint ? (
-        <div className="space-y-3">
-          <p className="mb-2 text-sm font-medium text-ice/85">ค้นหาเพลง</p>
-          <div className="flex flex-wrap gap-2">
+        <div>
+          <BlockTitle htmlFor={searchId}>ค้นหาเพลง</BlockTitle>
+          <div className="flex gap-2">
             <Input
+              id={searchId}
               value={q}
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void run();
               }}
-              placeholder="พิมพ์ชื่อเพลงหรือชื่อศิลปิน"
+              placeholder="ชื่อเพลงหรือชื่อศิลปิน"
+              enterKeyHint="search"
               className="min-w-0 flex-1"
             />
-            <Button onClick={() => void run()} loading={busy} disabled={!q.trim()}>
+            <Button
+              variant="secondary"
+              onClick={() => void run()}
+              loading={busy}
+              disabled={!q.trim()}
+            >
               ค้นหา
             </Button>
           </div>
 
-          {err && <p className="text-xs text-danger">{err}</p>}
+          {err && (
+            <p role="alert" className="mt-3 text-sm text-danger">
+              {err}
+            </p>
+          )}
 
           {hits?.length === 0 && (
-            <p className="text-sm text-muted">ไม่เจอเพลงที่ตรงกับคำค้นนี้</p>
+            <p className="mt-3 text-muted">
+              ไม่เจอเพลงที่ตรงกับคำค้นนี้ ลองพิมพ์ให้สั้นลง หรือใส่ชื่อศิลปินด้วย
+            </p>
           )}
 
           {!!hits?.length && (
-            <ul className="no-scrollbar max-h-96 space-y-2 overflow-y-auto">
-              {hits.map((h) => (
-                <li key={h.videoId}>
-                  <button
-                    type="button"
-                    onClick={() => void queue(h)}
-                    title="กดเพื่อใส่คิว"
-                    className="hover-tile tile flex w-full cursor-pointer items-center gap-3 rounded-xl p-2.5 text-left"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={safeImageSrc(h.thumb ?? thumbUrl(h.videoId, "mq")) ?? ""}
-                      alt=""
-                      loading="lazy"
-                      className="aspect-video w-20 shrink-0 rounded-md object-cover"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block line-clamp-2 text-sm leading-snug text-ice">
-                        {h.title}
-                      </span>
-                      <span className="block truncate text-xs text-muted">
-                        {h.author}
-                      </span>
-                    </span>
-                    <span
-                      className={`shrink-0 font-display text-xs ${
-                        added === h.videoId ? "text-win" : "text-iris"
-                      }`}
+            <ul className="rows mt-4 max-h-112 overflow-y-auto overscroll-contain">
+              {hits.map((h) => {
+                const isAdded = added === h.videoId;
+                return (
+                  <li key={h.videoId} className="py-1">
+                    <button
+                      type="button"
+                      onClick={() => void queue(h)}
+                      title="กดเพื่อใส่คิว"
+                      className="flex w-full cursor-pointer items-center gap-3 rounded-field p-2 text-left transition-colors hover:bg-fill"
                     >
-                      {added === h.videoId ? "ใส่แล้ว" : "+ ใส่คิว"}
-                    </span>
-                  </button>
-                </li>
-              ))}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={safeImageSrc(h.thumb ?? thumbUrl(h.videoId, "mq")) ?? ""}
+                        alt=""
+                        loading="lazy"
+                        className="aspect-video w-20 shrink-0 rounded-thumb bg-fill object-cover"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="line-clamp-2 leading-snug font-medium">{h.title}</span>
+                        <span className="mt-0.5 block truncate text-sm text-muted">
+                          {h.author}
+                        </span>
+                      </span>
+                      <span
+                        className={`inline-flex shrink-0 items-center gap-1.5 px-2 text-sm font-medium ${
+                          isAdded ? "text-open" : "text-ink"
+                        }`}
+                      >
+                        {isAdded ? (
+                          <IconCheck className="h-4 w-4" strokeWidth={2.2} />
+                        ) : (
+                          <IconPlus className="h-4 w-4" strokeWidth={2} />
+                        )}
+                        {isAdded ? "ใส่แล้ว" : "ใส่คิว"}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
-
-          <span className="rule block h-px" />
         </div>
       ) : (
-        <div className="tally rounded-xl tile px-4 py-3">
-          <p className="slug slug-2">ยังไม่มีช่องค้นหา</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted">
-            การค้นหาต้องใช้คีย์ YouTube Data API ซึ่งฝังในหน้าเว็บไม่ได้ (ใครก็หยิบไปใช้ได้)
-            ใส่คีย์ไว้ใน Worker แล้ววางลิงก์ Worker ที่หน้าช่อง → ระบบขอเพลง
-            ช่องค้นหาจะโผล่ตรงนี้เอง ระหว่างนี้วางลิงก์เพลงข้างล่างได้เหมือนเดิม
+        <div className="rounded-sheet bg-fill p-5">
+          <p className="font-bold">ยังค้นหาเพลงจากตรงนี้ไม่ได้</p>
+          <p className="mt-1 max-w-prose text-sm text-muted">
+            การค้นหาต้องใช้คีย์ YouTube Data API ซึ่งฝังไว้ในหน้าเว็บไม่ได้ (ใครเปิดดูก็หยิบไปใช้ได้)
+            ใส่คีย์ไว้ใน Worker แล้ววางลิงก์ Worker ในช่อง &ldquo;ลิงก์ Worker สำหรับค้นหา&rdquo;
+            ที่หน้าตั้งค่าช่องในสตูดิโอ ช่องค้นหาจะขึ้นตรงนี้เอง ระหว่างนี้วางลิงก์เพลงด้านล่างได้
           </p>
         </div>
       )}
 
       <LinkBox
         label="วางลิงก์เพลงที่อยากเปิด"
-        hint="เพลงจะต่อท้ายคิวปกติ ถ้าคิวว่างอยู่ก็เล่นต่อทันที"
+        hint="เพลงจะต่อท้ายคิว ถ้าคิวว่างอยู่ก็เล่นต่อทันที"
         actionLabel="ใส่คิว"
         onPick={async (info) => {
           const user = authStore.user();
@@ -414,7 +464,7 @@ function History({ channelId, done }: { channelId: string; done: SongRequest[] }
     return (
       <EmptyState
         title="ยังไม่มีเพลงที่เล่นจบ"
-        description="เพลงที่เล่นจบหรือถูกข้ามจะมากองอยู่ที่นี่ กดต่อคิวใหม่ได้ทุกเมื่อ"
+        description="เพลงที่เล่นจบหรือถูกข้ามจะมาอยู่ที่นี่ กดต่อคิวใหม่ได้ทุกเมื่อ"
       />
     );
   }
@@ -422,7 +472,7 @@ function History({ channelId, done }: { channelId: string; done: SongRequest[] }
   const requeue = async (song: SongRequest) => {
     const user = authStore.user();
     if (!user) {
-      toast("ต้องล็อกอินก่อน", "error");
+      toast("ต้องล็อกอินก่อนถึงจะต่อคิวได้", "error");
       return;
     }
     setWorking(song.id);
@@ -443,37 +493,32 @@ function History({ channelId, done }: { channelId: string; done: SongRequest[] }
       );
       toast(`ต่อคิว "${song.title.slice(0, 30)}" แล้ว`, "success");
     } catch {
-      toast("ต่อคิวไม่สำเร็จ", "error");
+      toast("ต่อคิวไม่สำเร็จ เช็คอินเทอร์เน็ตแล้วลองใหม่", "error");
     } finally {
       setWorking(null);
     }
   };
 
   return (
-    <ul className="space-y-2">
+    <ul className="rows">
       {done.map((song) => (
-        <li key={song.id} className="tile flex items-center gap-3 rounded-xl p-2.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={safeImageSrc(thumbUrl(song.videoId, "mq")) ?? ""}
-            alt=""
-            loading="lazy"
-            className="aspect-video w-16 shrink-0 rounded-md object-cover sm:w-20"
-          />
+        <li key={song.id} className="flex items-center gap-3 py-3">
+          <Cover videoId={song.videoId} size="sm" className="w-16 sm:w-20" />
           <div className="min-w-0 flex-1">
-            <p className="line-clamp-2 text-sm leading-snug text-ice">{song.title}</p>
-            <p className="mt-0.5 truncate text-xs text-muted">
-              {song.status === "rejected" ? "ถูกข้าม" : "เล่นจบ"} · ขอโดย {song.byName}
+            <p className="line-clamp-2 leading-snug font-medium">{song.title}</p>
+            <p className="mt-0.5 flex min-w-0 items-center gap-2 text-sm text-muted">
+              {song.status === "rejected" && <Badge>ถูกข้าม</Badge>}
+              <span className="truncate">
+                {song.source === "filler" ? "เพลงสำรอง" : `ขอโดย ${song.byName}`}
+              </span>
             </p>
           </div>
           <Button
-            size="sm"
-            variant="outline"
+            variant="secondary"
             loading={working === song.id}
             onClick={() => void requeue(song)}
-            className="shrink-0"
           >
-            ต่อคิวอีก
+            ต่อคิว
           </Button>
         </li>
       ))}
@@ -492,6 +537,7 @@ function ImportPlaylist({
   existing: FillerTrack[];
   onImported: (merged: FillerTrack[]) => Promise<void>;
 }) {
+  const inputId = useId();
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState<string | null>(null);
@@ -511,7 +557,7 @@ function ImportPlaylist({
     try {
       const room = Math.max(0, FILLER_LIMIT - existing.length);
       if (room === 0) {
-        setError(`กองเต็มแล้ว (${FILLER_LIMIT} เพลง) ลบบางเพลงออกก่อน`);
+        setError(`เพลงสำรองเต็ม ${FILLER_LIMIT} เพลงแล้ว ลบบางเพลงออกก่อนค่อยนำเข้า`);
         return;
       }
 
@@ -522,21 +568,21 @@ function ImportPlaylist({
       const have = new Set(existing.map((t) => t.videoId));
       fresh = found.filter((t) => !have.has(t.videoId));
       if (fresh.length === 0) {
-        setError("เพลงในเพลย์ลิสต์นี้อยู่ในกองครบแล้ว");
+        setError("ทุกเพลงในเพลย์ลิสต์นี้อยู่ในเพลงสำรองแล้ว");
         return;
       }
     } catch (e) {
       const code = e instanceof Error ? e.message : "";
       setError(
         code === "yt-api-blocked"
-          ? "โหลดตัวเล่นของ YouTube ไม่ได้ — ตัวบล็อกโฆษณาบางตัวบล็อกไว้ ลองปิดเฉพาะเว็บนี้"
+          ? "โหลดตัวเล่นของ YouTube ไม่ได้ ตัวบล็อกโฆษณาบางตัวบล็อกไว้ ปิดตัวบล็อกเฉพาะเว็บนี้แล้วลองใหม่"
           : code === "playlist-not-public"
             ? /* เจอบ่อยสุดและงงสุด: เจ้าของกดลิงก์เข้าดูได้ปกติเลยไม่คิดว่าติดตรงนี้
                  ต้องบอกให้ชัดว่า "ไม่จำกัด" ยังไม่พอ ต้อง "สาธารณะ" เท่านั้น */
-              "เพลย์ลิสต์นี้ยังไม่ได้ตั้งเป็นสาธารณะ — กดลิงก์เข้าดูเองได้ก็จริง แต่ตัวเล่นฝังของ YouTube โหลดได้เฉพาะเพลย์ลิสต์สาธารณะ ไปเปลี่ยนความเป็นส่วนตัวจาก “ไม่จำกัด” เป็น “สาธารณะ” แล้วลองใหม่"
+              "เพลย์ลิสต์นี้ยังไม่ได้ตั้งเป็นสาธารณะ กดลิงก์เข้าดูเองได้ก็จริง แต่ตัวเล่นฝังของ YouTube โหลดได้เฉพาะเพลย์ลิสต์สาธารณะ เปลี่ยนความเป็นส่วนตัวจาก “ไม่จำกัด” เป็น “สาธารณะ” แล้วลองใหม่"
             : code === "playlist-timeout"
               ? "อ่านเพลย์ลิสต์ไม่ทัน ลองใหม่อีกครั้ง ถ้ายังไม่ได้ให้เช็คว่าลิงก์ถูกต้อง"
-              : "เปิดเพลย์ลิสต์นี้ไม่ได้ ต้องเป็นเพลย์ลิสต์ที่เปิดสาธารณะ",
+              : "เปิดเพลย์ลิสต์นี้ไม่ได้ เช็คว่าเพลย์ลิสต์ตั้งเป็นสาธารณะแล้วลองใหม่",
       );
       return;
     } finally {
@@ -555,7 +601,7 @@ function ImportPlaylist({
       await onImported([...existing, ...fresh]);
     } catch {
       // ตัวบันทึกแจ้งสาเหตุจริงไปแล้ว ตรงนี้แค่ไม่ต้องบอกว่าสำเร็จ
-      setError("อ่านเพลย์ลิสต์ได้ แต่บันทึกลงช่องไม่สำเร็จ");
+      setError("อ่านเพลย์ลิสต์ได้ แต่บันทึกลงช่องไม่สำเร็จ ลองกดดึงเพลงอีกครั้ง");
       return;
     }
     setUrl("");
@@ -563,53 +609,69 @@ function ImportPlaylist({
   };
 
   return (
-    <div className="space-y-3">
-      <div>
-        <p className="mb-2 text-sm font-medium text-ice/85">นำเข้าทั้งเพลย์ลิสต์</p>
-        <Input
-          value={url}
-          onChange={(e) => {
-            setUrl(e.target.value);
-            setError(null);
-          }}
-          placeholder="https://www.youtube.com/watch?v=...&list=..."
-          inputMode="url"
-          autoComplete="off"
-          spellCheck={false}
-          aria-invalid={!!url.trim() && !listId}
-        />
-        <p className="mt-2 text-xs leading-relaxed text-muted">
-          วางลิงก์เพลย์ลิสต์หรือลิงก์คลิปที่มี <code>&amp;list=</code> ต่อท้ายก็ได้
-          ระบบจะดึงรายการเพลงมาใส่กองสำรองให้ (ไม่มีเสียงดังระหว่างนำเข้า)
-          <br />
-          {/* บอกไว้ตั้งแต่ต้น ไม่ต้องรอให้ลองแล้วพัง 15 วินาทีก่อนถึงจะรู้ */}
-          เพลย์ลิสต์ต้องตั้งเป็น <b>สาธารณะ</b> — แบบ “ไม่จำกัด” กดลิงก์เข้าดูได้ก็จริง
-          แต่ตัวเล่นฝังของ YouTube โหลดไม่ได้
-        </p>
+    <div>
+      <BlockTitle
+        htmlFor={inputId}
+        hint={
+          <>
+            วางลิงก์เพลย์ลิสต์ หรือลิงก์คลิปที่มี <code>&amp;list=</code> ต่อท้ายก็ได้
+            ระบบจะดึงรายชื่อเพลงมาใส่เพลงสำรองให้ ไม่มีเสียงดังระหว่างนำเข้า
+            <br />
+            {/* บอกไว้ตั้งแต่ต้น ไม่ต้องรอให้ลองแล้วพัง 15 วินาทีก่อนถึงจะรู้ */}
+            เพลย์ลิสต์ต้องตั้งเป็น <strong className="font-semibold text-ink">สาธารณะ</strong>{" "}
+            แบบ &ldquo;ไม่จำกัด&rdquo; กดลิงก์เข้าดูได้ก็จริง แต่ตัวเล่นฝังของ YouTube โหลดไม่ได้
+          </>
+        }
+      >
+        นำเข้าทั้งเพลย์ลิสต์
+      </BlockTitle>
+      <Input
+        id={inputId}
+        value={url}
+        onChange={(e) => {
+          setUrl(e.target.value);
+          setError(null);
+        }}
+        placeholder="วางลิงก์เพลย์ลิสต์ YouTube"
+        inputMode="url"
+        autoComplete="off"
+        spellCheck={false}
+        aria-invalid={!!url.trim() && !listId}
+      />
+
+      <div aria-live="polite" className="mt-3 space-y-2 empty:hidden">
+        {!!url.trim() && !listId && (
+          <p className="text-sm text-danger">
+            ลิงก์นี้ไม่มีรหัสเพลย์ลิสต์ ต้องมี <code>list=</code> อยู่ในลิงก์
+          </p>
+        )}
+
+        {isMix && (
+          <p className="max-w-prose text-sm text-muted">
+            นี่คือเพลย์ลิสต์แบบ Mix ที่ YouTube ทำให้อัตโนมัติ
+            รายการที่ได้จะเป็นภาพ ณ ตอนนำเข้า ไม่อัปเดตตามทีหลัง
+          </p>
+        )}
+
+        {error && (
+          <p role="alert" className="max-w-prose text-sm text-danger">
+            {error}
+          </p>
+        )}
+        {step && (
+          <p className="num flex items-center gap-2 text-sm text-muted">
+            <Spinner className="h-3.5 w-3.5" />
+            {step}
+          </p>
+        )}
       </div>
-
-      {!!url.trim() && !listId && (
-        <p className="text-xs text-danger">
-          ลิงก์นี้ไม่มีรหัสเพลย์ลิสต์ — ต้องมี <code>list=</code> อยู่ในลิงก์
-        </p>
-      )}
-
-      {isMix && (
-        <p className="text-xs leading-relaxed text-muted">
-          นี่คือเพลย์ลิสต์แบบ Mix ที่ YouTube ปั้นให้อัตโนมัติ
-          รายการที่ได้จะเป็นภาพ ณ ตอนนำเข้า ไม่ได้อัปเดตตามทีหลัง
-        </p>
-      )}
-
-      {error && <p className="text-xs text-danger">{error}</p>}
-      {step && <p className="num text-xs text-iris">{step}</p>}
 
       <Button
         onClick={() => void run()}
         disabled={!listId}
         loading={busy}
-        variant="outline"
-        className="w-full sm:w-auto"
+        variant="secondary"
+        className="mt-4 w-full sm:w-auto"
       >
         ดึงเพลงจากเพลย์ลิสต์
       </Button>
@@ -658,7 +720,7 @@ function Filler({
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       console.error("บันทึกกองสำรองไม่สำเร็จ", err);
-      toast(`บันทึกกองสำรองไม่สำเร็จ — ${why}`, "error", 7000);
+      toast(`บันทึกเพลงสำรองไม่สำเร็จ ลองใหม่อีกครั้ง (${why})`, "error", 7000);
       throw err;
     } finally {
       setBusy(false);
@@ -666,9 +728,14 @@ function Filler({
   };
 
   return (
-    <div className="space-y-5">
-      <div>
-        <p className="mb-2 text-sm font-medium text-ice/85">เล่นสำรองแบบไหน</p>
+    <div className="space-y-10">
+      <section aria-labelledby="filler-mode-title">
+        <BlockTitle
+          id="filler-mode-title"
+          hint="คิวว่างเมื่อไหร่ ตัวเล่นจะหยิบเพลงสำรองมาต่อให้เอง พอมีคนขอเพลงเข้ามา เพลงของเขาจะแทรกขึ้นก่อนเพลงสำรองที่ยังไม่ได้เล่น"
+        >
+          เล่นเพลงสำรองแบบไหน
+        </BlockTitle>
         <div className="grid grid-cols-3 gap-2">
           {MODES.map((m) => {
             const on = mode === m.key;
@@ -676,6 +743,7 @@ function Filler({
               <button
                 key={m.key}
                 type="button"
+                aria-pressed={on}
                 disabled={!canEdit}
                 onClick={() =>
                   void saveFillerMode(channelId, m.key).catch((err) => {
@@ -683,98 +751,101 @@ function Filler({
                        ถ้าไม่บอกสาเหตุ ผู้ใช้จะนึกว่าปุ่มเสีย */
                     console.error("เปลี่ยนโหมดเล่นสำรองไม่สำเร็จ", err);
                     toast(
-                      `เปลี่ยนโหมดไม่สำเร็จ — ${err instanceof Error ? err.message : err}`,
+                      `เปลี่ยนโหมดไม่สำเร็จ ลองใหม่อีกครั้ง (${err instanceof Error ? err.message : err})`,
                       "error",
                       7000,
                     );
                   })
                 }
-                className={`cursor-pointer rounded-xl px-3 py-2.5 text-center transition-all duration-200 ${
-                  on
-                    ? "bg-iris/14 text-iris ring-1 ring-iris/45"
-                    : "tile hover-tile text-muted hover:text-ice"
+                className={`min-h-11 cursor-pointer rounded-field px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                  on ? "bg-ink text-onink" : "bg-fill text-ink hover:bg-fill-2"
                 }`}
               >
-                <span className="block font-display text-sm">{m.label}</span>
-                <span className="mt-0.5 block text-[11px] text-muted">{m.hint}</span>
+                <span className="block font-medium">{m.label}</span>
+                <span className={`mt-0.5 block text-xs ${on ? "text-onink/75" : "text-muted"}`}>
+                  {m.hint}
+                </span>
               </button>
             );
           })}
         </div>
-        <p className="mt-2 text-xs text-muted">
-          คิวว่างเมื่อไหร่ระบบจะหยิบจากกองนี้มาต่อให้เอง
-          พอมีคนขอเพลงเข้ามาจริง เพลงของเขาจะแทรกขึ้นก่อนเพลงสำรองที่ยังไม่ได้เล่น
-        </p>
-      </div>
+      </section>
 
-      <span className="rule block h-px" />
-
-      <ImportPlaylist
-        existing={tracks}
-        onImported={async (merged) => {
-          await save(merged);
-        }}
-      />
-
-      <span className="rule block h-px" />
-
-      <LinkBox
-        label="เพิ่มเพลงเข้ากอง"
-        hint={`ใส่ได้สูงสุด ${FILLER_LIMIT} เพลง`}
-        actionLabel="เพิ่มเข้ากอง"
-        onPick={async (info) => {
-          if (tracks.some((t) => t.videoId === info.videoId)) {
-            toast("เพลงนี้อยู่ในกองแล้ว", "info");
-            return;
-          }
-          if (tracks.length >= FILLER_LIMIT) {
-            toast(`กองเต็มแล้ว (${FILLER_LIMIT} เพลง)`, "error");
-            return;
-          }
-          await save([
-            ...tracks,
-            { videoId: info.videoId, title: info.title, author: info.author },
-          ]);
-          toast("เพิ่มแล้ว", "success");
-        }}
-      />
-
-      {tracks.length === 0 ? (
-        <EmptyState
-          title="ยังไม่มีเพลงสำรอง"
-          description="ใส่เพลงที่เปิดได้เรื่อยๆ ไว้สักชุด ช่วงที่ไม่มีใครขอจะได้ไม่เงียบ"
+      <section className="border-t border-line pt-8">
+        <ImportPlaylist
+          existing={tracks}
+          onImported={async (merged) => {
+            await save(merged);
+          }}
         />
-      ) : (
-        <ul className="space-y-2">
-          {tracks.map((t, i) => (
-            <li key={t.videoId} className="tile flex items-center gap-3 rounded-xl p-2.5">
-              <span className="num w-6 shrink-0 text-center font-display text-xs text-muted">
-                {i + 1}
-              </span>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={safeImageSrc(thumbUrl(t.videoId, "mq")) ?? ""}
-                alt=""
-                loading="lazy"
-                className="aspect-video w-16 shrink-0 rounded-md object-cover"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="line-clamp-2 text-sm leading-snug text-ice">{t.title}</p>
-                <p className="mt-0.5 truncate text-xs text-muted">{t.author}</p>
-              </div>
-              <button
-                type="button"
-                disabled={busy || !canEdit}
-                onClick={() => void save(tracks.filter((x) => x.videoId !== t.videoId)).catch(() => {})}
-                className="shrink-0 cursor-pointer px-2 text-xs text-muted transition-colors hover:text-danger disabled:cursor-not-allowed"
-                aria-label="เอาเพลงนี้ออก"
-              >
-                ✕
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      </section>
+
+      <section className="border-t border-line pt-8">
+        <LinkBox
+          label="เพิ่มทีละเพลง"
+          hint={`ใส่ได้สูงสุด ${FILLER_LIMIT} เพลง`}
+          actionLabel="เพิ่มเข้าเพลงสำรอง"
+          onPick={async (info) => {
+            if (tracks.some((t) => t.videoId === info.videoId)) {
+              toast("เพลงนี้อยู่ในเพลงสำรองแล้ว", "info");
+              return;
+            }
+            if (tracks.length >= FILLER_LIMIT) {
+              toast(`เพลงสำรองเต็ม ${FILLER_LIMIT} เพลงแล้ว ลบบางเพลงออกก่อน`, "error");
+              return;
+            }
+            await save([
+              ...tracks,
+              { videoId: info.videoId, title: info.title, author: info.author },
+            ]);
+            toast("เพิ่มเข้าเพลงสำรองแล้ว", "success");
+          }}
+        />
+      </section>
+
+      <section aria-labelledby="filler-list-title" className="border-t border-line pt-8">
+        <BlockTitle id="filler-list-title">
+          รายการเพลงสำรอง
+          <span className="num ml-2 font-normal text-muted">
+            {tracks.length}/{FILLER_LIMIT}
+          </span>
+        </BlockTitle>
+
+        {tracks.length === 0 ? (
+          <EmptyState
+            title="ยังไม่มีเพลงสำรอง"
+            description="ใส่เพลงที่เปิดได้เรื่อยๆ ไว้สักชุด ช่วงที่ไม่มีใครขอจะได้ไม่เงียบ"
+          />
+        ) : (
+          /* เลขลำดับคือลำดับจริงที่โหมด "ตามลำดับ" ไล่เล่น */
+          <ol className="rows">
+            {tracks.map((t, i) => (
+              <li key={t.videoId} className="flex items-center gap-3 py-2">
+                <span className="num w-7 shrink-0 text-center text-sm font-semibold text-muted">
+                  {i + 1}
+                </span>
+                <Cover videoId={t.videoId} size="sm" className="w-16" />
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 leading-snug font-medium">{t.title}</p>
+                  <p className="mt-0.5 truncate text-sm text-muted">{t.author}</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={busy || !canEdit}
+                  onClick={() =>
+                    void save(tracks.filter((x) => x.videoId !== t.videoId)).catch(() => {})
+                  }
+                  className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-colors hover:bg-fill hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label={`เอา ${t.title} ออกจากเพลงสำรอง`}
+                  title="เอาออกจากเพลงสำรอง"
+                >
+                  <IconClose className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
     </div>
   );
 }

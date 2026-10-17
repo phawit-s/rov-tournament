@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import AppShell from "@/components/AppShell";
 import StreamerGate from "@/components/studio/StreamerGate";
 import SongPlayer from "@/components/song/SongPlayer";
+import { pageTitle } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: "เล่นเพลงตามคิว — Steamer Hub",
-  description: "หน้าเล่นเพลงของสตรีมเมอร์ ไล่ตามคิวที่คนดูขอเข้ามา",
+  title: pageTitle("ตัวเล่น"),
+  description: "ตัวเล่นเพลงของสตรีมเมอร์ เปิดเพลงตามคิวที่คนดูขอเข้ามาให้เอง",
 };
 
 /**
@@ -21,7 +22,7 @@ export default function PlayerPage() {
     <AppShell wide>
       <StreamerGate
         title="ตัวเล่นเพลงสำหรับสตรีมเมอร์"
-        description="ต้องล็อกอินก่อน เพราะหน้านี้เป็นตัวที่สั่งเปลี่ยนเพลงในคิวจริง"
+        description="ล็อกอินด้วยบัญชีสตรีมเมอร์ก่อน หน้านี้เป็นตัวที่เปลี่ยนเพลงในคิวจริง"
       >
         <SongPlayer />
       </StreamerGate>
