@@ -15,6 +15,7 @@ import { ROLE_LABEL, useSiteRole, type SiteRole } from "@/hooks/useRole";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { recordActivity } from "@/lib/activity";
 import Button from "@/components/ui/Button";
+import { GlassEffect } from "@/components/ui/liquid-glass";
 import ThemeSoundButtons from "@/components/ui/ThemeSound";
 import { toast } from "@/components/ui/Toast";
 import {
@@ -132,10 +133,11 @@ export default function NavBar({ wide = false }: { wide?: boolean }) {
       <div
         className={`mx-auto w-full ${wide ? "max-w-420" : "max-w-350"}`}
       >
-        <div
-          className={`nav-shell relative flex items-center gap-2 rounded-3xl ${
+        <GlassEffect
+          className={`rounded-3xl ${
             condensed ? "is-condensed px-2 py-1.5" : "px-2.5 py-2"
           }`}
+          contentClassName="flex w-full min-w-0 items-center gap-2"
         >
           {/* แบรนด์ */}
           <Link
@@ -240,7 +242,7 @@ export default function NavBar({ wide = false }: { wide?: boolean }) {
             style={{ scaleX: scrollYProgress }}
             className="pointer-events-none absolute inset-x-8 bottom-0 h-px origin-left bg-[linear-gradient(90deg,rgb(var(--accent)/.85),transparent)]"
           />
-        </div>
+        </GlassEffect>
       </div>
     </header>
   );

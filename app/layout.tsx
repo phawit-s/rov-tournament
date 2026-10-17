@@ -3,6 +3,7 @@ import { IBM_Plex_Sans_Thai, Prompt } from "next/font/google";
 import { BRAND } from "@/lib/brand";
 import { CHUNK_RECOVERY_SCRIPT } from "@/lib/chunk-recovery";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme-script";
+import { GlassFilter } from "@/components/ui/liquid-glass";
 import "./globals.css";
 
 const prompt = Prompt({
@@ -70,7 +71,14 @@ export default function RootLayout({
         */}
         <script dangerouslySetInnerHTML={{ __html: CHUNK_RECOVERY_SCRIPT }} />
       </head>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        {/*
+          ตัวบิดภาพของกระจกเหลว — ต้องอยู่ในหน้าเดียวกับของที่อ้างถึงมัน
+          วางไว้ที่รากครั้งเดียว ทั้งเว็บใช้ filter ตัวเดียวกัน (มันไม่วาดอะไรเอง)
+        */}
+        <GlassFilter />
+        {children}
+      </body>
     </html>
   );
 }

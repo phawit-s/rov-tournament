@@ -2,6 +2,7 @@
 
 import { useId, useRef, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
+import { GlassEffect } from "./liquid-glass";
 
 /**
  * แถบแท็บมาตรฐานของทั้งเว็บ
@@ -141,7 +142,7 @@ export default function Tabs<K extends string>({
 /**
  * แถบแท็บประจำหน้า — เกาะอยู่ใต้เมนูหลักตอนเลื่อนหน้า
  *
- * ใช้กับหน้าที่ยาวมากจนต้องแบ่งเป็นส่วนๆ (หน้าช่อง) พื้นหลังใช้ .nav-shell
+ * ใช้กับหน้าที่ยาวมากจนต้องแบ่งเป็นส่วนๆ (หน้าช่อง) พื้นหลังใช้กระจกเหลว
  * ตัวเดียวกับเมนูหลัก เนื้อหาที่เลื่อนผ่านข้างล่างจะได้ไม่ทะลุขึ้นมาเห็น
  */
 export function StickyTabs<K extends string>(props: {
@@ -153,9 +154,9 @@ export function StickyTabs<K extends string>(props: {
   return (
     /* -mx-1/px-1 กันเงาของแถบไม่ให้ถูกเฉือนตอนพ่อมี overflow ซ่อนอยู่ */
     <div className="sticky top-19 z-30 -mx-1 px-1 py-2">
-      <div className="nav-shell rounded-2xl p-1">
+      <GlassEffect className="rounded-2xl p-1">
         <Tabs {...props} size="md" grow bare />
-      </div>
+      </GlassEffect>
     </div>
   );
 }
