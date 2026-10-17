@@ -86,12 +86,51 @@ async function call(path: string, init?: RequestInit): Promise<Response> {
   }
 }
 
+/**
+ * แปลงสถานะที่ไม่ผ่านเป็นข้อความบนป้าย — 429 แยกออกมาเพราะเป็นเหตุที่เจอจริง:
+ * แพ็กเกจฟรีของ Firebase อ่านได้วันละ 50,000 ครั้ง เกินแล้วทุกอย่างอ่านไม่ได้จนเที่ยงคืนเวลาแปซิฟิก
+ */
+function failed(res: Response): RestError {
+  return new RestError(
+    res.status === 429 ? "โควตาอ่านฐานข้อมูลของวันนี้หมด (429)" : `HTTP ${res.status}`,
+  );
+}
+
 /** อ่านเอกสารใบเดียว — ไม่มีเอกสาร = null */
 export async function restGetDoc<T>(path: string): Promise<T | null> {
   const res = await call(path);
   if (res.status === 404) return null;
-  if (!res.ok) throw new RestError(`HTTP ${res.status}`);
+  if (!res.ok) throw failed(res);
   return toData<T>((await res.json()) as RestDoc);
+}
+
+/**
+ * ดึงเอกสารในคอลเลกชันย่อยที่ฟิลด์หนึ่งเท่ากับค่าที่ให้ (where field == value) จำกัดจำนวนได้
+ * คิดโควตาเท่าจำนวนเอกสารที่ได้ (ได้ศูนย์ใบก็ยังนับ 1) — ใช้แทนการดึงทั้งก้อนเมื่อรู้ว่าต้องการแค่ไม่กี่ใบ
+ */
+export async function restQueryEq<T>(
+  parent: string,
+  collectionId: string,
+  field: string,
+  value: string,
+  limit?: number,
+): Promise<T[]> {
+  const res = await call(`${parent}:runQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId }],
+        where: {
+          fieldFilter: { field: { fieldPath: field }, op: "EQUAL", value: { stringValue: value } },
+        },
+        ...(limit ? { limit } : {}),
+      },
+    }),
+  });
+  if (!res.ok) throw failed(res);
+  const rows = (await res.json()) as { document?: RestDoc }[];
+  return rows.flatMap((r) => (r.document ? [toData<T>(r.document)] : []));
 }
 
 /**
@@ -120,7 +159,7 @@ export async function restQueryIn<T>(
       },
     }),
   });
-  if (!res.ok) throw new RestError(`HTTP ${res.status}`);
+  if (!res.ok) throw failed(res);
   // ผลว่างก็ยังได้อาร์เรย์กลับมา แต่เป็นแถวที่มีแค่ readTime ไม่มี document
   const rows = (await res.json()) as { document?: RestDoc }[];
   return rows.flatMap((r) => (r.document ? [toData<T>(r.document)] : []));

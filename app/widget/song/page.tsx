@@ -5,7 +5,7 @@ import { useHashParam } from "@/hooks/useClient";
 import { useWidgetOptions } from "@/hooks/useWidgetOptions";
 import { hasBackend } from "@/lib/backend/firebase";
 import { fetchChannelOnce, watchChannel } from "@/lib/channel/store";
-import { fetchOpenSongQueue, splitQueue, watchSongQueue } from "@/lib/song/store";
+import { fetchOpenSongQueue, fetchPlayingSong, splitQueue, watchSongQueue } from "@/lib/song/store";
 import type { SongRequest } from "@/lib/song/types";
 import NowPlayingCard, {
   BAR_NEXT_LIMIT,
@@ -24,11 +24,23 @@ const STALL_MS = 15_000;
 const FALLBACK_MS = 6_000;
 
 /**
- * ทางสำรองถามคิวทุกเท่านี้ — เพลงเปลี่ยนแล้วป้ายตามทันในไม่กี่วินาที
- * ทุกครั้งกินโควตาอ่านเท่าจำนวนเพลงในคิว (อย่างน้อย 1) ไลฟ์ 3 ชม. คิว 5 เพลง ≈ 11,000 ครั้ง
- * จ่ายเฉพาะเครื่องที่สายสดใช้ไม่ได้ สายสดกลับมาเมื่อไหร่ก็เลิกถาม
+ * ทางสำรองถามแค่ "เพลงที่กำลังเล่น" ทุกเท่านี้ — กินโควตาอ่าน 1 ครั้งต่อรอบ
+ *
+ * ★ ห้ามกลับไปดึงทั้งคิวถี่ๆ ★ รุ่นแรก (ต.ค. 2569) ดึงทั้งคิวทุก 5 วิ — ทุกรอบกินเท่าจำนวนเพลง
+ * ในคิว (รวมเพลงสำรอง) คูณจำนวน widget ที่เปิดใน TikTok Studio คูณจำนวนช่อง
+ * ผลคือโควตาอ่านฟรีวันละ 50,000 ครั้งหมดในชั่วโมงกว่าๆ แล้วทั้งเว็บอ่านอะไรไม่ได้จนข้ามวัน
  */
-const POLL_MS = 5_000;
+const PLAYING_POLL_MS = 15_000;
+
+/**
+ * ดึงทั้งคิว (กินเท่าจำนวนเพลง) แค่ทุกเท่านี้ หรือทันทีที่เพลงที่กำลังเล่นเปลี่ยน
+ * คิวถัดไปบนป้ายจึงช้าได้ไม่เกินสองนาทีตอนคนขอเพิ่ม — ยอมได้สำหรับทางสำรอง
+ * ราว 4 + (จำนวนเพลง ÷ 2) ครั้งต่อนาทีต่อ widget แทน 12 × จำนวนเพลง ของรุ่นแรก
+ */
+const FULL_POLL_MS = 120_000;
+
+/** ล้มติดกันก็ถอยห่างขึ้นเรื่อยๆ ไม่ยิงซ้ำรัวๆ ใส่ฐานข้อมูลที่กำลังมีปัญหา (เช่นโควตาหมด) */
+const MAX_BACKOFF_MS = 5 * 60_000;
 
 /** อ้างอิงคงที่ ไม่งั้นคิวว่างจะเป็นอาร์เรย์ใหม่ทุกเรนเดอร์แล้ววนไม่จบ */
 const EMPTY: SongRequest[] = [];
@@ -144,28 +156,59 @@ export default function SongWidget() {
 
     /*
       ทางสำรอง — สายสดเงียบเกิน FALLBACK_MS ก็ถามผ่าน REST เป็นระยะจนกว่าสายสดจะกลับมา
-      ถามช่องครั้งเดียวพอ (มี/ไม่มีไม่เปลี่ยนระหว่างไลฟ์) ที่เหลือถามแต่คิว
+      ถามช่องครั้งเดียวพอ (มี/ไม่มีไม่เปลี่ยนระหว่างไลฟ์)
+      ทุกรอบถามแค่เพลงที่กำลังเล่น (1 read) — ทั้งคิวดึงตามรอบ FULL_POLL_MS หรือตอนเพลงเปลี่ยน
+      (เพลงเปลี่ยน = คิวขยับ ลำดับถัดไปต้องใหม่ ส่วนเพลงเดิมแค่แทนใบเดิมด้วยของใหม่
+       เพราะตัวเล่นเขียนความยาวเพลงลงใบหลังเริ่มเล่น แถบเวลาบนการ์ดใช้ค่านั้น)
       ล้มครั้งไหนเก็บคิวล่าสุดไว้ ไม่ล้างจอทิ้งเพราะเน็ตสะดุดครั้งเดียว
     */
     let found: boolean | null = null;
+    let lastFull = 0;
+    let playingId: string | null = null;
+    let failures = 0;
     const pull = async () => {
       let queue: SongRequest[] | null = null;
+      let playing: SongRequest | null = null;
       let error: string | null = null;
       try {
         if (found === null) found = (await fetchChannelOnce(channelId)) !== null;
-        queue = found ? await fetchOpenSongQueue(channelId) : EMPTY;
+        if (!found) {
+          queue = EMPTY;
+        } else {
+          let full = Date.now() - lastFull >= FULL_POLL_MS;
+          if (!full) {
+            playing = await fetchPlayingSong(channelId);
+            full = (playing?.id ?? null) !== playingId;
+          }
+          if (full) {
+            queue = await fetchOpenSongQueue(channelId);
+            lastFull = Date.now();
+            playingId = queue.find((s) => s.status === "playing")?.id ?? null;
+            playing = null;
+          }
+        }
+        failures = 0;
       } catch (e) {
         error = (e as Error).message || "อ่านไม่ได้";
+        failures += 1;
       }
       if (stopped || live) return;
-      setRest((prev) => ({
-        channelId,
-        found,
-        queue: queue ?? (prev?.channelId === channelId ? prev.queue : EMPTY),
-        error,
-      }));
+      setRest((prev) => {
+        const before = prev?.channelId === channelId ? prev.queue : EMPTY;
+        const fresh = playing;
+        return {
+          channelId,
+          found,
+          queue: queue ?? (fresh ? before.map((s) => (s.id === fresh.id ? fresh : s)) : before),
+          error,
+        };
+      });
       // ไม่มีช่องนี้ก็ไม่ต้องถามต่อ ป้าย "ไม่พบช่องนี้" ค้างไว้อย่างนั้น
-      if (found !== false) poll = window.setTimeout(pull, POLL_MS);
+      if (found === false) return;
+      const wait = failures
+        ? Math.min(MAX_BACKOFF_MS, PLAYING_POLL_MS * 2 ** (failures - 1))
+        : PLAYING_POLL_MS;
+      poll = window.setTimeout(pull, wait);
     };
     poll = window.setTimeout(pull, FALLBACK_MS);
 

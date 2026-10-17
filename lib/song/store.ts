@@ -15,7 +15,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { getDb } from "@/lib/backend/firebase";
-import { restQueryIn } from "@/lib/backend/firestore-rest";
+import { restQueryEq, restQueryIn } from "@/lib/backend/firestore-rest";
 import type { SongConfig, SongRequest, SongStatus } from "./types";
 
 const COL = "channels";
@@ -133,6 +133,15 @@ export async function fetchOpenSongQueue(channelId: string): Promise<SongRequest
     "playing",
   ]);
   return list.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+}
+
+/**
+ * เพลงที่กำลังเล่นอยู่ใบเดียวผ่าน REST — กินโควตาอ่านแค่ 1 ครั้ง
+ * ทางสำรองของ widget ใช้ถามถี่ๆ แทน fetchOpenSongQueue ที่กินเท่าจำนวนเพลงทั้งคิว
+ */
+export async function fetchPlayingSong(channelId: string): Promise<SongRequest | null> {
+  const [song] = await restQueryEq<SongRequest>(`${COL}/${channelId}`, SONGS, "status", "playing", 1);
+  return song ?? null;
 }
 
 /**
