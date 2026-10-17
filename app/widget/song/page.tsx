@@ -14,6 +14,9 @@ import WidgetShell, { WidgetCard, WidgetHint } from "@/components/widget/WidgetS
 /** โชว์คิวถัดไปแค่ 3 เพลง มากกว่านี้ความสูงจะเกินกรอบ 620x300 ที่ออกแบบไว้ */
 const NEXT_LIMIT = 3;
 
+/** รอเซิร์ฟเวอร์นานเท่านี้แล้วยังเงียบ ถือว่าต่อไม่ติด — เน็ตช้าปกติตอบไม่เกินไม่กี่วินาที */
+const STALL_MS = 15_000;
+
 /** อ้างอิงคงที่ ไม่งั้นคิวว่างจะเป็นอาร์เรย์ใหม่ทุกเรนเดอร์แล้ววนไม่จบ */
 const EMPTY: SongRequest[] = [];
 
@@ -65,6 +68,12 @@ export default function SongWidget() {
    * (ส่วนขยายกันโฆษณาบางตัวบล็อก googleapis.com, เน็ตองค์กรบล็อก, กติกาเปลี่ยน)
    */
   const [queueError, setQueueError] = useState<string | null>(null);
+  /**
+   * รอเซิร์ฟเวอร์นานเกินไปแล้ว — ตอนต่อไม่ได้ SDK ไม่โยน error ให้ แค่ตอบจากแคชเงียบๆ
+   * (watchChannel ไม่เชื่อคำตอบนั้น channelFound จึงค้างเป็น null) ไม่จับเวลาไว้
+   * widget จะเป็นการ์ดเทาว่างๆ ไปตลอดโดยไม่มีอะไรบอกว่าต่อไม่ติด
+   */
+  const [stalledFor, setStalledFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (!channelId) return;
@@ -81,11 +90,16 @@ export default function SongWidget() {
       // อ่านไม่ได้ (เน็ต/สิทธิ์) ไม่ใช่ "ไม่มีช่อง" — อย่าไปกล่าวหาว่ารหัสผิด
       () => setChannelFound(true),
     );
+    const stall = window.setTimeout(() => setStalledFor(channelId), STALL_MS);
     return () => {
       stopQueue();
       stopChannel();
+      window.clearTimeout(stall);
     };
   }, [channelId]);
+
+  // เซิร์ฟเวอร์ตอบเรื่องช่องเมื่อไหร่ก็นับว่าต่อติด ป้ายหายเองโดยไม่ต้องรีเฟรช source
+  const stalled = stalledFor === channelId && channelFound === null;
 
   const { playing, queued } = splitQueue(queue);
   const next = queued.slice(0, NEXT_LIMIT);
@@ -106,13 +120,15 @@ export default function SongWidget() {
     ต่อฐานข้อมูลไม่ได้เลย — อาการจะเหมือนจอขาวเปล่าทุกประการ
     ต้องบอกให้รู้ ไม่งั้นคนเปิดจะไปไล่แก้ผิดจุด (นึกว่าลิงก์ผิดหรือ widget พัง)
   */
-  if (!hasBackend || queueError) {
+  if (!hasBackend || queueError || stalled) {
     return (
       <WidgetShell>
         <WidgetHint setup title="ต่อฐานข้อมูลไม่ได้">
           {!hasBackend
             ? "เว็บชุดนี้ถูกสร้างมาโดยไม่มีค่าเชื่อมต่อฐานข้อมูล จึงอ่านคิวไม่ได้เลย"
-            : `อ่านคิวไม่สำเร็จ — ${queueError}`}
+            : queueError
+              ? `อ่านคิวไม่สำเร็จ — ${queueError}`
+              : `รอเซิร์ฟเวอร์ตอบเกิน ${STALL_MS / 1000} วินาทีแล้ว ลิงก์ไม่ได้ผิด — เครื่องนี้ต่อฐานข้อมูลไม่ติด`}
           <br />
           ถ้าเครื่องอื่นเปิดได้แต่เครื่องนี้ไม่ได้ ลองปิดส่วนขยายกันโฆษณาเฉพาะเว็บนี้
           หรือเปลี่ยนเครือข่าย (บางที่บล็อก googleapis.com)

@@ -279,7 +279,18 @@ export function watchChannel(
   }
   return onSnapshot(
     doc(db, COL, id),
-    (snap) => onChange(snap.exists() ? (snap.data() as Channel) : null),
+    (snap) => {
+      /*
+        "ไม่มีเอกสาร" ที่ตอบจากแคชแปลว่า "ยังไม่รู้" ไม่ใช่ "ไม่มีช่องนี้"
+
+        ต่อเซิร์ฟเวอร์ไม่ได้เมื่อไหร่ SDK จะตอบจากแคชภายในไม่กี่วินาที
+        และถ้าแคชไม่เคยเห็นช่องนี้ก็ตอบว่าไม่มี — widget บนไลฟ์ @affarain
+        จึงขึ้น "ไม่พบช่องนี้" ทั้งที่ช่องอยู่ครบ คนเลยไปไล่ก๊อปลิงก์ใหม่ผิดจุด
+        รอให้เซิร์ฟเวอร์ยืนยันก่อนค่อยบอกว่าไม่มี
+      */
+      if (!snap.exists() && snap.metadata.fromCache) return;
+      onChange(snap.exists() ? (snap.data() as Channel) : null);
+    },
     (err) => onError?.(err),
   );
 }

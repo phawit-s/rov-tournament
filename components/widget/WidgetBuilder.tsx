@@ -10,10 +10,11 @@ import {
   type ReactNode,
 } from "react";
 import { motion } from "motion/react";
-import { authStore, hasBackend } from "@/lib/backend/firebase";
+import { hasBackend } from "@/lib/backend/firebase";
 import { tournamentStore } from "@/lib/tournament/store";
-import { watchMyChannels } from "@/lib/channel/store";
-import type { Channel } from "@/lib/channel/types";
+import { useManageableChannels } from "@/hooks/useChannels";
+import { useSiteRole } from "@/hooks/useRole";
+import { setHashParams, useHashParam } from "@/hooks/useClient";
 import Panel from "../ui/Panel";
 import Button from "../ui/Button";
 import PageHead from "../studio/PageHead";
@@ -140,9 +141,6 @@ const WIDGETS: WidgetDef[] = [
   },
 ];
 
-/** อ้างอิงคงที่ ไม่งั้น setState ตอน error จะสร้างอาร์เรย์ใหม่แล้วรีเรนเดอร์ไม่จบ */
-const NO_CHANNELS: Channel[] = [];
-
 /** สีสำเร็จรูปชุดเดียวกับสีสถานะของทั้งเว็บ กดแล้วได้โทนที่เข้ากับงานแน่ๆ */
 const ACCENT_PRESETS = ["a99bff", "7c6cf5", "35d6e8", "34e3b0", "ff5b7a", "ffb454"];
 
@@ -185,12 +183,7 @@ export default function WidgetBuilder() {
     tournamentStore.getSnapshot,
     tournamentStore.getServerSnapshot,
   );
-  useSyncExternalStore(
-    authStore.subscribe,
-    authStore.getSnapshot,
-    authStore.getServerSnapshot,
-  );
-  const user = authStore.user();
+  const { admin, uid } = useSiteRole();
   const [tournamentId, setTournamentId] = useState("");
   const [useCloud, setUseCloud] = useState(hasBackend);
   const [accent, setAccent] = useState("e6c894");
@@ -198,28 +191,17 @@ export default function WidgetBuilder() {
   const [copied, setCopied] = useState<string | null>(null);
 
   /*
-    ช่องทั้งหมดที่เราเป็นเจ้าของ — คนหนึ่งเปิดได้หลายช่องแล้ว
-    ลิงก์ widget ที่ผูกกับช่อง (แจ้งเตือน/เพลง) จึงต้องบอกให้ชัดว่าอันไหนของช่องไหน
-    ไม่งั้นจะแจกลิงก์ของช่องเดียวเงียบๆ แล้วคนเอาไปแปะผิดช่องโดยไม่รู้ตัว
-  */
-  const [myChannels, setMyChannels] = useState<Channel[]>(NO_CHANNELS);
-  const [pickedChannelId, setPickedChannelId] = useState("");
+    ช่องที่ทำ widget ให้ได้ — สตรีมเมอร์ได้เฉพาะช่องตัวเอง ผู้ดูแลได้ทุกช่อง
 
-  /*
-    ถามเฉพาะช่องของตัวเอง ไม่ใช่ดึงมาทั้งระบบแล้วค่อยกรองในเครื่อง
+    ผู้ดูแลต้องได้ทุกช่อง เพราะเป็นคนตั้ง OBS ให้สตรีมเมอร์จริงๆ
+    เคยกรองเหลือแค่ ownerUid === เรา แล้วพอโอนช่อง @affarain ให้เจ้าของตัวจริง
+    widget ของช่องนั้นทั้งชุดก็หายไปจากหน้านี้ของผู้ดูแลเงียบๆ
+    (ลิงก์ widget เป็นแค่ ?ch=รหัสช่อง ซึ่งอ่านได้สาธารณะอยู่แล้ว ไม่มีอะไรรั่ว)
 
-    ของเดิมดึง channels ทั้งคอลเลกชัน (กติกาเปิดอ่านสาธารณะอยู่แล้ว จึงผ่าน)
-    แล้วค่อย filter ด้วย ownerUid — แปลว่าสตรีมเมอร์คนหนึ่งต้องโหลดข้อมูลช่อง
-    ของทุกคนในระบบลงเครื่อง เพื่อจะใช้ช่องตัวเองสองสามช่อง
+    ช่องที่เลือกเก็บใน #c= แบบเดียวกับหน้าช่อง รีโหลดแล้วไม่เด้งกลับไปช่องแรก
   */
-  useEffect(() => {
-    if (!hasBackend || !user?.uid) return;
-    return watchMyChannels(
-      user.uid,
-      (list) => setMyChannels(list),
-      () => setMyChannels(NO_CHANNELS),
-    );
-  }, [user?.uid]);
+  const { channels } = useManageableChannels(admin, uid);
+  const pickedChannelId = useHashParam("c");
 
   // หน่วงสีก่อนส่งเข้า iframe ไม่งั้นพิมพ์โค้ดสีทีละตัวแล้วพรีวิวรีโหลดรัวๆ
   const previewAccent = useDebounced(accent, 400);
@@ -231,15 +213,17 @@ export default function WidgetBuilder() {
 
   const selected = tournaments.find((t) => t.id === tournamentId) ?? tournaments[0];
 
-  /* ช่องของเราเท่านั้น — ผู้ดูแลเห็นช่องคนอื่นได้ก็จริง แต่เอาไปทำ widget ของตัวเองไม่ได้ */
-  const owned = useMemo(
-    () => myChannels.filter((c) => c.ownerUid && c.ownerUid === user?.uid),
-    [myChannels, user?.uid],
-  );
+  /* ช่องของเราขึ้นก่อน ช่องคนอื่น (เห็นเฉพาะผู้ดูแล) ตามหลัง */
+  const pickable = useMemo(() => {
+    const mine = channels.filter((c) => c.ownerUid === uid);
+    const others = channels.filter((c) => c.ownerUid !== uid);
+    return [...mine, ...others];
+  }, [channels, uid]);
   /* ช่องที่เลือกไว้ในหน้านี้มาก่อน ไม่มีก็เอาช่องล่าสุดของเรา
      ตั้งใจไม่ไปดูร่างที่ค้างอยู่ในหน้าตั้งค่าช่อง — ร่างนั้นเป็นของแท็บนั้น
      ถ้ายังไม่เคยเปิดหน้านั้นในแท็บนี้มันจะว่างเปล่า แล้วลิงก์ widget จะขาดรหัสช่อง */
-  const activeChannel = owned.find((c) => c.id === pickedChannelId) ?? owned[0] ?? null;
+  const activeChannel =
+    pickable.find((c) => c.id === pickedChannelId) ?? pickable[0] ?? null;
 
   const makeUrl = useCallback(
     (widget: WidgetDef, accentValue: string, solid = false) => {
@@ -296,19 +280,21 @@ export default function WidgetBuilder() {
 
         {/* เลือกช่อง — มีผลเฉพาะ widget ที่ผูกกับช่อง (แจ้งเตือนโดเนท / เพลง)
             โผล่ก็ต่อเมื่อมีมากกว่าหนึ่งช่อง ช่องเดียวไม่ต้องให้เลือกให้รก */}
-        {owned.length > 1 && (
+        {pickable.length > 1 && (
           <div className="mb-5">
             <Label hint="ใช้กับ widget แจ้งเตือนโดเนทและเพลง — ทัวร์เลือกแยกด้านล่าง">
               ทำ widget ให้ช่องไหน
             </Label>
             <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-              {owned.map((c) => {
+              {pickable.map((c) => {
                 const on = c.id === activeChannel?.id;
+                // ช่องคนอื่นต้องบอกเจ้าของ ไม่งั้นผู้ดูแลแยกไม่ออกว่ากำลังทำลิงก์ให้ใคร
+                const owner = c.ownerUid !== uid ? c.ownerEmail?.split("@")[0] : null;
                 return (
                   <button
                     key={c.id}
                     type="button"
-                    onClick={() => setPickedChannelId(c.id)}
+                    onClick={() => setHashParams({ c: c.id })}
                     className={`min-h-11 shrink-0 cursor-pointer rounded-xl px-4 py-2 text-left transition-colors ${
                       on
                         ? "bg-iris/14 text-iris ring-1 ring-iris/45"
@@ -320,6 +306,7 @@ export default function WidgetBuilder() {
                     </span>
                     <span className="num block text-eyebrow text-muted">
                       {c.handle ? `@${c.handle}` : "ยังไม่ตั้ง handle"}
+                      {owner && ` · ของ ${owner}`}
                     </span>
                   </button>
                 );

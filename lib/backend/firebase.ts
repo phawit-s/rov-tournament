@@ -4,6 +4,7 @@ import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import {
   getFirestore,
   initializeFirestore,
+  memoryLocalCache,
   persistentLocalCache,
   persistentMultipleTabManager,
   type Firestore,
@@ -47,12 +48,20 @@ export function getDb(): Firestore | null {
     ถ้าไม่มีแคช ทุกครั้งที่เปิดหน้าจะเห็นรายการว่างจนกว่าเน็ตจะตอบ
     และแก้อะไรตอนเน็ตหลุดไม่ได้เลย — แคชนี้คืนสองอย่างนั้นกลับมาให้
     persistentMultipleTabManager เผื่อเปิดหลายแท็บพร้อมกัน (OBS + หน้าตั้งค่า)
+
+    ยกเว้นหน้า widget — ใช้แคชในหน่วยความจำ แต่ละ source ต่อเซิร์ฟเวอร์เอง
+    browser source ทุกตัวใน OBS ใช้ที่เก็บข้อมูลก้อนเดียวกัน โหมดหลายแท็บจึงให้
+    source ตัวเดียวเป็นคนต่อเน็ตแทนทุกตัว ถ้าตัวนั้นถูกพัก/ค้าง ตัวอื่นก็ค้างตาม
+    ทั้งที่ widget แค่โชว์ของสด แคชถาวรไม่ได้ช่วยอะไรมันเลย
   */
+  const widget = /\/widget\//.test(window.location.pathname);
   try {
     db = initializeFirestore(instance, {
-      localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager(),
-      }),
+      localCache: widget
+        ? memoryLocalCache()
+        : persistentLocalCache({
+            tabManager: persistentMultipleTabManager(),
+          }),
     });
   } catch {
     // เบราว์เซอร์บางตัวปิด IndexedDB (โหมดส่วนตัวบางรุ่น) — ใช้แบบไม่มีแคชแทน
