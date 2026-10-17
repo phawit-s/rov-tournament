@@ -61,15 +61,16 @@ export function useArtPalette(videoId: string | null | undefined): ArtPalette {
 /**
  * สีพื้นของ "เวที" (กล่องเพลงที่กำลังเล่น) จากสีปก
  *
- * ผสมสีปกเข้ากับพื้นหน้า 24% — สว่างยังเป็นพื้นอ่อน มืดยังเป็นพื้นเข้ม
+ * ผสมสีปกเข้ากับแผ่น (paper) 24% — สว่างยังเป็นพื้นอ่อน มืดยังเป็นพื้นเข้ม
  * ตัวหนังสือสีหลัก (ดำ/ขาว) อ่านออกเสมอโดยไม่ต้องคำนวณคอนทราสต์ต่อเพลง
- * ไม่มีเพลง = พื้นเทาธรรมดา
+ * ผสมกับ paper ไม่ใช่ canvas — พื้นหน้าเป็นเทาแล้ว เวทีต้องสว่างกว่าพื้นถึงจะดูยกขึ้นมา
+ * ไม่มีเพลง = แผ่นเปล่า
  */
 export function stageStyle(palette: ArtPalette, hasSong: boolean): CSSProperties {
   return {
     background: hasSong
-      ? `color-mix(in oklab, ${palette.glow} 24%, var(--c-canvas))`
-      : "var(--c-fill)",
+      ? `color-mix(in oklab, ${palette.glow} 24%, var(--c-paper))`
+      : "var(--c-paper)",
     transition: "background-color 600ms ease, background 600ms ease",
   };
 }

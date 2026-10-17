@@ -597,6 +597,102 @@ function allow(key, maxPerMin) {
 }
 
 /* ------------------------------------------------------------------ *
+ * ค้นเพลง — กันโควตา YouTube หมด/เสียเงินจากคนยิงรัว
+ *
+ * ค้นหนึ่งครั้ง = 100 หน่วยของ YouTube Data API (ฟรีวันละ 10,000 = ~100 ครั้ง)
+ * หน้าขอเพลงเปิดให้คนดูค้นได้ ซึ่งใครก็เปิดได้ และ ALLOWED_ORIGIN กันได้แค่เว็บอื่น
+ * ในเบราว์เซอร์ — สคริปต์ยิงตรงมาที่ Worker ได้เสมอ ด่านจริงจึงต้องอยู่ฝั่งนี้:
+ *
+ *   1. แคชตามคำค้น — คนในไลฟ์ขอเพลงฮิตซ้ำกันเยอะ ตอบซ้ำได้ฟรี
+ *   2. จำกัดต่อ IP เฉพาะคำขอที่ไปถึง YouTube จริง (MAX_SEARCH_PER_MIN ค่าปริยาย 6)
+ *      ผูก Rate Limiting binding ชื่อ SEARCH_LIMITER ไว้จะนับแม่นกว่า (ดู wrangler.toml)
+ *   3. เพดานรวมต่อวัน (SEARCH_DAILY_BUDGET) — ต้องผูก KV SONG_CACHE ถึงจะนับข้ามเครื่องได้
+ *      ถึงเพดานแล้วหยุดค้นจนข้ามวัน แทนที่จะปล่อยให้คนยิงจนโควตาของสตรีมเมอร์หมด
+ * ------------------------------------------------------------------ */
+
+const SEARCH_MIN_CHARS = 2;
+/** ผลค้นหาเก่าแค่ไหนยังใช้ได้ — เพลงไม่ได้เปลี่ยนรายชั่วโมง */
+const SEARCH_CACHE_TTL = 12 * 3600;
+
+/** คำค้นที่ถือว่าเหมือนกัน — ตัวเล็ก ช่องว่างซ้อนเหลือช่องเดียว */
+const searchKey = (q) => q.toLowerCase().replace(/\s+/g, " ").trim();
+
+/** แคชในหน่วยความจำของ instance — ใช้ได้ทุกที่ (Cache API ไม่รับประกันบน workers.dev) */
+const searchMemo = new Map();
+
+async function searchCacheGet(env, key) {
+  const hit = searchMemo.get(key);
+  if (hit && hit.until > Date.now()) return hit.items;
+  if (!env.SONG_CACHE) return null;
+  try {
+    const items = await env.SONG_CACHE.get(`search:${key}`, "json");
+    if (Array.isArray(items)) {
+      searchMemo.set(key, { items, until: Date.now() + SEARCH_CACHE_TTL * 1000 });
+      return items;
+    }
+  } catch {
+    // KV ล่มก็แค่ไม่มีแคช ไม่ต้องทำให้การค้นพัง
+  }
+  return null;
+}
+
+async function searchCachePut(env, key, items) {
+  // ไม่ให้ Map โตไม่หยุดถ้า instance อยู่ยาว — ทิ้งของเก่าสุดก่อน
+  if (searchMemo.size > 500) searchMemo.delete(searchMemo.keys().next().value);
+  searchMemo.set(key, { items, until: Date.now() + SEARCH_CACHE_TTL * 1000 });
+  if (!env.SONG_CACHE) return;
+  try {
+    await env.SONG_CACHE.put(`search:${key}`, JSON.stringify(items), {
+      expirationTtl: SEARCH_CACHE_TTL,
+    });
+  } catch {
+    // เขียนแคชไม่ได้ ผลค้นยังส่งกลับได้ตามปกติ
+  }
+}
+
+/** ยังค้นต่อได้ไหม (ต่อ IP) — binding แม่นกว่า ไม่มีก็นับในหน่วยความจำแบบเดียวกับ allow() */
+async function allowSearch(env, ip) {
+  if (env.SEARCH_LIMITER?.limit) {
+    try {
+      const { success } = await env.SEARCH_LIMITER.limit({ key: `search:${ip}` });
+      return success;
+    } catch {
+      // binding มีปัญหา — ถอยไปนับในหน่วยความจำ ไม่ปล่อยผ่านฟรี
+    }
+  }
+  return allow(`search:${ip}`, Number(env.MAX_SEARCH_PER_MIN || 6));
+}
+
+/**
+ * วันตามเวลาแปซิฟิก — โควตา YouTube รีเซ็ตเที่ยงคืนเวลานั้น
+ * ใช้ UTC-8 ตายตัว ช่วงเวลาออมแสงคลาดไปหนึ่งชั่วโมง ยอมรับได้สำหรับเพดานหยาบๆ
+ */
+const quotaDay = () => new Date(Date.now() - 8 * 3600 * 1000).toISOString().slice(0, 10);
+
+async function withinSearchBudget(env) {
+  const budget = Number(env.SEARCH_DAILY_BUDGET || 0);
+  if (!budget || !env.SONG_CACHE) return true; // ไม่ได้ตั้ง/ไม่มีที่นับ = ไม่จำกัด
+  try {
+    const used = Number((await env.SONG_CACHE.get(`search-count:${quotaDay()}`)) || 0);
+    return used < budget;
+  } catch {
+    return true;
+  }
+}
+
+/** นับหลังค้นสำเร็จเท่านั้น · KV ไม่ใช่ตัวนับแม่น (ยิงพร้อมกันอาจนับขาด) พอสำหรับเพดานรายวัน */
+async function countSearch(env) {
+  if (!env.SEARCH_DAILY_BUDGET || !env.SONG_CACHE) return;
+  try {
+    const key = `search-count:${quotaDay()}`;
+    const used = Number((await env.SONG_CACHE.get(key)) || 0);
+    await env.SONG_CACHE.put(key, String(used + 1), { expirationTtl: 2 * 86400 });
+  } catch {
+    // นับไม่ได้ก็ไม่ต้องทำให้ผลค้นที่ได้มาแล้วหาย
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * HTTP
  * ------------------------------------------------------------------ */
 
@@ -768,10 +864,22 @@ const handler = {
       const search = params.get("search");
       if (search !== null) {
         const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+        // ด่านแรก: กันยิงถล่มทั่วไป (นับรวมกับการตรวจสลิป)
         if (!allow(ip, Number(env.MAX_PER_MIN || 0))) return fail("rate-limited", cors);
 
         const q = search.trim().slice(0, 100);
         if (!q) return fail("empty-query", cors);
+        // คำเดียวตัวเดียวได้ผลมั่วและเปลืองโควตาเท่ากับคำค้นจริง
+        const key = searchKey(q);
+        if (key.length < SEARCH_MIN_CHARS) return fail("query-too-short", cors);
+
+        // คำค้นซ้ำ = ตอบจากแคช ไม่ถึง YouTube จึงไม่นับโควตาและไม่ติดด่านข้างล่าง
+        const cached = await searchCacheGet(env, key);
+        if (cached) return reply({ ok: true, items: cached, cached: true }, cors);
+
+        // ด่านที่สอง: เฉพาะคำขอที่จะไปถึง YouTube จริง — เข้มกว่าด่านแรกมาก
+        if (!(await allowSearch(env, ip))) return fail("search-rate-limited", cors, { retryAfter: 60 });
+        if (!(await withinSearchBudget(env))) return fail("daily-budget", cors);
         if (!env.YT_API_KEY) return fail("no-youtube-key", cors);
 
         const api = new URL("https://www.googleapis.com/youtube/v3/search");
@@ -792,20 +900,16 @@ const handler = {
           });
         }
 
-        return reply(
-          {
-            ok: true,
-            items: (data?.items ?? [])
-              .filter((it) => it?.id?.videoId)
-              .map((it) => ({
-                videoId: it.id.videoId,
-                title: it.snippet?.title ?? "",
-                author: it.snippet?.channelTitle ?? "",
-                thumb: it.snippet?.thumbnails?.medium?.url ?? null,
-              })),
-          },
-          cors,
-        );
+        const items = (data?.items ?? [])
+          .filter((it) => it?.id?.videoId)
+          .map((it) => ({
+            videoId: it.id.videoId,
+            title: it.snippet?.title ?? "",
+            author: it.snippet?.channelTitle ?? "",
+            thumb: it.snippet?.thumbnails?.medium?.url ?? null,
+          }));
+        await Promise.all([searchCachePut(env, key, items), countSearch(env)]);
+        return reply({ ok: true, items }, cors);
       }
 
       if (request.method !== "POST") {

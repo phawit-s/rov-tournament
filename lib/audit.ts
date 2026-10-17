@@ -25,6 +25,7 @@ export type AuditKind =
   | "tournament.publish"
   | "tournament.unpublish"
   | "channel.publish"
+  | "channel.delete"
   | "donation.approve"
   | "donation.reject"
   | "admin.add"
@@ -45,6 +46,7 @@ export const AUDIT_META: Record<AuditKind, { label: string; rgb: string }> = {
   "tournament.publish": { label: "เผยแพร่ทัวร์", rgb: "52 227 176" },
   "tournament.unpublish": { label: "ถอดทัวร์ออก", rgb: "255 91 122" },
   "channel.publish": { label: "อัปเดตช่อง", rgb: "110 155 240" },
+  "channel.delete": { label: "ลบช่อง", rgb: "255 91 122" },
   "donation.approve": { label: "อนุมัติสลิป", rgb: "169 155 255" },
   "donation.reject": { label: "ปฏิเสธสลิป", rgb: "255 91 122" },
   "admin.add": { label: "เพิ่มผู้ดูแล", rgb: "196 130 255" },

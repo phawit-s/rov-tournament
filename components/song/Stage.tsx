@@ -31,7 +31,7 @@ export default function Stage({
   return (
     <section
       aria-label="เพลงที่กำลังเล่น"
-      className="rounded-stage p-4 sm:p-5"
+      className="rounded-stage p-4 shadow-raise sm:p-5"
       style={stageStyle(palette, !!song)}
     >
       {song ? (

@@ -22,7 +22,7 @@ export default function SiteHeader({ wide = false }: { wide?: boolean }) {
   const { studio, role, signedIn, loading } = useSiteRole();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-canvas/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-line bg-canvas pt-[env(safe-area-inset-top)]">
       <div
         className={`mx-auto flex h-16 items-center gap-2 px-5 sm:px-8 ${wide ? "max-w-[1400px]" : "max-w-[1120px]"}`}
       >
@@ -45,7 +45,7 @@ export default function SiteHeader({ wide = false }: { wide?: boolean }) {
             ) : (
               <Link
                 href="/studio/"
-                className="inline-flex min-h-9 items-center rounded-full px-3 text-sm font-medium transition-colors hover:bg-fill"
+                className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium transition-colors hover:bg-fill sm:min-h-9"
               >
                 สำหรับสตรีมเมอร์
               </Link>

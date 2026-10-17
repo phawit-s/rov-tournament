@@ -159,7 +159,7 @@ export default function UserPicker({
         </>
       ) : (
         <>
-          <label className="flex min-h-12 items-center gap-2.5 rounded-field bg-fill px-4 focus-within:bg-canvas focus-within:shadow-[inset_0_0_0_2px_var(--c-ink)]">
+          <label className="flex min-h-12 items-center gap-2.5 rounded-field bg-fill px-4 focus-within:bg-paper focus-within:shadow-[inset_0_0_0_2px_var(--c-ink)]">
             <IconSearch className="h-4 w-4 shrink-0 text-muted" />
             <span className="sr-only">ค้นหาผู้ใช้</span>
             <input

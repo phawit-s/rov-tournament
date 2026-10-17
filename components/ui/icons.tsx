@@ -3,11 +3,14 @@ import type { ComponentType, ReactNode } from "react";
 type IconProps = { className?: string; strokeWidth?: number };
 
 /**
- * ไอคอนเส้นบางชุดกลางของทั้งเว็บ
+ * ไอคอนชุดกลางของทั้งเว็บ — น้ำหนักเส้นแบบ SF Symbols ของ iOS (regular)
+ *
+ * เดิมเส้น 1.6 ซึ่งพอย่อเหลือ 16–18px บนจอ เส้นจริงเหลือราว 1px ดูผอมจาง
+ * ไม่ใช่ภาษาเดียวกับแอปเพลงบน iOS ที่ผู้ใช้อยากได้ — ตั้งต้นที่ 2 ปลายมน มุมมน
  * ทุกตัวเป็น SVG ล้วน ไม่มี state จึงใช้ได้ทั้งฝั่ง server และ client
  * ใช้เป็นลายน้ำขนาดใหญ่ได้ด้วยการส่ง className ขนาดใหญ่ + strokeWidth บางลง
  */
-function base(children: ReactNode, className = "h-4 w-4", strokeWidth = 1.6) {
+function base(children: ReactNode, className = "h-4 w-4", strokeWidth = 2) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -216,9 +219,9 @@ export const IconSearch = ({ className, strokeWidth }: IconProps) =>
 export const IconMore = ({ className, strokeWidth }: IconProps) =>
   base(
     <>
-      <circle cx="5.5" cy="12" r="1.2" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
-      <circle cx="18.5" cy="12" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="5.5" cy="12" r="1.75" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.75" fill="currentColor" stroke="none" />
+      <circle cx="18.5" cy="12" r="1.75" fill="currentColor" stroke="none" />
     </>,
     className,
     strokeWidth,
@@ -284,7 +287,7 @@ export const IconMenu = ({ className, strokeWidth }: IconProps) =>
   base(<path d="M4 7h16M4 12h16M4 17h16" />, className, strokeWidth);
 
 export const IconClose = ({ className, strokeWidth }: IconProps) =>
-  base(<path d="M6 6l12 12M18 6 6 18" />, className, strokeWidth);
+  base(<path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />, className, strokeWidth);
 
 export const IconLogout = ({ className, strokeWidth }: IconProps) =>
   base(
@@ -386,11 +389,22 @@ export const IconPlus = ({ className, strokeWidth }: IconProps) =>
   base(<path d="M12 5v14M5 12h14" />, className, strokeWidth);
 
 export const IconArrowUp = ({ className, strokeWidth }: IconProps) =>
-  base(<path d="M12 19V5m0 0-6 6m6-6 6 6" />, className, strokeWidth);
+  base(<path d="M12 19.5V5m0 0-5.5 5.5M12 5l5.5 5.5" />, className, strokeWidth);
 
 export const IconArrowDown = ({ className, strokeWidth }: IconProps) =>
-  base(<path d="M12 5v14m0 0-6-6m6 6 6-6" />, className, strokeWidth);
+  base(<path d="M12 4.5V19m0 0-5.5-5.5M12 19l5.5-5.5" />, className, strokeWidth);
 
 /** ดันขึ้นหัวคิว */
 export const IconToTop = ({ className, strokeWidth }: IconProps) =>
-  base(<path d="M5 4.5h14M12 20V9m0 0-5 5m5-5 5 5" />, className, strokeWidth);
+  base(<path d="M5.5 4h13M12 20V8.5m0 0-5 5m5-5 5 5" />, className, strokeWidth);
+
+/** วงกลมมีขีด (minus.circle) แบบ SF — "เอาออกจากคิว" ในเมนูคำสั่งของแถวคิว */
+export const IconMinusCircle = ({ className, strokeWidth }: IconProps) =>
+  base(
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M8.5 12h7" />
+    </>,
+    className,
+    strokeWidth,
+  );

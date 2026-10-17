@@ -87,7 +87,6 @@ function Overview({ channel }: { channel: Channel }) {
       ? `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}`
       : "";
   const requestUrl = channel.handle ? `${origin}/song/#h=${channel.handle}` : null;
-  const playerHref = `/player/#ch=${channel.id}`;
 
   /* เปิด/ปิดรับมีผลทันที (เขียนตรงลงช่อง) ไม่ต้องผ่านปุ่มบันทึกของหน้าตั้งค่า
      — ปิดรับกลางไลฟ์แล้วต้องปิดเดี๋ยวนั้น */
@@ -136,20 +135,13 @@ function Overview({ channel }: { channel: Channel }) {
           }
           footer={
             <div className="mt-5 flex flex-wrap gap-2 px-1">
-              <a
-                href={playerHref}
-                target="_blank"
-                rel="noopener"
-                className="inline-flex min-h-11 items-center rounded-full bg-ink px-5 font-medium text-onink transition-opacity hover:opacity-85"
-              >
-                เปิดตัวเล่น
-              </a>
+              {/* ตัวเล่นกับคิวอยู่หน้าเดียวกันในสตูดิโอแล้ว (ต.ค. 2569) — ปุ่มเดียวพอ */}
               <Link
                 href={studioHref("/studio/queue/", channel.id)}
-                className="inline-flex min-h-11 items-center rounded-full bg-canvas/70 px-5 font-medium transition-colors hover:bg-canvas"
+                className="inline-flex min-h-11 items-center rounded-full bg-ink px-5 font-medium text-onink shadow-btn transition-opacity hover:opacity-85"
               >
-                จัดคิว
-                <span className="num ml-2 text-muted">{queued.length}</span>
+                เปิดตัวเล่นและคิว
+                <span className="num ml-2 opacity-70">{queued.length}</span>
               </Link>
             </div>
           }

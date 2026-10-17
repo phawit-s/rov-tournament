@@ -62,7 +62,7 @@ export default function Tabs<K extends string>({
               grow ? "flex-1" : ""
             } ${SIZE[size]} ${
               on
-                ? "bg-canvas font-semibold text-ink shadow-[0_1px_3px_rgb(0_0_0/0.12)] dark:bg-fill-2"
+                ? "bg-paper font-semibold text-ink shadow-[0_1px_3px_rgb(0_0_0/0.12)] dark:bg-fill-2"
                 : "text-muted hover:text-ink"
             }`}
           >
@@ -87,7 +87,7 @@ export function StickyTabs<K extends string>(props: {
   label: string;
 }) {
   return (
-    <div className="sticky top-16 z-30 -mx-1 bg-canvas/90 px-1 py-2 backdrop-blur">
+    <div className="sticky top-16 z-30 -mx-1 bg-canvas px-1 py-2">
       <Tabs {...props} size="md" grow />
     </div>
   );

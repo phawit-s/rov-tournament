@@ -6,6 +6,10 @@
   สีมาจากเพลงเท่านั้น: หน้าจอเป็นขาว ดำ เทา สีที่เหลือมาจากปกเพลง (--art)
   ทุกค่าที่ต้องพลิกตามธีมอยู่ใน :root / [data-theme="dark"] ด้านล่าง
   @theme แค่ชี้ไปหาตัวแปรพวกนั้น Tailwind จึงสร้างคลาสที่พลิกตามธีมได้เอง
+
+  มิติ (ต.ค. 2569 — ผู้ใช้บอกว่า "ขาวเกินไป"): พื้นหน้าเป็นเทาอมฟ้าอ่อนมีแสงฟุ้งด้านบน
+  ของที่ต้องอ่านเป็นก้อนลอยขึ้นมาเป็นแผ่นขาว (surface / shadow-card)
+  fill กับ line เป็นสีโปร่ง — วางบนพื้นเทาหรือบนแผ่นขาวก็ยังเห็นเท่ากัน
 */
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
@@ -51,45 +55,93 @@
   --radius-art: 0.625rem;
   --radius-thumb: 0.375rem;
 
-  /* ของลอยเท่านั้นที่มีเงา (เมนู dialog toast) ของที่วางบนพื้นไม่มี */
+  /* ของที่ลอยเหนือทุกอย่าง (เมนู dialog toast) — แผ่นที่วางบนพื้นใช้ shadow-card ด้านล่าง */
   --shadow-float: 0 1px 2px rgb(0 0 0 / 0.08), 0 12px 32px -8px rgb(0 0 0 / 0.22);
 
   --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 :root {
-  --c-canvas: #ffffff;
-  --c-fill: #f1f1f4;
-  --c-fill-2: #e6e6eb;
+  --c-canvas: #eef0f4;
+  /* โปร่ง ไม่ใช่เทาทึบ — ช่องกรอก/ปุ่มรองต้องเห็นได้ทั้งบนพื้นเทาและบนแผ่นขาว
+     เทาทึบค่าเดียวจะกลืนไปกับพื้นอย่างใดอย่างหนึ่งเสมอ */
+  --c-fill: rgb(22 27 45 / 0.055);
+  --c-fill-2: rgb(22 27 45 / 0.1);
   --c-paper: #ffffff;
   --c-ink: #000000;
   --c-onink: #ffffff;
-  --c-muted: #5c5c66;
-  --c-faint: #8e8e98;
-  --c-line: #e4e4e9;
+  --c-muted: #5a5c68;
+  --c-faint: #8a8c98;
+  --c-line: rgb(22 27 45 / 0.1);
   --c-live: #d8232a;
   --c-open: #0f7a3b;
   --c-danger: #c4271e;
   /* สีจากปกเพลง r g b — คอมโพเนนต์ที่รู้จักเพลงเป็นคนตั้งทับ */
   --art: 142 142 152;
+
+  /* แผ่นที่วางบนพื้น: ขอบบางในตัวเงา + เงาใกล้ + เงาฟุ้งไกล (ไม่ต้องใส่ border/ring ซ้ำ) */
+  --c-shadow-card:
+    0 0 0 1px rgb(22 27 45 / 0.05), 0 1px 2px rgb(22 27 45 / 0.05),
+    0 10px 28px -14px rgb(22 27 45 / 0.22);
+  --c-shadow-raise:
+    0 0 0 1px rgb(22 27 45 / 0.06), 0 2px 4px rgb(22 27 45 / 0.06),
+    0 18px 40px -16px rgb(22 27 45 / 0.3);
+  /* ปุ่มหลัก — ขอบบนสว่างนิดเดียวให้ดูนูน */
+  --c-shadow-btn:
+    inset 0 1px 0 rgb(255 255 255 / 0.16), 0 1px 2px rgb(0 0 0 / 0.2),
+    0 8px 18px -8px rgb(0 0 0 / 0.45);
+  /* แสงฟุ้งบนพื้น — เทาอมฟ้ากับเทาอมทราย จางพอไม่กลายเป็น "สีแบรนด์" */
+  --c-glow-1: rgb(176 190 228 / 0.5);
+  --c-glow-2: rgb(232 214 198 / 0.45);
   color-scheme: light;
 }
 
 [data-theme="dark"] {
-  --c-canvas: #000000;
-  --c-fill: #1c1c1f;
-  --c-fill-2: #2a2a2e;
-  --c-paper: #161618;
+  --c-canvas: #08080b;
+  --c-fill: rgb(255 255 255 / 0.07);
+  --c-fill-2: rgb(255 255 255 / 0.12);
+  --c-paper: #151519;
   --c-ink: #ffffff;
   --c-onink: #000000;
   --c-muted: #a3a3ad;
   --c-faint: #6e6e78;
-  --c-line: #2c2c31;
+  --c-line: rgb(255 255 255 / 0.09);
   --c-live: #ff453a;
   --c-open: #32d74b;
   --c-danger: #ff6961;
   --art: 90 90 98;
+
+  /* บนพื้นมืด เงาแทบไม่เห็น — ความนูนมาจากขอบบนสว่างแทน */
+  --c-shadow-card:
+    0 0 0 1px rgb(255 255 255 / 0.06), inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 14px 34px -18px rgb(0 0 0 / 0.95);
+  --c-shadow-raise:
+    0 0 0 1px rgb(255 255 255 / 0.09), inset 0 1px 0 rgb(255 255 255 / 0.07),
+    0 22px 44px -18px rgb(0 0 0 / 1);
+  --c-shadow-btn: inset 0 -1px 0 rgb(0 0 0 / 0.14), 0 6px 18px -8px rgb(255 255 255 / 0.25);
+  --c-glow-1: rgb(70 88 160 / 0.26);
+  --c-glow-2: rgb(130 90 150 / 0.16);
   color-scheme: dark;
+}
+
+/*
+  แผ่นที่ยกขึ้นจากพื้น — กลุ่มการตั้งค่า แผงในสตูดิโอ การ์ดในหน้าสาธารณะ
+  เขียนเป็น utility เองเพราะเงาต้องพลิกตามธีม (ค่ามาจากตัวแปรด้านบน)
+  ไม่ใช้คู่กับ ring-* — ring ก็ใช้ box-shadow แล้วจะทับกัน (ขอบบางอยู่ในเงาแล้ว)
+*/
+@utility shadow-card {
+  box-shadow: var(--c-shadow-card);
+}
+@utility shadow-raise {
+  box-shadow: var(--c-shadow-raise);
+}
+@utility shadow-btn {
+  box-shadow: var(--c-shadow-btn);
+}
+@utility surface {
+  background-color: var(--c-paper);
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--c-shadow-card);
 }
 
 /* ---------------- พื้นฐาน ---------------- */
@@ -107,6 +159,29 @@ body {
   font-family: var(--font-sans);
   line-height: 1.6;
   min-height: 100dvh;
+  /*
+    แสงฟุ้งสองดวงด้านบน + ไล่เข้มลงล่างนิดเดียว — ให้พื้นมีความลึกแทนขาวแบน
+    หน้า widget ทับด้วย background: transparent !important ใน app/widget/layout.tsx
+    อยู่แล้ว (shorthand ล้าง background-image ด้วย) OBS จึงยังโปร่ง
+
+    ห้ามใส่ background-attachment: fixed — iOS Safari ไม่รองรับ (เพิกเฉยเฉยๆ) ส่วน Android
+    ต้องวาดพื้นใหม่ทั้งจอทุกเฟรมที่เลื่อน = เลื่อนกระตุกบนเครื่องรุ่นกลางลงล่าง
+    ให้แสงอยู่บนหัวหน้าแล้วเลื่อนหายไปพร้อมเนื้อหาแทน
+  */
+  background-image:
+    radial-gradient(70rem 34rem at 8% -6%, var(--c-glow-1), transparent 70%),
+    radial-gradient(56rem 30rem at 100% -4%, var(--c-glow-2), transparent 68%),
+    linear-gradient(to bottom, transparent 40%, rgb(22 27 45 / 0.035));
+}
+
+/* แตะแล้วตอบทันที — ปิดการรอดูว่าจะแตะสองครั้งเพื่อซูมไหม (หน่วง ~300ms บนบางเครื่อง) */
+a,
+button,
+[role="button"],
+input,
+label,
+summary {
+  touch-action: manipulation;
 }
 
 ::selection {

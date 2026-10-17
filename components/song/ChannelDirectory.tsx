@@ -121,7 +121,7 @@ export default function ChannelDirectory() {
         </div>
       </section>
 
-      <section className="mt-20 border-t border-line pt-10">
+      <section className="surface mt-16 p-6 sm:p-10">
         <h2 className="text-title font-bold">เป็นสตรีมเมอร์?</h2>
         <p className="mt-2 max-w-[36rem] text-muted">
           เปิดคิวขอเพลงให้ช่องของคุณ คนดูสแกน QR บนไลฟ์แล้วขอเพลงได้ทันที
@@ -154,7 +154,8 @@ function ChannelTile({ channel }: { channel: Channel }) {
 
   return (
     <Link href={`/song/#h=${channel.handle}`} className="group block min-w-0">
-      <div className="relative">
+      {/* ปกยกขึ้นจากพื้นเทา และลอยขึ้นอีกนิดตอนชี้ — ตอบการกระทำ ไม่ได้ขยับเอง */}
+      <div className="relative rounded-art shadow-card transition-[transform,box-shadow] duration-200 ease-out group-hover:-translate-y-0.5 group-hover:shadow-raise">
         {playing ? (
           <Cover videoId={playing.videoId} square className="w-full" />
         ) : avatar ? (

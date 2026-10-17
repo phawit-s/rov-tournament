@@ -3,7 +3,6 @@ import {
   IconGauge,
   IconMonitor,
   IconPlay,
-  IconQueue,
   IconShield,
   IconSliders,
 } from "@/components/ui/icons";
@@ -16,6 +15,8 @@ export type StudioBadge = "streamerRequests";
 export type StudioItem = {
   href: string;
   label: string;
+  /** ชื่อสั้นใต้ไอคอนบน dock มือถือ (~60px ต่อช่อง) — ไม่ใส่ = ใช้ label */
+  short?: string;
   Icon: IconType;
   /** เปิดได้เฉพาะผู้ดูแลระบบ */
   admin?: boolean;
@@ -25,15 +26,17 @@ export type StudioItem = {
 };
 
 /**
- * สารบัญของสตูดิโอ — แถบข้าง (จอกว้าง) กับแถบแท็บ (มือถือ) ใช้ชุดเดียวกัน
- * เรียงตามความถี่ที่ใช้ระหว่างไลฟ์: ดูภาพรวม → จัดคิว → เปิดตัวเล่น → ตั้งค่าที่แก้นานๆ ครั้ง
+ * สารบัญของสตูดิโอ — dock ล่างจอ (ทั้งจอกว้างและมือถือ) ใช้ชุดนี้
+ * เรียงตามความถี่ที่ใช้ระหว่างไลฟ์: ดูภาพรวม → คิว/ตัวเล่น → ตั้งค่าที่แก้นานๆ ครั้ง
+ *
+ * ตัวเล่นอยู่ในหน้าคิวแล้ว (ต.ค. 2569) ไม่มีเมนูแยก — /player/ ยังเปิดเป็นหน้าต่างแยกได้
+ * จากปุ่มในหน้าคิว สำหรับคนที่จับหน้าต่างตัวเล่นเข้า OBS
  */
 export const STUDIO_NAV: StudioItem[] = [
   { href: "/studio/", label: "ภาพรวม", Icon: IconGauge },
-  { href: "/studio/queue/", label: "คิวเพลง", Icon: IconQueue },
-  { href: "/player/", label: "ตัวเล่น", Icon: IconPlay, external: true },
-  { href: "/studio/channel/", label: "ตั้งค่าช่อง", Icon: IconSliders },
-  { href: "/studio/widgets/", label: "ลิงก์สำหรับ OBS", Icon: IconMonitor },
+  { href: "/studio/queue/", label: "คิวและตัวเล่น", short: "คิวเพลง", Icon: IconPlay },
+  { href: "/studio/channel/", label: "ตั้งค่าช่อง", short: "ตั้งค่า", Icon: IconSliders },
+  { href: "/studio/widgets/", label: "ลิงก์สำหรับ OBS", short: "OBS", Icon: IconMonitor },
   {
     href: "/studio/roles/",
     label: "สตรีมเมอร์",

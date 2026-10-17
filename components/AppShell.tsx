@@ -41,15 +41,15 @@ export default function AppShell({
       </main>
       <footer className="border-t border-line">
         <div
-          className={`mx-auto flex ${width} flex-wrap items-center gap-x-6 gap-y-2 px-5 py-8 pb-[calc(2rem+env(safe-area-inset-bottom))] text-sm text-muted sm:px-8`}
+          className={`mx-auto flex ${width} flex-wrap items-center gap-x-6 gap-y-0 px-5 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] text-sm text-muted sm:px-8`}
         >
           <span className="font-semibold text-ink">{BRAND}</span>
           <span>ขอเพลงให้ไลฟ์ที่คุณดูอยู่</span>
           <span className="flex-1" />
-          <Link href="/" className="hover:text-ink">
+          <Link href="/" className="inline-flex min-h-11 items-center hover:text-ink">
             ช่องที่เปิดรับเพลง
           </Link>
-          <Link href="/studio/" className="hover:text-ink">
+          <Link href="/studio/" className="inline-flex min-h-11 items-center hover:text-ink">
             สำหรับสตรีมเมอร์
           </Link>
         </div>

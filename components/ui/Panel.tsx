@@ -3,9 +3,8 @@ import type { CSSProperties, ReactNode } from "react";
 /**
  * แผ่นจัดกลุ่ม — ใช้เมื่อจำเป็นต้องล้อมของหลายชิ้นให้อ่านเป็นก้อนเดียว
  *
- * ตั้งใจให้เรียบที่สุด: ไม่มีเงา (ของที่วางบนพื้นไม่ลอย) ขอบบางหรือพื้นเทาอย่างใดอย่างหนึ่ง
- *   plain / feature  ขอบบาง พื้นเดียวกับหน้า
- *   quiet            พื้นเทา ไม่มีขอบ — กลุ่มย่อยที่อยู่ในกลุ่มอีกที
+ *   plain / feature  แผ่นขาวยกขึ้นจากพื้นเทา (เงานุ่ม ขอบบางอยู่ในเงา)
+ *   quiet            พื้นเทาโปร่ง ไม่มีเงา — กลุ่มย่อยที่อยู่ในแผ่นอีกที
  *
  * ก่อนใช้ ถามตัวเองก่อนว่าแถว + เส้นคั่นพอไหม (docs/DESIGN.md ข้อ 3)
  * พร็อพ accent / interactive / tag / state / ornament เป็นของดีไซน์เก่า รับไว้แต่ไม่ใช้
@@ -25,8 +24,8 @@ type Props = {
 };
 
 const LOOK: Record<Variant, string> = {
-  plain: "border border-line",
-  feature: "border border-line",
+  plain: "bg-paper shadow-card",
+  feature: "bg-paper shadow-card",
   quiet: "bg-fill",
 };
 

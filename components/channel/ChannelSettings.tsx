@@ -13,6 +13,7 @@ import {
   channelStore,
   createChannel,
   decideChannelSeed,
+  deleteChannel,
   emptyChannel,
   findChannelByHandle,
   pushChannelAs,
@@ -21,6 +22,7 @@ import { normalizeHandle, type Channel } from "@/lib/channel/types";
 import { DEFAULT_SONG_CONFIG, type SongConfig } from "@/lib/song/types";
 import PageHead from "../studio/PageHead";
 import Button from "../ui/Button";
+import ConfirmDialog from "../ui/ConfirmDialog";
 import ImagePicker from "../ui/ImagePicker";
 import { SwitchRow } from "../ui/Switch";
 import { toast } from "../ui/Toast";
@@ -207,6 +209,7 @@ export default function ChannelSettings() {
       busy={busy}
       setBusy={setBusy}
       onAddChannel={() => void addChannel()}
+      otherChannelId={ownChannels.find((c) => c.id !== activeId)?.id ?? null}
     />
   );
 }
@@ -220,6 +223,7 @@ function Editor({
   busy,
   setBusy,
   onAddChannel,
+  otherChannelId,
 }: {
   activeId: string;
   channel: Channel;
@@ -229,10 +233,14 @@ function Editor({
   busy: boolean;
   setBusy: (v: boolean) => void;
   onAddChannel: () => void;
+  /** ช่องอื่นของเราที่จะพาไปหลังลบช่องนี้ — null = ไม่มีช่องอื่นแล้ว */
+  otherChannelId: string | null;
 }) {
   const reduced = useReducedMotion();
   const user = authStore.user();
   const [handleTaken, setHandleTaken] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const name = channel.name || channel.handle || "ช่องนี้";
   const songs: SongConfig = { ...DEFAULT_SONG_CONFIG, ...channel.songs };
@@ -286,9 +294,36 @@ function Editor({
     }
   };
 
+  /** คำที่ต้องพิมพ์ยืนยันก่อนลบ — ชื่อลิงก์ถ้ามี (ไม่ซ้ำกับช่องอื่น) ไม่งั้นชื่อช่อง */
+  const deletePhrase = channel.handle || channel.name || activeId;
+
+  const remove = async () => {
+    setDeleting(true);
+    try {
+      await deleteChannel(activeId);
+      void recordAudit("channel.delete", {
+        id: activeId,
+        name: channel.name || channel.handle,
+        detail: editingOther ? `ลบโดยผู้ดูแล (เจ้าของ ${channel.ownerEmail ?? channel.ownerUid})` : undefined,
+      });
+      toast(`ลบช่อง ${name} แล้ว`, "success");
+      /*
+        สลับไปช่องอื่นก่อน แล้วค่อยทิ้งร่าง — กลับลำดับแล้วหน้าจะเห็น "ร่างหาย + คลาวด์ไม่มี"
+        ของช่องเดิมชั่วขณะ แล้วโชว์ "ไม่พบช่องนี้" แวบหนึ่งก่อนจะสลับ
+      */
+      setHashParams({ c: otherChannelId });
+      channelStore.set(activeId, null);
+    } catch {
+      // ลบลูกก่อนแม่ ล้มกลางทางช่องจึงยังอยู่ครบ กดลบซ้ำได้
+      toast("ลบช่องไม่สำเร็จ ช่องยังอยู่ครบ เช็คอินเทอร์เน็ตแล้วลองใหม่", "error");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     /* เว้นที่ท้ายหน้าไว้ให้แถบบันทึกที่ลอยอยู่ ไม่ให้ทับช่องสุดท้าย */
-    <div className="space-y-12 pb-32">
+    <div className="space-y-6 pb-32">
       <PageHead
         title="ตั้งค่าช่อง"
         description={
@@ -462,14 +497,13 @@ function Editor({
             ? `มี ${songs.filler?.length} เพลง จัดการได้ในตัวเล่น`
             : "ยังไม่มีเพลงสำรอง เพิ่มได้ในตัวเล่น"}
         </p>
-        <a
-          href={`/player/#ch=${activeId}`}
-          target="_blank"
-          rel="noopener"
+        {/* ตัวเล่นอยู่ในสตูดิโอแล้ว (หน้าคิว) — เปิดในแท็บเดิม ไม่ต้องแยกหน้าต่าง */}
+        <Link
+          href={studioHref("/studio/queue/", activeId)}
           className="mt-3 inline-flex min-h-11 items-center rounded-full bg-fill px-5 font-medium transition-colors hover:bg-fill-2"
         >
           เปิดตัวเล่น
-        </a>
+        </Link>
       </Group>
 
       {!editingOther && (
@@ -486,16 +520,50 @@ function Editor({
         </Group>
       )}
 
-      {/* แถบบันทึกลอย — โผล่เฉพาะตอนมีของค้าง กดได้จากตรงไหนก็ได้ในหน้า */}
+      {/* ลบได้เฉพาะช่องที่มีอยู่บนคลาวด์แล้ว — ช่องที่ยังเป็นร่างล้วนแค่รีเฟรชก็หายเอง */}
+      {canManage && !neverPublished && (
+        <Group
+          title="ลบช่อง"
+          description="ลบช่องนี้พร้อมคิวและประวัติเพลงทั้งหมด ย้อนกลับไม่ได้"
+          tone="danger"
+        >
+          <p className="text-muted">
+            ลิงก์ขอเพลง {channel.handle ? <span className="font-medium text-ink">/song/#h={channel.handle}</span> : null}{" "}
+            ลิงก์ตัวเล่น และลิงก์ widget ที่ใส่ไว้ใน OBS ของช่องนี้จะใช้ไม่ได้ทันที
+          </p>
+          <Button
+            variant="danger"
+            className="mt-4"
+            loading={deleting}
+            disabled={busy || deleting}
+            onClick={() => setConfirmDelete(true)}
+          >
+            ลบช่องนี้
+          </Button>
+          <ConfirmDialog
+            open={confirmDelete}
+            title={`ลบช่อง ${name}?`}
+            description="คิว ประวัติเพลง และการตั้งค่าทั้งหมดของช่องนี้จะหายถาวร กู้คืนไม่ได้"
+            confirmText="ลบช่องถาวร"
+            confirmPhrase={deletePhrase}
+            onConfirm={() => void remove()}
+            onClose={() => setConfirmDelete(false)}
+          />
+        </Group>
+      )}
+
+      {/* แถบบันทึกลอย — โผล่เฉพาะตอนมีของค้าง กดได้จากตรงไหนก็ได้ในหน้า
+          ซ่อนระหว่างลบ: ระหว่างนั้นคลาวด์บอกว่าช่องหายแล้ว แถบจะกลายเป็น "เปิดช่อง"
+          ซึ่งกดแล้วสร้างช่องที่กำลังลบขึ้นมาใหม่ */}
       <AnimatePresence>
-        {dirty && canManage && (
+        {dirty && canManage && !deleting && (
           <motion.div
             initial={reduced ? false : { y: 40, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={reduced ? undefined : { y: 40, opacity: 0 }}
             transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-            /* lg:pl-64 = ความกว้างแถบข้างของสตูดิโอ ไม่ชดเชยแล้วแถบจะเยื้องจากกลางเนื้อหา */
-            className="pointer-events-none fixed inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 px-4 lg:pl-64"
+            /* ลอยเหนือ dock ของสตูดิโอ (--dock-space ตั้งโดย components/ui/Dock.tsx) */
+            className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--dock-space,0px)+max(1rem,env(safe-area-inset-bottom)))] z-40 px-4"
           >
             <div className="pointer-events-auto mx-auto flex max-w-2xl flex-wrap items-center gap-x-4 gap-y-3 rounded-sheet bg-paper py-3 pr-3 pl-5 shadow-float ring-1 ring-line">
               <div className="min-w-0 flex-1">
@@ -521,20 +589,25 @@ function Editor({
   );
 }
 
-/** กลุ่มการตั้งค่า — หัวข้อซ้าย เนื้อหาขวาบนจอกว้าง ซ้อนกันบนมือถือ */
+/**
+ * กลุ่มการตั้งค่า — แผ่นขาวยกจากพื้น หัวข้อซ้าย เนื้อหาขวาบนจอกว้าง ซ้อนกันบนมือถือ
+ * tone="danger" = ของที่ย้อนไม่ได้ หัวข้อเป็นสีแดง ให้สะดุดตาก่อนกด
+ */
 function Group({
   title,
   description,
+  tone,
   children,
 }: {
   title: string;
   description?: string;
+  tone?: "danger";
   children: ReactNode;
 }) {
   return (
-    <section className="grid gap-4 border-t border-line pt-8 md:grid-cols-[14rem_minmax(0,1fr)] md:gap-10">
+    <section className="surface grid gap-4 p-6 sm:p-8 md:grid-cols-[14rem_minmax(0,1fr)] md:gap-10">
       <div>
-        <h2 className="text-lg font-bold">{title}</h2>
+        <h2 className={`text-lg font-bold ${tone === "danger" ? "text-danger" : ""}`}>{title}</h2>
         {description && <p className="mt-1 text-sm text-muted">{description}</p>}
       </div>
       <div className="min-w-0">{children}</div>

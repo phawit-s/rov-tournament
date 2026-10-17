@@ -7,34 +7,41 @@ import { AnimatePresence, motion } from "motion/react";
 import { authStore, hasBackend } from "@/lib/backend/firebase";
 import { useLive } from "@/lib/backend/live";
 import { watchStreamerRequests, type StreamerRequest } from "@/lib/backend/roles";
+import { repairDuplicatedHash } from "@/lib/hash";
 import { safeImageSrc } from "@/lib/safe";
 import type { Channel } from "@/lib/channel/types";
-import { ROLE_LABEL, useSiteRole, type RoleInfo } from "@/hooks/useRole";
+import { useSiteRole, type RoleInfo } from "@/hooks/useRole";
 import { studioHref, useStudioChannel } from "@/hooks/useStudioChannel";
 import AuthPanel from "@/components/auth/AuthPanel";
 import ProfileGate from "@/components/auth/ProfileGate";
-import { AccountMenu, Avatar, Wordmark } from "@/components/SiteHeader";
+import { AccountMenu, Wordmark } from "@/components/SiteHeader";
 import ThemeToggle from "@/components/ui/ThemeToggle";
-import ToastHost, { toast } from "@/components/ui/Toast";
+import ToastHost from "@/components/ui/Toast";
 import { IconArrowLeft, IconCheck, IconChevronDown, IconSearch } from "@/components/ui/icons";
 import { EmptyState, Skeleton } from "@/components/ui/kit";
 import StreamerRequestPanel from "./StreamerRequest";
-import { isStudioActive, studioNavFor, type StudioItem } from "./nav";
+import { isStudioActive, studioNavFor } from "./nav";
+import StudioPlayer from "./StudioPlayer";
+import Dock, { type DockItem } from "@/components/ui/Dock";
 
 const NO_REQUESTS: StreamerRequest[] = [];
 
 /**
  * เปลือกของสตูดิโอ (หลังบ้านของสตรีมเมอร์)
  *
- * จอกว้าง: แถบข้างถาวร — ชื่อเว็บ ตัวเลือกช่อง เมนู บัญชี
- * มือถือ: แถบบน + แถบเมนูเลื่อนแนวนอนใต้แถบบน (ไม่มีลิ้นชักให้ต้องกดเปิดก่อน
- * สตรีมเมอร์ที่จัดคิวจากมือถือระหว่างไลฟ์ต้องสลับหน้าได้ด้วยนิ้วเดียว)
+ * บน: ชื่อเว็บ · ตัวเลือกช่อง · ธีม · บัญชี
+ * ล่าง: dock เมนู (ต.ค. 2569 แทนแถบข้างกับแถบแท็บเดิม) ลอยกลางจอ — บนมือถืออยู่ระดับ
+ * นิ้วโป้ง สตรีมเมอร์ที่จัดคิวจากมือถือระหว่างไลฟ์สลับหน้าได้ด้วยนิ้วเดียว
+ *
+ * ตัวเล่นถูกวางที่นี่ ไม่ได้อยู่ในหน้า /studio/queue/ — ดูเหตุผลใน StudioPlayer
  *
  * ทุกลิงก์ในเมนูพา #c= (ช่องที่เลือก) ติดไปด้วย — ดู hooks/useStudioChannel.ts
  */
 export default function StudioShell({ children }: { children: ReactNode }) {
   const info = useSiteRole();
   const admin = info.admin;
+  const pathname = usePathname();
+  const { channel } = useStudioChannel();
 
   /* งานค้างของผู้ดูแล — ท่อเดียวใช้ร่วมกับหน้าสตรีมเมอร์ */
   const { data: requests } = useLive<StreamerRequest[]>(
@@ -43,6 +50,26 @@ export default function StudioShell({ children }: { children: ReactNode }) {
     (onChange, onError) => watchStreamerRequests(onChange, onError),
   );
   const pending = requests.filter((r) => r.status === "pending").length;
+
+  /*
+    เปิดตัวเล่นครั้งแรกที่เข้าหน้าคิว แล้วเก็บไว้ตลอดทั้งแท็บ — สลับไปหน้าอื่นเพลงต้องไม่หยุด
+    ไม่เปิดตั้งแต่หน้าแรกของสตูดิโอ: คนที่แค่เข้ามาแก้ชื่อช่องไม่ควรได้ตัวเล่นที่แย่งสิทธิ์เล่น
+    (ปรับ state ตอน render ตามแบบที่ React แนะนำ ไม่ใช่ setState ใน effect)
+  */
+  /*
+    ล้าง #c=...#c=... ที่ซ้อนกันหลังกดเมนู — Next 16 ต่อ hash ของลิงก์ใหม่เข้ากับที่อยู่เดิม
+    (ดู lib/hash.ts) ตัวอ่านค่ายึดก้อนท้ายอยู่แล้ว ตรงนี้แค่ทำให้ลิงก์สะอาดพอจะก๊อปไปแปะต่อ
+    หน้าสาธารณะทำที่ AppShell แต่สตูดิโอมีเปลือกของตัวเอง จึงต้องทำซ้ำที่นี่
+  */
+  useEffect(() => {
+    repairDuplicatedHash();
+    window.addEventListener("hashchange", repairDuplicatedHash);
+    return () => window.removeEventListener("hashchange", repairDuplicatedHash);
+  }, [pathname]);
+
+  const onQueue = isStudioActive("/studio/queue/", pathname);
+  const [playerOn, setPlayerOn] = useState(onQueue);
+  if (onQueue && !playerOn) setPlayerOn(true);
 
   if (!info.studio) {
     return (
@@ -53,123 +80,69 @@ export default function StudioShell({ children }: { children: ReactNode }) {
     );
   }
 
+  const dockItems: DockItem[] = studioNavFor(admin).map((item) => ({
+    id: item.href,
+    /* หน้าต่างแยกของตัวเล่นใช้ #ch= (ลิงก์ที่แจกไปแล้ว) หน้าในสตูดิโอใช้ #c= */
+    href: item.external
+      ? channel
+        ? `${item.href}#ch=${channel.id}`
+        : item.href
+      : studioHref(item.href, channel?.id),
+    label: item.label,
+    short: item.short,
+    Icon: item.Icon,
+    active: isStudioActive(item.href, pathname),
+    badge: item.badge === "streamerRequests" ? pending : 0,
+    external: item.external,
+  }));
+
   return (
-    <div className="min-h-dvh lg:flex">
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-line lg:flex">
-        <div className="px-5 pt-4">
+    <div className="min-h-dvh">
+      {/* พื้นทึบ ไม่เบลอ — แถบนี้ลอยทับวิดีโอที่กำลังเล่นทั้งไลฟ์ backdrop-filter ต้องเบลอใหม่
+          ทุกเฟรมของวิดีโอ ซึ่งคือการ์ดจอของเครื่องที่กำลังเข้ารหัสสตรีมอยู่พอดี */}
+      <header className="sticky top-0 z-30 border-b border-line bg-canvas pt-[env(safe-area-inset-top)]">
+        <div className="mx-auto flex h-16 w-full max-w-[1280px] items-center gap-2 px-4 sm:gap-4 sm:px-8">
           <Wordmark />
-        </div>
-        <div className="px-3 pt-3">
-          <ChannelPicker />
-        </div>
-        <nav aria-label="เมนูสตูดิโอ" className="mt-3 flex-1 space-y-0.5 overflow-y-auto px-3">
-          <NavItems admin={admin} pending={pending} layout="rail" />
-        </nav>
-        <SidebarAccount info={info} />
-      </aside>
-
-      <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 border-b border-line bg-canvas/90 pt-[env(safe-area-inset-top)] backdrop-blur-md lg:hidden">
-          <div className="flex h-14 items-center gap-1 px-4">
-            <Wordmark />
-            <span className="flex-1" />
-            <ThemeToggle />
-            <MobileAccount info={info} />
+          <div className="hidden w-72 min-w-0 sm:block">
+            <ChannelPicker />
           </div>
-          <div className="px-4 pb-2 empty:hidden">
-            <ChannelPicker compact />
-          </div>
-          <nav aria-label="เมนูสตูดิโอ" className="no-scrollbar flex gap-1 overflow-x-auto px-3 pb-2.5">
-            <NavItems admin={admin} pending={pending} layout="tabs" />
-          </nav>
-        </header>
+          <span className="flex-1" />
+          <ThemeToggle />
+          <MobileAccount info={info} />
+        </div>
+        <div className="px-4 pb-2 empty:hidden sm:hidden">
+          <ChannelPicker compact />
+        </div>
+      </header>
 
-        <main className="mx-auto w-full max-w-[960px] px-5 pt-7 pb-[calc(4rem+env(safe-area-inset-bottom))] sm:px-8 lg:pt-10">
-          <ProfileGate>{children}</ProfileGate>
-        </main>
-      </div>
+      {/* เว้นท้ายหน้าเท่าความสูง dock ไม่งั้นแถวสุดท้ายของทุกหน้าอยู่ใต้ dock กดไม่ได้ */}
+      <main
+        className={`mx-auto w-full px-5 pt-7 pb-[calc(var(--dock-space,5.5rem)+2rem+env(safe-area-inset-bottom))] sm:px-8 lg:pt-10 ${
+          onQueue ? "max-w-[1280px]" : "max-w-[960px]"
+        }`}
+      >
+        <ProfileGate>
+          {playerOn && (
+            <div
+              /*
+                หน้าอื่น: ย้ายออกนอกจอแต่ยังมีขนาดจริง (ไม่ใช่ display:none)
+                YouTube ที่ฝังอยู่ในกล่องที่ไม่มีขนาดเริ่มเล่นไม่ได้ในบางเบราว์เซอร์
+                inert = กด/โฟกัส/โปรแกรมอ่านจอเข้าไม่ถึง
+              */
+              className={onQueue ? "" : "pointer-events-none fixed top-0 -left-[200vw] w-[960px]"}
+              aria-hidden={!onQueue}
+              inert={!onQueue}
+            >
+              <StudioPlayer visible={onQueue} />
+            </div>
+          )}
+          {children}
+        </ProfileGate>
+      </main>
 
+      <Dock items={dockItems} label="เมนูสตูดิโอ" />
       <ToastHost />
     </div>
-  );
-}
-
-/* =========================================================================
-   เมนู
-   ========================================================================= */
-
-function NavItems({
-  admin,
-  pending,
-  layout,
-}: {
-  admin: boolean;
-  pending: number;
-  layout: "rail" | "tabs";
-}) {
-  const pathname = usePathname();
-  const { channel } = useStudioChannel();
-
-  return (
-    <>
-      {studioNavFor(admin).map((item) => (
-        <NavLink
-          key={item.href}
-          item={item}
-          on={isStudioActive(item.href, pathname)}
-          channelId={channel?.id}
-          count={item.badge === "streamerRequests" ? pending : 0}
-          layout={layout}
-        />
-      ))}
-    </>
-  );
-}
-
-function NavLink({
-  item,
-  on,
-  channelId,
-  count,
-  layout,
-}: {
-  item: StudioItem;
-  on: boolean;
-  channelId?: string;
-  count: number;
-  layout: "rail" | "tabs";
-}) {
-  /* ตัวเล่นใช้ #ch= (ตามลิงก์ที่แจกไปก่อนหน้านี้) หน้าในสตูดิโอใช้ #c= */
-  const href = item.external
-    ? channelId
-      ? `${item.href}#ch=${channelId}`
-      : item.href
-    : studioHref(item.href, channelId);
-
-  const look =
-    layout === "rail"
-      ? `flex min-h-11 items-center gap-3 rounded-xl px-3 ${on ? "bg-fill font-semibold" : "text-muted hover:bg-fill hover:text-ink"}`
-      : `inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full px-4 text-sm ${on ? "bg-ink font-semibold text-onink" : "bg-fill text-ink"}`;
-
-  return (
-    <Link
-      href={href}
-      aria-current={on ? "page" : undefined}
-      target={item.external ? "_blank" : undefined}
-      rel={item.external ? "noopener" : undefined}
-      className={`transition-colors ${look}`}
-    >
-      {layout === "rail" && <item.Icon className="h-5 w-5 shrink-0" />}
-      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-      {count > 0 && (
-        <span className="num grid h-5 min-w-5 place-items-center rounded-full bg-live px-1.5 text-xs font-semibold text-white">
-          {count}
-        </span>
-      )}
-      {item.external && layout === "rail" && (
-        <span className="text-xs font-normal text-faint">หน้าต่างใหม่</span>
-      )}
-    </Link>
   );
 }
 
@@ -358,49 +331,6 @@ export function ChannelAvatar({
 function useUser() {
   useSyncExternalStore(authStore.subscribe, authStore.getSnapshot, authStore.getServerSnapshot);
   return authStore.user();
-}
-
-function SidebarAccount({ info }: { info: RoleInfo }) {
-  const user = useUser();
-  if (!user) return null;
-  return (
-    <div className="border-t border-line p-3">
-      <div className="flex items-center gap-3 px-2 py-1.5">
-        <Avatar user={user} className="h-9 w-9" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium">{user.name}</span>
-          <span className="block text-sm text-muted">{ROLE_LABEL[info.role]}</span>
-        </span>
-        <ThemeToggle />
-      </div>
-      <div className="mt-1 flex gap-1">
-        <Link
-          href="/"
-          className="flex min-h-10 flex-1 items-center justify-center rounded-xl text-sm text-muted transition-colors hover:bg-fill hover:text-ink"
-        >
-          หน้าเว็บ
-        </Link>
-        <Link
-          href="/account/"
-          className="flex min-h-10 flex-1 items-center justify-center rounded-xl text-sm text-muted transition-colors hover:bg-fill hover:text-ink"
-        >
-          โปรไฟล์
-        </Link>
-        <button
-          type="button"
-          onClick={() =>
-            void authStore
-              .signOut()
-              .then(() => toast("ออกจากระบบแล้ว", "success"))
-              .catch(() => toast("ออกจากระบบไม่สำเร็จ ลองใหม่อีกครั้ง", "error"))
-          }
-          className="flex min-h-10 flex-1 cursor-pointer items-center justify-center rounded-xl text-sm text-muted transition-colors hover:bg-fill hover:text-danger"
-        >
-          ออกจากระบบ
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function MobileAccount({ info }: { info: RoleInfo }) {

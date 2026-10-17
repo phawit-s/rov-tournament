@@ -222,7 +222,7 @@ function AccountSection({
   onSignOut: () => void;
 }) {
   return (
-    <section aria-labelledby="account-title" className="border-t border-line pt-10">
+    <section aria-labelledby="account-title" className="surface p-6 sm:p-8">
       <h2 id="account-title" className="text-title font-bold">
         บัญชีที่ล็อกอินอยู่
       </h2>
@@ -265,7 +265,7 @@ function InfoRow({ label, value }: { label: string; value: ReactNode }) {
  */
 function StudioEntry({ studio }: { studio: boolean }) {
   return (
-    <section aria-labelledby="studio-entry-title" className="border-t border-line pt-10">
+    <section aria-labelledby="studio-entry-title" className="surface p-6 sm:p-8">
       <h2 id="studio-entry-title" className="text-title font-bold">
         {studio ? "สตูดิโอของคุณ" : "เป็นสตรีมเมอร์?"}
       </h2>
@@ -297,7 +297,7 @@ function AccountSkeleton() {
           <Skeleton className="h-12 w-24 rounded-full" />
         </div>
       </div>
-      <div className="border-t border-line pt-10">
+      <div className="surface p-6 sm:p-8">
         <Skeleton className="h-7 w-52" />
         <div className="mt-5 flex items-center gap-4">
           <Skeleton className="h-14 w-14 rounded-full" />

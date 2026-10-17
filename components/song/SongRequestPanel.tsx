@@ -6,11 +6,18 @@ import { useHydrated } from "@/hooks/useClient";
 import { authStore, getAuthClient } from "@/lib/backend/firebase";
 import { profileStore } from "@/lib/backend/users";
 import type { Channel } from "@/lib/channel/types";
-import { safeUrl } from "@/lib/safe";
+import { safeImageSrc, safeUrl } from "@/lib/safe";
+import {
+  VIEWER_SEARCH,
+  viewerSearch,
+  viewerSearchCached,
+  viewerSearchWait,
+  type SearchHit,
+} from "@/lib/song/search";
 import { removeSongRequest, submitSongRequest } from "@/lib/song/store";
 import { canEmbed } from "@/lib/song/embeddable";
 import { DEFAULT_SONG_CONFIG, type SongConfig, type SongRequest } from "@/lib/song/types";
-import { lookupVideo, videoIdFrom, type YoutubeInfo } from "@/lib/song/youtube";
+import { lookupVideo, thumbUrl, videoIdFrom, watchUrl, type YoutubeInfo } from "@/lib/song/youtube";
 import Button from "../ui/Button";
 import Cover from "../ui/Cover";
 import { toast } from "../ui/Toast";
@@ -62,7 +69,11 @@ export function RequestForm({
   queued: SongRequest[];
 }) {
   // อ่านชื่อจากบัญชี/โปรไฟล์เพื่อเติมช่อง "ชื่อ" ให้ล่วงหน้า
-  useSyncExternalStore(profileStore.subscribe, profileStore.getSnapshot, profileStore.getServerSnapshot);
+  useSyncExternalStore(
+    profileStore.subscribe,
+    profileStore.getSnapshot,
+    profileStore.getServerSnapshot,
+  );
   const myUid = useMyUid();
   const calm = useReducedMotion();
   const hydrated = useHydrated();
@@ -78,6 +89,27 @@ export function RequestForm({
   const [error, setError] = useState<string | null>(null);
   /** คิวที่เท่าไหร่ของเพลงที่เพิ่งส่ง โชว์ค้างไว้จนกว่าจะส่งใบใหม่ */
   const [placed, setPlaced] = useState<number | null>(null);
+
+  /*
+    ค้นหา — เปิดเฉพาะช่องที่ตั้ง Worker ไว้ (คีย์ YouTube อยู่ที่นั่น)
+    ช่องเดียวรับทั้งลิงก์และชื่อเพลง: เป็นลิงก์ = ทางเดิม · ไม่ใช่ลิงก์ = ปุ่มค้นหา
+    ค้นเฉพาะตอนกดปุ่ม/Enter ไม่ค้นตามที่พิมพ์ — พิมพ์ทีละตัวแล้วค้นทุกตัวคือการเผาโควตา
+  */
+  const searchEndpoint = config.searchEndpoint?.trim() ?? "";
+  const searchOn = !!searchEndpoint;
+  const [hits, setHits] = useState<SearchHit[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchErr, setSearchErr] = useState<string | null>(null);
+  /** วินาทีที่ต้องรอก่อนค้นครั้งถัดไป — เริ่มที่ 0 แล้วรู้ค่าจริงตอนกดค้นครั้งแรก
+      (อ่าน localStorage ตอน render แรกไม่ได้ ค่าจะไม่ตรงกับหน้าที่ build ไว้) */
+  const [waitLeft, setWaitLeft] = useState(0);
+  const cooling = waitLeft > 0;
+
+  useEffect(() => {
+    if (!cooling) return;
+    const t = window.setInterval(() => setWaitLeft(Math.ceil(viewerSearchWait() / 1000)), 1000);
+    return () => window.clearInterval(t);
+  }, [cooling]);
 
   const timer = useRef<number | null>(null);
   /** ลำดับการถาม — คำตอบของลิงก์เก่าที่มาช้าต้องไม่ทับผลของลิงก์ใหม่ */
@@ -101,6 +133,9 @@ export function RequestForm({
   const onLink = (raw: string) => {
     setLink(raw);
     setError(null);
+    setSearchErr(null);
+    // แก้คำค้นแล้วผลเก่าไม่ตรงคำใหม่ — ล้างทิ้ง (ค้นคำเดิมซ้ำได้ผลจากความจำทันที)
+    setHits(null);
     if (timer.current != null) window.clearTimeout(timer.current);
     const token = ++seq.current;
 
@@ -111,7 +146,8 @@ export function RequestForm({
     }
     const videoId = videoIdFrom(text);
     if (!videoId) {
-      setPreview({ state: "invalid" });
+      // ช่องที่ค้นได้ ข้อความที่ไม่ใช่ลิงก์คือคำค้น ไม่ใช่ลิงก์ผิด
+      setPreview(searchOn ? NONE : { state: "invalid" });
       return;
     }
 
@@ -131,6 +167,30 @@ export function RequestForm({
         if (verdict === "blocked") setPreview({ state: "blocked", info });
       });
     }, LOOKUP_DELAY);
+  };
+
+  const typed = link.trim();
+  const isQuery = searchOn && !!typed && !videoIdFrom(typed);
+  const tooShort = typed.replace(/\s+/g, " ").length < VIEWER_SEARCH.minChars;
+  // คำที่ค้นไปแล้วในแท็บนี้ตอบจากความจำได้ทันที ไม่ต้องรอนับถอยหลัง
+  const mustWait = cooling && !viewerSearchCached(typed);
+
+  const runSearch = async () => {
+    if (!isQuery || searching || tooShort || mustWait) return;
+    setSearching(true);
+    setSearchErr(null);
+    const res = await viewerSearch(searchEndpoint, typed);
+    setSearching(false);
+    if (res.ok) setHits(res.items);
+    else setSearchErr(res.reason);
+    // เริ่มนับถอยหลังของรอบถัดไปให้เห็นบนปุ่มเลย ไม่ต้องให้คนกดแล้วโดนปฏิเสธก่อนถึงรู้
+    setWaitLeft(Math.ceil(viewerSearchWait() / 1000));
+  };
+
+  /** เลือกจากผลค้นหา = เหมือนวางลิงก์ของคลิปนั้น — ผ่านด่านเดิมทั้งหมด (คลิปมีจริง · ฝังได้) */
+  const pick = (h: SearchHit) => {
+    setHits(null);
+    onLink(watchUrl(h.videoId));
   };
 
   const reasonText = (reason: "duplicate" | "too-many" | "queue-full" | "failed") => {
@@ -179,8 +239,9 @@ export function RequestForm({
         return;
       }
 
-      // snapshot ปัจจุบันยังไม่มีเพลงใหม่ ลำดับของมันจึงเป็นตัวถัดไป
-      setPlaced(queued.length + 1);
+      /* snapshot ปัจจุบันยังไม่มีเพลงใหม่ ลำดับของมันจึงต่อจากเพลงที่คนขอไว้ก่อนหน้า
+         ไม่นับเพลงสำรอง — มันอยู่ท้ายคิวเสมอ เพลงที่คนขอแซงขึ้นก่อนทุกเพลง */
+      setPlaced(queued.filter((s) => s.source !== "filler").length + 1);
       setLink("");
       setPreview(NONE);
       toast("ส่งเข้าคิวแล้ว", "success");
@@ -233,27 +294,92 @@ export function RequestForm({
       <div className="mt-5 space-y-4">
         <div>
           <label htmlFor="song-link" className="sr-only">
-            ลิงก์ YouTube
+            {searchOn ? "ลิงก์ YouTube หรือชื่อเพลง" : "ลิงก์ YouTube"}
           </label>
           <div className="flex gap-2">
             <Input
               id="song-link"
               value={link}
               onChange={(e) => onLink(e.target.value)}
-              placeholder="วางลิงก์ YouTube"
-              inputMode="url"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && isQuery) {
+                  e.preventDefault();
+                  void runSearch();
+                }
+              }}
+              placeholder={searchOn ? "วางลิงก์ YouTube หรือพิมพ์ชื่อเพลง" : "วางลิงก์ YouTube"}
+              // แป้นแบบ url บนมือถือไม่มีช่องว่างดีๆ ให้พิมพ์ชื่อเพลง
+              inputMode={searchOn ? "search" : "url"}
+              enterKeyHint={searchOn ? "search" : undefined}
               autoComplete="off"
               spellCheck={false}
               className="min-h-13 min-w-0 flex-1 text-base"
               aria-invalid={linkBad}
               aria-describedby="song-link-status"
             />
-            {canPaste && (
-              <Button variant="secondary" onClick={() => void pasteLink()} className="min-h-13">
-                วาง
+            {isQuery ? (
+              <Button
+                variant="secondary"
+                onClick={() => void runSearch()}
+                loading={searching}
+                disabled={tooShort || mustWait}
+                className="num min-h-13"
+              >
+                {mustWait ? `รอ ${waitLeft} วิ` : "ค้นหา"}
               </Button>
+            ) : (
+              canPaste && (
+                <Button variant="secondary" onClick={() => void pasteLink()} className="min-h-13">
+                  วาง
+                </Button>
+              )
             )}
           </div>
+
+          {isQuery && (
+            <div aria-live="polite" className="mt-3 empty:hidden">
+              {searchErr && <p className="text-sm text-danger">{searchErr}</p>}
+              {!searchErr && !hits && (
+                <p className="text-sm text-muted">
+                  กดค้นหาหรือ Enter · ค้นได้ทุก {VIEWER_SEARCH.cooldownMs / 1000} วินาที
+                  ถ้ามีลิงก์อยู่แล้ว วางลิงก์เร็วกว่า
+                </p>
+              )}
+              {hits?.length === 0 && (
+                <p className="text-muted">
+                  ไม่เจอเพลงนี้ ลองใส่ชื่อศิลปินด้วย หรือวางลิงก์ YouTube แทน
+                </p>
+              )}
+              {!!hits?.length && (
+                <ul className="rows max-h-96 overflow-y-auto overscroll-contain rounded-field bg-fill">
+                  {hits.map((h) => (
+                    <li key={h.videoId}>
+                      <button
+                        type="button"
+                        onClick={() => pick(h)}
+                        className="flex w-full cursor-pointer items-center gap-3 p-2.5 text-left transition-colors hover:bg-fill-2"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={safeImageSrc(h.thumb ?? thumbUrl(h.videoId, "mq")) ?? ""}
+                          alt=""
+                          loading="lazy"
+                          className="aspect-video w-20 shrink-0 rounded-thumb bg-fill object-cover"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="line-clamp-2 leading-snug font-medium">{h.title}</span>
+                          <span className="mt-0.5 block truncate text-sm text-muted">
+                            {h.author}
+                          </span>
+                        </span>
+                        <span className="shrink-0 px-1 text-sm font-medium">เลือก</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <div id="song-link-status" aria-live="polite" className="mt-3 empty:hidden">
             {preview.state === "invalid" && (
@@ -332,8 +458,7 @@ export function RequestForm({
               exit={{ opacity: 0 }}
               className="rounded-field bg-open/10 px-4 py-3 text-open"
             >
-              ส่งเข้าคิวแล้ว เพลงของคุณอยู่คิวที่{" "}
-              <span className="num font-bold">{placed}</span>
+              ส่งเข้าคิวแล้ว เพลงของคุณอยู่คิวที่ <span className="num font-bold">{placed}</span>
             </motion.p>
           )}
         </AnimatePresence>
@@ -382,11 +507,22 @@ export function QueueList({
     }
   };
 
+  /*
+    คนดูเห็นเฉพาะเพลงที่มีคนขอ — เพลงสำรองไม่ใช่ของที่เขาต้องรู้ และกองสำรองยาวเป็นสิบเพลง
+    ทำให้คิวดูเต็ม คนเลยไม่กล้าขอ ทั้งที่เพลงที่ขอเข้ามาแซงขึ้นก่อนเพลงสำรองทุกเพลง
+    ยังไม่มีใครขอเลยค่อยโชว์ "เพลงต่อไป" ที่เป็นเพลงสำรองแค่เพลงเดียว ให้รู้ว่าจะได้ฟังอะไรต่อ
+    (splitQueue เรียงเพลงสำรองไว้ท้ายเสมอ ใบแรกเมื่อไม่มีคนขอจึงคือเพลงสำรองถัดไป)
+  */
+  const requested = queued.filter((s) => s.source !== "filler");
+  const shown = requested.length > 0 ? requested : queued.slice(0, 1);
+
   return (
     <section aria-labelledby="queue-title">
       <h2 id="queue-title" className="text-title font-bold">
         คิวถัดไป
-        {!loading && <span className="num ml-2 font-normal text-muted">{queued.length}</span>}
+        {!loading && requested.length > 0 && (
+          <span className="num ml-2 font-normal text-muted">{requested.length}</span>
+        )}
       </h2>
 
       {loading ? (
@@ -401,53 +537,58 @@ export function QueueList({
             </div>
           ))}
         </div>
-      ) : queued.length === 0 ? (
+      ) : shown.length === 0 ? (
         <p className="mt-3 text-muted">ยังไม่มีเพลงรอคิว เพลงที่คุณขอตอนนี้จะได้เล่นถัดไปเลย</p>
       ) : (
-        <ol className="rows mt-2">
-          <AnimatePresence initial={false}>
-            {queued.map((song, i) => {
-              const mine = song.byUid === myUid;
-              return (
-                <motion.li
-                  key={song.id}
-                  layout={!calm}
-                  initial={{ opacity: 0, y: calm ? 0 : 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                  className="flex items-center gap-3 py-3"
-                >
-                  <span className="num w-7 shrink-0 text-center font-semibold text-muted">
-                    {i + 1}
-                  </span>
-                  <Cover videoId={song.videoId} size="sm" className="w-20 sm:w-24" />
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 leading-snug font-medium">{song.title}</p>
-                    <p className="mt-0.5 flex min-w-0 items-center gap-2 text-sm text-muted">
-                      <span className="truncate">
-                        {song.source === "filler" ? "เพลงสำรองของช่อง" : `ขอโดย ${song.byName}`}
-                      </span>
-                      {mine && <Badge tone="ink">ของคุณ</Badge>}
-                    </p>
-                  </div>
-                  {mine && (
-                    <button
-                      type="button"
-                      disabled={pulling === song.id}
-                      onClick={() => void pull(song)}
-                      aria-label={`ถอน ${song.title} ออกจากคิว`}
-                      title="ถอนออกจากคิว"
-                      className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-colors hover:bg-fill hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <IconClose className="h-4 w-4" />
-                    </button>
-                  )}
-                </motion.li>
-              );
-            })}
-          </AnimatePresence>
-        </ol>
+        <>
+          {requested.length === 0 && (
+            <p className="mt-2 text-muted">ยังไม่มีใครขอเพลง ถ้าคุณขอตอนนี้ จะได้เล่นก่อนเพลงนี้</p>
+          )}
+          <ol className="rows mt-2">
+            <AnimatePresence initial={false}>
+              {shown.map((song, i) => {
+                const mine = song.byUid === myUid;
+                return (
+                  <motion.li
+                    key={song.id}
+                    layout={!calm}
+                    initial={{ opacity: 0, y: calm ? 0 : 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                    className="flex items-center gap-3 py-3"
+                  >
+                    <span className="num w-7 shrink-0 text-center font-semibold text-muted">
+                      {i + 1}
+                    </span>
+                    <Cover videoId={song.videoId} size="sm" className="w-20 sm:w-24" />
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 leading-snug font-medium">{song.title}</p>
+                      <p className="mt-0.5 flex min-w-0 items-center gap-2 text-sm text-muted">
+                        <span className="truncate">
+                          {song.source === "filler" ? "เพลงสำรองของช่อง" : `ขอโดย ${song.byName}`}
+                        </span>
+                        {mine && <Badge tone="ink">ของคุณ</Badge>}
+                      </p>
+                    </div>
+                    {mine && (
+                      <button
+                        type="button"
+                        disabled={pulling === song.id}
+                        onClick={() => void pull(song)}
+                        aria-label={`ถอน ${song.title} ออกจากคิว`}
+                        title="ถอนออกจากคิว"
+                        className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-colors hover:bg-fill hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <IconClose className="h-4 w-4" />
+                      </button>
+                    )}
+                  </motion.li>
+                );
+              })}
+            </AnimatePresence>
+          </ol>
+        </>
       )}
     </section>
   );

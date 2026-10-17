@@ -33,7 +33,7 @@ export function Badge({
 }) {
   return (
     <span
-      className={`inline-flex min-h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium whitespace-nowrap ${BADGE[tone]} ${className}`}
+      className={`inline-flex min-h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[0.8rem] font-medium whitespace-nowrap ${BADGE[tone]} ${className}`}
     >
       {dot && <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />}
       {children}
@@ -50,7 +50,9 @@ export function LiveBadge({ url, label = "ไลฟ์อยู่" }: { url: st
       href={href}
       target="_blank"
       rel="noreferrer noopener"
-      className="inline-flex min-h-6 shrink-0 items-center gap-1.5 rounded-full bg-live px-2.5 text-xs font-semibold text-white transition-opacity hover:opacity-85"
+      /* ป้ายสูง 24px แต่พื้นที่กดต้องได้ ~44px บนมือถือ — ขยายด้วย ::before ที่มองไม่เห็น
+         หน้าตาเท่าเดิม ไม่ดันแถวชื่อช่องให้สูงขึ้น */
+      className="relative inline-flex min-h-6 shrink-0 items-center gap-1.5 rounded-full bg-live px-2.5 text-[0.8rem] font-semibold text-white transition-opacity before:absolute before:-inset-x-1.5 before:-inset-y-2.5 before:content-[''] hover:opacity-85"
     >
       <span className="h-1.5 w-1.5 rounded-full bg-white" aria-hidden />
       {label}
@@ -86,7 +88,7 @@ function widthClass(className: string): string {
 }
 
 const FIELD =
-  "rounded-field bg-fill px-4 text-ink outline-none transition-[box-shadow,background-color] placeholder:text-faint focus:bg-canvas focus:shadow-[inset_0_0_0_2px_var(--c-ink)] aria-[invalid=true]:shadow-[inset_0_0_0_2px_var(--c-danger)] disabled:opacity-50";
+  "rounded-field bg-fill px-4 text-ink outline-none transition-[box-shadow,background-color] placeholder:text-faint focus:bg-paper focus:shadow-[inset_0_0_0_2px_var(--c-ink)] aria-[invalid=true]:shadow-[inset_0_0_0_2px_var(--c-danger)] disabled:opacity-50";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   const { className = "", ...rest } = props;
@@ -156,7 +158,7 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div className={`rounded-sheet bg-fill px-6 py-10 ${className}`}>
+    <div className={`surface px-6 py-10 ${className}`}>
       <p className="text-lg font-bold">{title}</p>
       {description && <p className="mt-1.5 max-w-[46ch] text-muted">{description}</p>}
       {action && <div className="mt-5">{action}</div>}

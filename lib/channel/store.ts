@@ -3,6 +3,7 @@
 import {
   updateDoc,
   collection,
+  deleteDoc,
   doc,
   getDocs,
   limit,
@@ -11,6 +12,7 @@ import {
   serverTimestamp,
   setDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { authStore, getDb, hasBackend } from "@/lib/backend/firebase";
 import { DEFAULT_CHANNEL, type Channel } from "./types";
@@ -383,4 +385,34 @@ export async function setChannelLive(channelId: string, isLive: boolean): Promis
     "live.isLive": isLive,
     updatedAt: new Date().toISOString(),
   });
+}
+
+/** ของที่อยู่ใต้ช่อง — คิว/ประวัติเพลง และโดเนทสมัยก่อนที่ยังค้างอยู่บางช่อง */
+const CHANNEL_CHILDREN = ["songRequests", "donations"] as const;
+
+/**
+ * ลบช่องทั้งใบ พร้อมคิวและประวัติเพลงของช่อง — ย้อนกลับไม่ได้
+ *
+ * ★ ลบลูกก่อนแม่เสมอ ★
+ * Firestore ไม่ลบของใต้ช่องตามให้ และกติกาของลูก (firestore.rules) เช็คสิทธิ์จาก
+ * ownerUid ของ "ช่องแม่" — ถ้าลบแม่ก่อน เจ้าของจะลบลูกที่ค้างไม่ได้อีกเลย
+ * เหลือใบขอเพลงกำพร้าที่เปิดอ่านสาธารณะอยู่ตลอดไป
+ *
+ * ลบทีละไม่เกิน 400 ใบต่อ batch (เพดานของ Firestore คือ 500)
+ * ล้มกลางทาง = ช่องยังอยู่ กดลบซ้ำได้ ไม่มีช่องที่หายไปครึ่งใบ
+ */
+export async function deleteChannel(channelId: string): Promise<void> {
+  const db = getDb();
+  if (!db || !channelId) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
+  for (const child of CHANNEL_CHILDREN) {
+    for (;;) {
+      const page = await getDocs(query(collection(db, COL, channelId, child), limit(400)));
+      if (page.empty) break;
+      const batch = writeBatch(db);
+      page.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+      if (page.size < 400) break;
+    }
+  }
+  await deleteDoc(doc(db, COL, channelId));
 }

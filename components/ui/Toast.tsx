@@ -52,8 +52,9 @@ export default function ToastHost() {
   if (!hydrated) return null;
 
   return createPortal(
+    /* --dock-space = ความสูงของ dock ในสตูดิโอ (ไม่มี dock = 0) — toast ต้องไม่ขึ้นทับเมนู */
     <div
-      className="pointer-events-none fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-90 flex w-[min(92vw,26rem)] -translate-x-1/2 flex-col items-center gap-2"
+      className="pointer-events-none fixed bottom-[calc(1rem+var(--dock-space,0px)+env(safe-area-inset-bottom))] left-1/2 z-90 flex w-[min(92vw,26rem)] -translate-x-1/2 flex-col items-center gap-2"
       aria-live="polite"
     >
       <AnimatePresence initial={false}>

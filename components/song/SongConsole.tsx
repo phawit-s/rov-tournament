@@ -8,21 +8,23 @@ import { FILLER_LIMIT } from "@/lib/song/filler";
 import { saveFillerList, saveFillerMode } from "@/lib/song/config";
 import { importPlaylist, playlistIdFrom } from "@/lib/song/playlist";
 import { searchSongs, type SearchHit } from "@/lib/song/search";
-import { addSongToQueue, watchSongQueue } from "@/lib/song/store";
+import { addSongToQueue, watchRecentFinished } from "@/lib/song/store";
 import { DEFAULT_SONG_CONFIG, type FillerTrack, type SongRequest } from "@/lib/song/types";
 import { lookupVideo, thumbUrl, videoIdFrom, watchUrl } from "@/lib/song/youtube";
 import type { YoutubeInfo } from "@/lib/song/youtube";
+import ActionMenu from "../ui/ActionMenu";
 import Button, { Spinner } from "../ui/Button";
 import Cover from "../ui/Cover";
 import Tabs from "../ui/Tabs";
 import { toast } from "../ui/Toast";
-import { IconCheck, IconClose, IconPlus } from "../ui/icons";
+import { IconCheck, IconMinusCircle, IconPlus } from "../ui/icons";
 import { Badge, EmptyState, Input, Skeleton } from "../ui/kit";
 
 const EMPTY: SongRequest[] = [];
 const LOOKUP_DELAY = 450;
 
-type Tab = "add" | "history" | "filler";
+export type ConsoleTab = "add" | "history" | "filler";
+type Tab = ConsoleTab;
 
 /**
  * แผงควบคุมของสตรีมเมอร์บนหน้าเล่นเพลง
@@ -35,25 +37,42 @@ type Tab = "add" | "history" | "filler";
 export default function SongConsole({
   channelId,
   channel,
+  tab: tabIn,
+  onTabChange,
 }: {
   channelId: string;
   channel: Channel | null;
+  /** คุมแท็บจากข้างนอกได้ — ปุ่ม "จัดการ" ของสรุปเพลงสำรองท้ายคิวพามาแท็บเพลงสำรอง */
+  tab?: Tab;
+  onTabChange?: (tab: Tab) => void;
 }) {
-  const [tab, setTab] = useState<Tab>("add");
-  const [queue, setQueue] = useState<SongRequest[]>(EMPTY);
+  const [tabOwn, setTabOwn] = useState<Tab>("add");
+  const tab = tabIn ?? tabOwn;
+  const setTab = (next: Tab) => {
+    setTabOwn(next);
+    onTabChange?.(next);
+  };
+  /*
+    ประวัติอ่านเฉพาะตอนเปิดแท็บประวัติ และอ่านแค่ 50 ใบล่าสุด
+
+    ของเดิมฟังทุกใบที่เคยขอตลอดเวลาที่ตัวเล่นเปิดอยู่ (ช่องที่ไลฟ์ทุกคืนมีเป็นพันใบ)
+    แล้วเรนเดอร์ทั้งหมดพร้อมรูปปกตอนเปิดแท็บ — หน้าค้างบนเครื่องที่ไม่แรง
+  */
+  const [history, setHistory] = useState<{ id: string; items: SongRequest[] } | null>(null);
 
   useEffect(() => {
-    if (!channelId) return;
-    return watchSongQueue(channelId, setQueue, { onError: () => setQueue(EMPTY) });
-  }, [channelId]);
+    if (!channelId || tab !== "history") return;
+    return watchRecentFinished(
+      channelId,
+      (items) => setHistory({ id: channelId, items }),
+      50,
+      () => setHistory({ id: channelId, items: EMPTY }),
+    );
+  }, [channelId, tab]);
 
   const songs = { ...DEFAULT_SONG_CONFIG, ...channel?.songs };
   const filler = songs.filler ?? [];
-  const done = queue
-    .filter((s) => s.status === "played" || s.status === "rejected")
-    .sort((a, b) =>
-      (b.playedAt ?? b.createdAt ?? "").localeCompare(a.playedAt ?? a.createdAt ?? ""),
-    );
+  const done = history?.id === channelId ? history.items : null;
 
   return (
     <section aria-label="ใส่เพลงและตั้งเพลงสำรอง">
@@ -66,7 +85,7 @@ export default function SongConsole({
         onChange={setTab}
         items={[
           { key: "add", label: "ใส่เพลง" },
-          { key: "history", label: "ประวัติ", count: done.length || null },
+          { key: "history", label: "ประวัติ" },
           { key: "filler", label: "เพลงสำรอง", count: filler.length || null },
         ]}
       />
@@ -76,7 +95,15 @@ export default function SongConsole({
           <AddSong channelId={channelId} searchEndpoint={songs.searchEndpoint?.trim()} />
         )}
 
-        {tab === "history" && <History channelId={channelId} done={done} />}
+        {tab === "history" &&
+          (done ? (
+            <History channelId={channelId} done={done} />
+          ) : (
+            <div className="space-y-3" aria-busy="true">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ))}
 
         {tab === "filler" && (
           <Filler
@@ -727,6 +754,36 @@ function Filler({
     }
   };
 
+  /*
+    ต่อเพลงสำรองเข้าคิวเดี๋ยวนี้ — อยากเปิดเพลงนี้ช่วงไหนก็หยิบมาต่อเอง ไม่ต้องรอสุ่ม
+    ติดป้ายเป็นเพลงสำรอง (source filler) จึงยังอยู่ท้ายคิว เพลงที่คนดูขอแซงขึ้นก่อนได้
+    (เดิมอยู่ในรายการเพลงสำรองชุดที่สองข้างคิว ย้ายมารวมที่นี่ที่เดียว)
+  */
+  const queueNow = async (track: FillerTrack) => {
+    const uid = authStore.user()?.uid;
+    if (!uid) {
+      toast("ต้องล็อกอินก่อนถึงจะต่อคิวได้", "error");
+      return;
+    }
+    try {
+      await addSongToQueue(
+        channelId,
+        {
+          videoId: track.videoId,
+          title: track.title,
+          author: track.author,
+          url: watchUrl(track.videoId),
+          byUid: uid,
+          byName: "เพลย์ลิสต์สำรอง",
+        },
+        "filler",
+      );
+      toast(`ต่อคิว "${track.title.slice(0, 30)}" แล้ว`, "success", 1800);
+    } catch {
+      toast("ต่อคิวไม่สำเร็จ เช็คอินเทอร์เน็ตแล้วลองใหม่", "error");
+    }
+  };
+
   return (
     <div className="space-y-10">
       <section aria-labelledby="filler-mode-title">
@@ -829,18 +886,20 @@ function Filler({
                   <p className="line-clamp-2 leading-snug font-medium">{t.title}</p>
                   <p className="mt-0.5 truncate text-sm text-muted">{t.author}</p>
                 </div>
-                <button
-                  type="button"
-                  disabled={busy || !canEdit}
-                  onClick={() =>
-                    void save(tracks.filter((x) => x.videoId !== t.videoId)).catch(() => {})
-                  }
-                  className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full text-muted transition-colors hover:bg-fill hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label={`เอา ${t.title} ออกจากเพลงสำรอง`}
-                  title="เอาออกจากเพลงสำรอง"
-                >
-                  <IconClose className="h-4 w-4" />
-                </button>
+                <ActionMenu
+                  label={`คำสั่งของเพลงสำรอง ${t.title}`}
+                  items={[
+                    { label: "ต่อคิวตอนนี้", Icon: IconPlus, onSelect: () => void queueNow(t) },
+                    {
+                      label: "เอาออกจากเพลงสำรอง",
+                      Icon: IconMinusCircle,
+                      danger: true,
+                      disabled: busy || !canEdit,
+                      onSelect: () =>
+                        void save(tracks.filter((x) => x.videoId !== t.videoId)).catch(() => {}),
+                    },
+                  ]}
+                />
               </li>
             ))}
           </ol>

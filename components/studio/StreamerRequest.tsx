@@ -349,7 +349,7 @@ function ApprovedCard({ req }: { req: StreamerRequest }) {
 
 function RequestSkeleton() {
   return (
-    <div className="rounded-sheet border border-line p-6 sm:p-8" aria-busy="true">
+    <div className="surface p-6 sm:p-8" aria-busy="true">
       <Skeleton className="h-9 w-64 max-w-full" />
       <Skeleton className="mt-4 h-4 w-full" />
       <Skeleton className="mt-2 h-4 w-4/5" />
