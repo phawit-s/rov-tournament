@@ -24,6 +24,8 @@
  *   ตอบ 200 เสมอ { ok, reason?, ... } ด้วยเหตุผลเดียวกับที่หัว slip-verify.js
  */
 
+import { isQuotaError, noteExhausted, noteSearch, searchBlock } from "./yt-quota.js";
+
 /* ------------------------------------------------------------------ *
  * ลิงก์ YouTube — คู่แฝดของ lib/song/youtube.ts ฝั่งเว็บ
  *
@@ -172,6 +174,10 @@ async function searchOne(env, query) {
 
   if (!env.YT_API_KEY) throw new Error("no-youtube-key");
 
+  /* โควตาเดียวกับช่องค้นหาบนเว็บ (ทุกช่องใช้คีย์เดียวกัน) — หมดหรือถึงเพดานแล้วไม่ถาม YouTube อีก
+     ถึงเพดานที่ตั้งเองก็ตอบคนดูแบบเดียวกับโควตาหมด เขาทำได้อย่างเดียวคือวางลิงก์แทน */
+  if (await searchBlock(env)) throw new Error("youtube-quota");
+
   const api = new URL("https://www.googleapis.com/youtube/v3/search");
   api.searchParams.set("part", "snippet");
   api.searchParams.set("type", "video");
@@ -184,9 +190,13 @@ async function searchOne(env, query) {
   const res = await fetch(api.toString(), { signal: AbortSignal.timeout(10000) });
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    const msg = data?.error?.message ?? `HTTP_${res.status}`;
-    throw new Error(/quota/i.test(msg) ? "youtube-quota" : "youtube-error");
+    if (isQuotaError(res.status, data)) {
+      await noteExhausted(env);
+      throw new Error("youtube-quota");
+    }
+    throw new Error("youtube-error");
   }
+  await noteSearch(env);
 
   const hit = (data?.items ?? []).find((it) => it?.id?.videoId);
   const track = hit
@@ -391,15 +401,7 @@ async function createSong(env, token, channelId, song) {
  * ------------------------------------------------------------------ */
 
 /** คำสั่งที่ยอมรับเมื่อรับบรรทัดแชทดิบมา (สะพานของเราตัดให้ก่อนแล้ว) */
-const COMMANDS = [
-  "!เพลง",
-  "!ขอเพลง",
-  "!song",
-  "!sr",
-  "!play",
-  "/เพลง",
-  "/song",
-];
+const COMMANDS = ["!เพลง"]; // คำสั่งเดียว ให้ตรงกับสะพาน (bridge/core.mjs DEFAULT_COMMANDS)
 
 /** คืนข้อความหลังคำสั่ง หรือ null ถ้าไม่ใช่คำขอเพลง (แชทคุยเล่นทั่วไป) */
 function stripCommand(text) {

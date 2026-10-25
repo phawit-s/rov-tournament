@@ -32,8 +32,10 @@ function explain(reason: string, message?: string | null): string {
   if (reason === "rate-limited" || reason === "search-rate-limited") {
     return "ค้นถี่เกินไป รอสักนาทีแล้วลองใหม่ หรือวางลิงก์ YouTube แทนก็ได้";
   }
-  if (reason === "daily-budget") {
-    return "วันนี้ช่องนี้ค้นเพลงครบโควตาแล้ว วางลิงก์ YouTube แทนได้เลย";
+  /* โควตาค้นหาเป็นของทั้งระบบ (ทุกช่องใช้คีย์ YouTube ตัวเดียวกัน) ไม่ใช่ของช่องนี้ช่องเดียว
+     หมดแล้ว Worker หยุดถาม YouTube จนข้ามวัน (worker/yt-quota.js) — วางลิงก์ยังใช้ได้ตลอด */
+  if (reason === "daily-budget" || reason === "youtube-quota") {
+    return "วันนี้ค้นเพลงด้วยชื่อครบโควตาแล้ว วางลิงก์ YouTube แทนได้เลย พรุ่งนี้ค้นได้ใหม่";
   }
   if (reason === "query-too-short") return "พิมพ์ชื่อเพลงให้ยาวกว่านี้อีกนิด";
   if (reason === "empty-query") return "พิมพ์คำค้นก่อน";

@@ -110,8 +110,9 @@ export default function ChatBridgePanel({ channel }: { channel: Channel }) {
           รับคำขอเพลงจากแชท TikTok
         </h2>
         <p className="mt-1 max-w-prose text-muted">
-          คนดูพิมพ์ <b className="text-ink">!เพลง ชื่อเพลง</b> หรือวางลิงก์ YouTube ในแชทไลฟ์
-          แล้วเพลงเข้าคิวเอง ต้องเปิดโปรแกรมเล็กๆ ค้างไว้บนเครื่องที่ไลฟ์ (Windows)
+          คนดูพิมพ์ <b className="text-ink">!เพลง</b> ตามด้วยชื่อเพลงหรือลิงก์ YouTube ในแชทไลฟ์
+          เช่น <b className="text-ink">!เพลง ทางผ่าน</b> แล้วเพลงเข้าคิวเอง
+          ต้องเปิดโปรแกรมเล็กๆ ค้างไว้บนเครื่องที่ไลฟ์ (Windows)
         </p>
       </div>
 

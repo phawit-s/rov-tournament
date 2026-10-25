@@ -29,6 +29,7 @@
  */
 
 import { handleChatPair, handleSongIngest } from "./song-ingest.js";
+import { isQuotaError, noteExhausted, noteSearch, searchBlock } from "./yt-quota.js";
 
 /* ------------------------------------------------------------------ *
  * ตาราง adapter ของผู้ให้บริการ
@@ -607,8 +608,8 @@ function allow(key, maxPerMin) {
  *   1. แคชตามคำค้น — คนในไลฟ์ขอเพลงฮิตซ้ำกันเยอะ ตอบซ้ำได้ฟรี
  *   2. จำกัดต่อ IP เฉพาะคำขอที่ไปถึง YouTube จริง (MAX_SEARCH_PER_MIN ค่าปริยาย 6)
  *      ผูก Rate Limiting binding ชื่อ SEARCH_LIMITER ไว้จะนับแม่นกว่า (ดู wrangler.toml)
- *   3. เพดานรวมต่อวัน (SEARCH_DAILY_BUDGET) — ต้องผูก KV SONG_CACHE ถึงจะนับข้ามเครื่องได้
- *      ถึงเพดานแล้วหยุดค้นจนข้ามวัน แทนที่จะปล่อยให้คนยิงจนโควตาของสตรีมเมอร์หมด
+ *   3. เพดานรวมต่อวัน + หยุดทั้งวันเมื่อ YouTube บอกว่าโควตาหมด (yt-quota.js)
+ *      นับรวมกับ "!เพลง ชื่อเพลง" จากแชทของทุกช่อง เพราะใช้คีย์ตัวเดียวกัน
  * ------------------------------------------------------------------ */
 
 const SEARCH_MIN_CHARS = 2;
@@ -664,34 +665,7 @@ async function allowSearch(env, ip) {
   return allow(`search:${ip}`, Number(env.MAX_SEARCH_PER_MIN || 6));
 }
 
-/**
- * วันตามเวลาแปซิฟิก — โควตา YouTube รีเซ็ตเที่ยงคืนเวลานั้น
- * ใช้ UTC-8 ตายตัว ช่วงเวลาออมแสงคลาดไปหนึ่งชั่วโมง ยอมรับได้สำหรับเพดานหยาบๆ
- */
-const quotaDay = () => new Date(Date.now() - 8 * 3600 * 1000).toISOString().slice(0, 10);
-
-async function withinSearchBudget(env) {
-  const budget = Number(env.SEARCH_DAILY_BUDGET || 0);
-  if (!budget || !env.SONG_CACHE) return true; // ไม่ได้ตั้ง/ไม่มีที่นับ = ไม่จำกัด
-  try {
-    const used = Number((await env.SONG_CACHE.get(`search-count:${quotaDay()}`)) || 0);
-    return used < budget;
-  } catch {
-    return true;
-  }
-}
-
-/** นับหลังค้นสำเร็จเท่านั้น · KV ไม่ใช่ตัวนับแม่น (ยิงพร้อมกันอาจนับขาด) พอสำหรับเพดานรายวัน */
-async function countSearch(env) {
-  if (!env.SEARCH_DAILY_BUDGET || !env.SONG_CACHE) return;
-  try {
-    const key = `search-count:${quotaDay()}`;
-    const used = Number((await env.SONG_CACHE.get(key)) || 0);
-    await env.SONG_CACHE.put(key, String(used + 1), { expirationTtl: 2 * 86400 });
-  } catch {
-    // นับไม่ได้ก็ไม่ต้องทำให้ผลค้นที่ได้มาแล้วหาย
-  }
-}
+/* เพดานรายวันกับการหยุดเมื่อโควตาหมด อยู่ที่ yt-quota.js — ใช้ร่วมกับการค้นจากแชท */
 
 /* ------------------------------------------------------------------ *
  * HTTP
@@ -885,7 +859,9 @@ const handler = {
 
         // ด่านที่สอง: เฉพาะคำขอที่จะไปถึง YouTube จริง — เข้มกว่าด่านแรกมาก
         if (!(await allowSearch(env, ip))) return fail("search-rate-limited", cors, { retryAfter: 60 });
-        if (!(await withinSearchBudget(env))) return fail("daily-budget", cors);
+        // ด่านที่สาม: โควตาของทั้งระบบ — หมด/ถึงเพดานแล้วหยุดถาม YouTube จนข้ามวัน
+        const blocked = await searchBlock(env);
+        if (blocked) return fail(blocked, cors);
         if (!env.YT_API_KEY) return fail("no-youtube-key", cors);
 
         const api = new URL("https://www.googleapis.com/youtube/v3/search");
@@ -900,6 +876,10 @@ const handler = {
         const res = await fetch(api.toString());
         const data = await res.json().catch(() => null);
         if (!res.ok) {
+          if (isQuotaError(res.status, data)) {
+            await noteExhausted(env);
+            return fail("youtube-quota", cors);
+          }
           return fail("youtube-error", cors, {
             status: res.status,
             message: data?.error?.message ?? null,
@@ -914,7 +894,7 @@ const handler = {
             author: it.snippet?.channelTitle ?? "",
             thumb: it.snippet?.thumbnails?.medium?.url ?? null,
           }));
-        await Promise.all([searchCachePut(env, key, items), countSearch(env)]);
+        await Promise.all([searchCachePut(env, key, items), noteSearch(env)]);
         return reply({ ok: true, items }, cors);
       }
 
