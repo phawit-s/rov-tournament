@@ -83,7 +83,7 @@ function print(e) {
     case "status":
       if (!e.loud) return;
       if (e.state === "live") return log(green(`● ${e.text}`), ...tail);
-      if (e.state === "retry") return log(yellow(`○ ${e.text}`), ...tail);
+      if (e.state === "retry" || e.state === "limited") return log(yellow(`○ ${e.text}`), ...tail);
       return log(dim(`○ ${e.text}`), ...tail);
     default:
       return log(dim(e.text), ...tail);

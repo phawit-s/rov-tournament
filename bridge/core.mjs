@@ -116,11 +116,120 @@ export function readComment(payload) {
   return typeof text === "string" ? text : null;
 }
 
-/** ข้อความบอกเหตุจากไลบรารี มักยาวและมี stack ปน เอาแค่บรรทัดแรก */
-export const briefly = (e) =>
-  String(e?.message ?? e ?? "unknown").split("\n")[0].slice(0, 160);
+/** ข้อความบอกเหตุจากไลบรารี มักยาวและมี stack ปน เอาแค่บรรทัดแรก
+ *  event "error" ของไลบรารีส่งมาเป็น { info, exception } — ไม่แกะก่อนจะได้ "[object Object]" */
+export const briefly = (e) => {
+  const inner = e?.exception ?? e;
+  const text = inner?.message ?? (typeof inner === "object" && inner ? e?.info : inner);
+  return String(text ?? "unknown").split("\n")[0].slice(0, 160);
+};
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const errorName = (e) => e?.constructor?.name ?? "";
+
+/** สตรีมเมอร์ยังไม่ได้ไลฟ์ — ไม่ใช่ความผิดพลาด
+ *  v2.4.3 พูดว่า "The requested user isn't online :(" ซึ่งคำว่า offline / not live ไม่ครอบ
+ *  เคยหลุดไปนับเป็น "ต่อไม่ติด" แล้วพิมพ์ลง log ทุกนาทีทั้งวัน */
+export const isOffline = (e) =>
+  errorName(e) === "UserOfflineError" ||
+  /offline|isn'?t online|not.*live|LIVE has ended|user_not_found/i.test(briefly(e));
+
+/** บริการลายเซ็นปฏิเสธเพราะใช้เกินโควตา (HTTP 429)
+ *  v2.4.3 สร้าง SignatureRateLimitError ผิด (ส่ง body แทน response) เลยพังเป็น
+ *  "Cannot read properties of undefined (reading 'retry-after')" แทน — ต้องจับทั้งสองแบบ */
+export const isRateLimited = (e) =>
+  errorName(e) === "SignatureRateLimitError" ||
+  /retry-after|too many connections|rate.?limit|\b429\b/i.test(briefly(e));
+
+/* ---------------- โควตาบริการลายเซ็น (Euler Stream) ----------------
+
+   ทุกครั้งที่ต่อเข้าไลฟ์ ไลบรารีต้องขอลายเซ็นจาก Euler Stream หนึ่งครั้ง (เช็คว่าไลฟ์อยู่ไหม
+   ไม่กิน เพราะถาม TikTok ตรง) ไม่ใส่คีย์ = โควตาฟรีต่อ IP นาทีละ 5 ชั่วโมงละ 30 วันละ 100
+   สะพานทุกตัวที่ออกเน็ตเดียวกันใช้ก้อนเดียวกัน
+
+   เคยหมดจริง (affarain 20 ต.ค. 2569): ไลฟ์จบแล้ว TikTok ยังบอกว่าห้องเดิมไลฟ์อยู่อีกหลายนาที
+   สะพานต่อติด → ได้ streamEnd ทันที → 5 วิต่อใหม่ วนนาทีละ 5 รอบพอดีเพดาน แล้วโดน 429 ร้อยกว่าครั้ง
+   ★ เจ้าของสั่ง: โควตาเต็มต้องหยุด ห้ามยิงต่อ ★ ด่านจึงมีสามชั้น
+     1. ถามยอดคงเหลือก่อนต่อทุกครั้ง (ถามฟรี ไม่นับโควตา) หมดถังไหนก็รอถึงเวลารีเซ็ตของถังนั้น
+     2. นับเองในโปรแกรมอีกชั้น เผื่อถามไม่ได้ หรือตัวเลขที่ได้ไม่ขยับ (เคยเห็น 100/100 ทั้งที่เพิ่งต่อ)
+     3. โดน 429 = พักยาวทันที ไม่ไล่ถอยทีละ 5 วิแบบความผิดพลาดทั่วไป */
+
+const SIGN_BUCKETS = [
+  ["minute", 60_000],
+  ["hour", 3_600_000],
+  ["day", 86_400_000],
+];
+const FREE_LIMITS = { minute: 5, hour: 30, day: 100 };
+/** Euler บอกว่าหมดแต่ไม่บอกเวลารีเซ็ต — รอเท่านี้แล้วถามใหม่ (ถามฟรี จึงไม่ต้องรอเต็มถัง) */
+const RECHECK_MS = { minute: 60_000, hour: 10 * 60_000, day: 30 * 60_000 };
+/** ลองซ้ำหลังต่อพลาด เก็บโควตาส่วนนี้ไว้ให้ตอนไลฟ์เริ่มจริง ไม่เผาหมดกับปัญหาที่ลองกี่ทีก็ไม่หาย */
+const RETRY_RESERVE = { hour: 3, day: 10 };
+/** โดน 429 ครั้งที่ 1, 2, 3, ... ติดกัน — พักอย่างน้อยเท่านี้ (นาที) */
+const LIMITED_BACKOFF_MS = [2, 5, 15, 30, 60].map((m) => m * 60_000);
+
+const BUCKET_TEXT = {
+  minute: (max) => `ต่อถี่เกินเพดานบริการเชื่อมต่อแชท (${max} ครั้ง/นาที)`,
+  hour: (max) => `โควตาบริการเชื่อมต่อแชทของชั่วโมงนี้เต็ม (${max} ครั้ง/ชั่วโมง)`,
+  day: (max) => `โควตาบริการเชื่อมต่อแชทของวันนี้เต็ม (${max} ครั้ง/วัน)`,
+};
+
+/** ยอดคงเหลือจาก Euler — { minute, hour, day: { max, remaining, reset_at } } หรือ null ถ้าถามไม่ได้ */
+export async function fetchSignLimits(key) {
+  const base = (process.env.SIGN_API_URL || "https://api.eulerstream.com").replace(/\/+$/, "");
+  try {
+    const res = await fetch(`${base}/webcast/rate_limits`, {
+      headers: key ? { "x-api-key": key } : {},
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return SIGN_BUCKETS.every(([b]) => typeof data?.[b]?.remaining === "number") ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** reset_at ไม่รู้ว่ามาเป็นแบบไหน รับไว้ทุกแบบ: วินาทีที่เหลือ, epoch วินาที, epoch มิลลิวินาที, ISO */
+export function resetTime(value, now = Date.now()) {
+  if (value == null || value === "") return null;
+  const n = /^\d+(\.\d+)?$/.test(String(value)) ? Number(value) : Date.parse(value);
+  if (!Number.isFinite(n)) return null;
+  const at = n < 1e9 ? now + n * 1000 : n < 1e12 ? n * 1000 : n;
+  return at > now ? at : null;
+}
+
+/**
+ * ต้องพักไหม — คืน { bucket, until, max } หรือ null ถ้าต่อได้
+ *   limits   คำตอบจาก fetchSignLimits (null = ถามไม่ได้ ใช้ตัวนับเองอย่างเดียว)
+ *   used     เวลาที่สะพานนี้ขอลายเซ็นไปเอง
+ *   reserve  เหลือไม่เกินเท่านี้ก็ถือว่าหมด แยกรายถัง
+ */
+export function signHold({ limits, used = [], reserve = {}, now = Date.now() }) {
+  for (const [bucket, span] of SIGN_BUCKETS) {
+    const keep = reserve[bucket] ?? 0;
+    const srv = limits?.[bucket];
+    const max = srv?.max ?? FREE_LIMITS[bucket];
+    let until = 0;
+
+    if (srv && srv.remaining <= keep) until = resetTime(srv.reset_at, now) ?? now + RECHECK_MS[bucket];
+
+    // ตัวนับเอง: ต้องรอให้ครั้งเก่าสุดหลุดหน้าต่างไปกี่ครั้งถึงจะเหลือมากกว่า keep
+    const mine = used.filter((t) => t > now - span).sort((a, b) => a - b);
+    const over = mine.length - (max - keep) + 1;
+    if (over > 0) until = Math.max(until, (mine[Math.min(over, mine.length) - 1] ?? now) + span);
+
+    if (until) return { bucket, until, max };
+  }
+  return null;
+}
+
+/** เวลาแบบ 14:05 น. — ถ้าข้ามวันใส่วันที่ด้วย */
+const clock = (ms) => {
+  const d = new Date(ms);
+  const hm = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return d.toDateString() === new Date().toDateString()
+    ? `${hm} น.`
+    : `${d.toLocaleDateString("th-TH", { day: "numeric", month: "short" })} ${hm} น.`;
+};
 
 /**
  * @param cfg {
@@ -288,6 +397,32 @@ export function createBridge(cfg, onEvent = () => {}) {
   let conn = null;
   let reconnecting = false;
 
+  /* รอแบบปลุกได้ — พักรอโควตาอาจนานเป็นชั่วโมง กดหยุดแล้วต้องจบทันที ไม่ค้างรอจนครบ */
+  const naps = new Set();
+  const nap = (ms) =>
+    new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        naps.delete(done);
+        resolve();
+      };
+      const timer = setTimeout(done, Math.max(0, ms));
+      naps.add(done);
+    });
+
+  /** เวลาที่สะพานนี้ขอลายเซ็นไป — ต่อสำเร็จ หรือพลาดด้วยเหตุอื่นที่ไม่ใช่ "ยังไม่ไลฟ์" */
+  const signUsed = [];
+  let limitedStreak = 0;
+  let lastHold = "";
+
+  async function holdOff(until, why) {
+    // พักซ้ำด้วยเหตุเดิม (ถามใหม่แล้วยังหมด) ไม่ต้องพิมพ์ซ้ำทุกรอบ
+    const loud = why !== lastHold;
+    lastHold = why;
+    emit("status", `พักการต่อ — ${why}`, { state: "limited", detail: `ลองใหม่ ${clock(until)}`, until, loud });
+    await nap(until - Date.now());
+  }
+
   /* ต่อไม่ติดแล้วลองใหม่เรื่อยๆ ด้วยการถอยหลังแบบทวีคูณ
 
      เคสที่เจอบ่อยที่สุดคือ "ยังไม่ได้เริ่มไลฟ์" ซึ่งไม่ใช่ความผิดพลาด —
@@ -297,17 +432,38 @@ export function createBridge(cfg, onEvent = () => {}) {
     const c = await makeConnection();
     c.on("chat", onChat);
     // ไลบรารีโยน error ระหว่างทางได้ ถ้าไม่ดักไว้ process จะตายทั้งตัว
-    c.on("error", (e) => emit("info", `(ไลบรารีแจ้ง: ${briefly(e)})`));
+    c.on("error", (e) => {
+      // พลาดตอนต่อ ไลบรารีแจ้งซ้ำกับที่ connect() โยนออกมา — ลูปข้างล่างรายงานเองแล้ว
+      if (e?.info === "Error while connecting") return;
+      emit("info", `(ไลบรารีแจ้ง: ${briefly(e)})`);
+    });
 
     let attempt = 0;
+    let lastOffline = false;
     while (!stopped) {
+      // ลองซ้ำหลังพลาดด้วยเหตุอื่น เก็บโควตาไว้ส่วนหนึ่ง · ครั้งแรกหรือรอไลฟ์อยู่ใช้ได้จนหมด
+      const hold = signHold({
+        limits: await fetchSignLimits(cfg.signKey),
+        used: signUsed,
+        reserve: attempt > 0 && !lastOffline ? RETRY_RESERVE : {},
+      });
+      if (stopped) break;
+      if (hold) {
+        await holdOff(hold.until, BUCKET_TEXT[hold.bucket](hold.max));
+        continue;
+      }
+      lastHold = "";
+
       emit("status", `กำลังต่อกับไลฟ์ของ @${cfg.user}`, { state: "connecting", loud: attempt === 0 });
       try {
         const state = await c.connect();
+        signUsed.push(Date.now());
         if (stopped) {
           c.disconnect?.();
           return null;
         }
+        limitedStreak = 0;
+        liveSince = Date.now();
         emit("status", "ต่อกับไลฟ์แล้ว", {
           state: "live",
           detail: `ห้อง ${state?.roomId ?? "?"}`,
@@ -315,18 +471,38 @@ export function createBridge(cfg, onEvent = () => {}) {
         });
         return c;
       } catch (e) {
+        if (stopped) break;
+
+        if (isRateLimited(e)) {
+          signUsed.push(Date.now());
+          limitedStreak += 1;
+          const floor = Date.now() + LIMITED_BACKOFF_MS[Math.min(limitedStreak, LIMITED_BACKOFF_MS.length) - 1];
+          const known = signHold({ limits: await fetchSignLimits(cfg.signKey), used: signUsed });
+          await holdOff(
+            Math.max(floor, known?.until ?? 0),
+            known ? BUCKET_TEXT[known.bucket](known.max) : "บริการเชื่อมต่อแชทปฏิเสธ (ใช้เกินโควตา)",
+          );
+          continue;
+        }
+
         attempt += 1;
-        const wait = Math.min(60, 5 * 2 ** Math.min(attempt - 1, 4));
-        const why = briefly(e);
-        const offline = /offline|not.*live|LIVE has ended|user_not_found/i.test(why);
+        const offline = isOffline(e);
+        lastOffline = offline;
+        // ยังไม่ไลฟ์ = ถาม TikTok อย่างเดียว ไม่ได้ขอลายเซ็น จึงไม่นับ
+        if (!offline) signUsed.push(Date.now());
+        const wait = offline
+          ? attempt <= 10
+            ? 60
+            : 120
+          : Math.min(120, 5 * 2 ** Math.min(attempt - 1, 5));
         /* เปิดค้างข้ามวัน ช่วงไม่ไลฟ์จะลองทุกนาที — บอกทุกครั้งก็ท่วม log วันละพันบรรทัด
            บอกครั้งแรกแล้วเว้นทุกสิบครั้ง พอให้รู้ว่ายังรออยู่ ส่วนต่อไม่ติดด้วยเหตุอื่นบอกทุกครั้ง */
-        emit("status", offline ? "ยังไม่ได้เริ่มไลฟ์" : `ต่อไม่ติด — ${why}`, {
+        emit("status", offline ? "ยังไม่ได้เริ่มไลฟ์" : `ต่อไม่ติด — ${briefly(e)}`, {
           state: offline ? "waiting" : "retry",
           detail: `ลองใหม่ใน ${wait} วิ`,
           loud: !offline || attempt === 1 || attempt % 10 === 0,
         });
-        await sleep(wait * 1000);
+        await nap(wait * 1000);
       }
     }
     return null;
@@ -337,11 +513,29 @@ export function createBridge(cfg, onEvent = () => {}) {
      ทุกการเชื่อมต่อใหม่ต้องผูกตัวดักซ้ำ (watch) — รุ่นแรกผูกไว้แค่ตัวแรก
      ไลฟ์แรกจบก็ต่อใหม่ได้ แต่พอไลฟ์ที่สองจบไม่มีใครรู้ สะพานค้างเงียบไปตลอด
      และ streamEnd กับ disconnected มักมาคู่กัน — ต่อใหม่ครั้งเดียวพอ ไม่งั้นได้
-     สองการเชื่อมต่อ แล้วทุกคำขอเข้าคิวสองรอบ */
-  async function reconnect(from, label) {
+     สองการเชื่อมต่อ แล้วทุกคำขอเข้าคิวสองรอบ
+
+     ไลฟ์จบแล้ว TikTok ยังบอกว่าห้องเดิมไลฟ์อยู่อีกพักหนึ่ง ต่อเข้าไปก็ได้ streamEnd ทันที
+     ถ้าต่อใหม่ใน 5 วิจะวนเผาโควตาลายเซ็นนาทีละ 5 ครั้ง (ดูหัวข้อโควตาข้างบน)
+     จึงรอหลังไลฟ์จบอย่างน้อยหนึ่งนาที และถ้าต่อติดไม่ถึง 3 นาทีแล้วหลุดอีก ให้ถอยยาวขึ้นเรื่อยๆ */
+  let liveSince = 0;
+  let shortStreak = 0;
+  const SHORT_LIVE_MS = 3 * 60_000;
+
+  async function reconnect(from, label, ended) {
     if (stopped || reconnecting || from !== conn) return;
     reconnecting = true;
-    emit("status", `${label} — จะลองต่อใหม่`, { state: "connecting", loud: true });
+    shortStreak = Date.now() - liveSince < SHORT_LIVE_MS ? shortStreak + 1 : 0;
+    const wait = ended
+      ? Math.min(900, 60 * 2 ** shortStreak) // 60 → 120 → 240 → 480 → 900 วิ
+      : shortStreak > 1
+        ? Math.min(900, 30 * 2 ** (shortStreak - 1))
+        : 5;
+    emit("status", `${label} — จะลองต่อใหม่`, {
+      state: ended ? "waiting" : "connecting",
+      detail: `อีก ${wait} วิ`,
+      loud: true,
+    });
     // ตัวเก่าห้ามส่งแชทต่อ เผื่อไลบรารีต่อเองข้างในแล้วซ้อนกับตัวใหม่
     from.removeAllListeners?.("chat");
     try {
@@ -349,7 +543,7 @@ export function createBridge(cfg, onEvent = () => {}) {
     } catch {
       /* หลุดอยู่แล้ว */
     }
-    await sleep(5000);
+    await nap(wait * 1000);
     try {
       conn = await connectLoop();
       if (conn) watch(conn);
@@ -361,8 +555,8 @@ export function createBridge(cfg, onEvent = () => {}) {
   }
 
   function watch(c) {
-    c.on("disconnected", () => void reconnect(c, "หลุดจากไลฟ์"));
-    c.on("streamEnd", () => void reconnect(c, "ไลฟ์จบแล้ว"));
+    c.on("disconnected", () => void reconnect(c, "หลุดจากไลฟ์", false));
+    c.on("streamEnd", () => void reconnect(c, "ไลฟ์จบแล้ว", true));
   }
 
   return {
@@ -374,6 +568,7 @@ export function createBridge(cfg, onEvent = () => {}) {
     },
     stop() {
       stopped = true;
+      for (const wake of [...naps]) wake();
       if (!conn) return;
       conn.removeAllListeners?.("chat");
       try {

@@ -185,6 +185,7 @@ export const PAGE = `<!doctype html>
     waiting: "รอไลฟ์เริ่ม",
     connecting: "กำลังต่อกับไลฟ์…",
     retry: "ต่อไลฟ์ไม่ติด กำลังลองใหม่",
+    limited: "พักการต่อชั่วคราว",
     setup: "ยังไม่ได้ตั้งค่า",
   };
 
@@ -199,11 +200,11 @@ export const PAGE = `<!doctype html>
     if (showSetup) return;
 
     const s = state.status;
-    $("pill").className = "pill " + (s.state === "live" ? "live" : s.state === "retry" ? "retry" : "");
+    $("pill").className = "pill " + (s.state === "live" ? "live" : s.state === "retry" || s.state === "limited" ? "retry" : "");
     $("statusText").textContent = STATUS[s.state] || s.text;
     $("statusDetail").textContent =
       s.state === "waiting" ? "ยังไม่ได้เริ่มไลฟ์ — เริ่มเมื่อไหร่ โปรแกรมต่อให้เอง (ลองล่าสุด " + new Date(s.at).toLocaleTimeString("th-TH") + ")" :
-      s.state === "retry" ? s.text + (s.detail ? " · " + s.detail : "") :
+      s.state === "retry" || s.state === "limited" ? s.text + (s.detail ? " · " + s.detail : "") :
       s.detail || "";
     $("problem").hidden = !state.problem;
     $("problem").textContent = state.problem ? "ตั้งค่ายังไม่ครบ: " + state.problem.text : "";
