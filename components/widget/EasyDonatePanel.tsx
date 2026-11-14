@@ -258,7 +258,7 @@ export default function EasyDonatePanel({ channel }: { channel: Channel }) {
                   </Button>
                   {on ? (
                     <Badge tone="open" dot>
-                      เปิดอยู่ · {baht(saved?.min ?? 0)} ขึ้นไป
+                      เปิดอยู่ ตั้งแต่ {baht(saved?.min ?? 0)}
                     </Badge>
                   ) : (
                     <Badge>ปิดอยู่</Badge>

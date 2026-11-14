@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { authStore } from "@/lib/backend/firebase";
 import type { Channel } from "@/lib/channel/types";
 import { safeImageSrc } from "@/lib/safe";
@@ -276,9 +277,17 @@ function LinkBox({
 }
 
 /* =========================================================================
-   ใส่เพลงเอง
+   ใส่เพลงเอง — ช่องเดียวรับทั้งชื่อเพลงและลิงก์
    ========================================================================= */
 
+/** พรีวิวลิงก์ที่วาง — null = ข้อความในช่องไม่ใช่ลิงก์ (เป็นคำค้น หรือว่าง) */
+type LinkPreview = { state: "loading" } | { state: "missing" } | { state: "ok"; info: YoutubeInfo };
+
+/**
+ * เดิมเป็นสองช่องซ้อนกัน "ค้นหาเพลง" กับ "วางลิงก์เพลงที่อยากเปิด" — คนต้องเลือกก่อนว่าจะใช้ช่องไหน
+ * และหน้ายาวจนช่องล่างตกขอบจอ ตอนนี้รวมเป็นช่องเดียวแบบหน้าขอเพลงของคนดู:
+ * ข้อความเป็นลิงก์ = พรีวิวแล้วปุ่มกลายเป็น "ใส่คิว" · ไม่ใช่ลิงก์ = ปุ่ม "ค้นหา"
+ */
 function AddSong({
   channelId,
   searchEndpoint,
@@ -286,22 +295,61 @@ function AddSong({
   channelId: string;
   searchEndpoint?: string;
 }) {
-  const searchId = useId();
+  const inputId = useId();
   const [q, setQ] = useState("");
+  const [link, setLink] = useState<LinkPreview | null>(null);
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [added, setAdded] = useState<string | null>(null);
+  const timer = useRef<number | null>(null);
+  /** ลำดับการถาม — คำตอบของลิงก์เก่าที่มาช้าต้องไม่ทับผลของลิงก์ใหม่ */
+  const seq = useRef(0);
 
+  useEffect(
+    () => () => {
+      if (timer.current != null) window.clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const canSearch = !!searchEndpoint;
+  const typed = q.trim();
+  const isLink = !!typed && !!videoIdFrom(typed);
+  const notLink = !!typed && !isLink && !canSearch;
+
+  const onInput = (raw: string) => {
+    setQ(raw);
+    setErr(null);
+    // แก้ข้อความแล้วผลค้นเก่าไม่ตรงคำใหม่ — ล้างทิ้ง
+    setHits(null);
+    if (timer.current != null) window.clearTimeout(timer.current);
+    const token = ++seq.current;
+
+    const videoId = videoIdFrom(raw.trim());
+    if (!videoId) {
+      setLink(null);
+      return;
+    }
+    setLink({ state: "loading" });
+    timer.current = window.setTimeout(() => {
+      void lookupVideo(videoId).then((info) => {
+        if (token !== seq.current) return;
+        setLink(info ? { state: "ok", info } : { state: "missing" });
+      });
+    }, LOOKUP_DELAY);
+  };
+
+  /** คืน true เมื่อเขียนลงคิวจริง */
   const queue = async (info: {
     videoId: string;
     title: string;
     author: string;
-  }) => {
+  }): Promise<boolean> => {
     const user = authStore.user();
     if (!user) {
       toast("ต้องล็อกอินก่อนถึงจะใส่เพลงได้", "error");
-      return;
+      return false;
     }
     /*
       ต้องเช็คว่าเขียนลงจริงก่อนค่อยบอกว่าสำเร็จ
@@ -324,30 +372,43 @@ function AddSong({
         },
         "streamer",
       );
-    } catch (err) {
-      console.error("ใส่เพลงเข้าคิวไม่สำเร็จ", err);
+    } catch (e) {
+      console.error("ใส่เพลงเข้าคิวไม่สำเร็จ", e);
       toast(
-        `ใส่คิวไม่สำเร็จ ลองกดอีกครั้ง (${err instanceof Error ? err.message : err})`,
+        `ใส่คิวไม่สำเร็จ ลองกดอีกครั้ง (${e instanceof Error ? e.message : e})`,
         "error",
         7000,
       );
-      return;
+      return false;
     }
     if (!newId) {
       toast("ใส่คิวไม่สำเร็จ ต่อฐานข้อมูลไม่ติด รีเฟรชหน้าแล้วลองใหม่", "error", 7000);
-      return;
+      return false;
     }
 
     setAdded(info.videoId);
     toast("ใส่คิวแล้ว", "success", 1600);
     window.setTimeout(() => setAdded(null), 1600);
+    return true;
+  };
+
+  const addLink = async () => {
+    if (link?.state !== "ok") return;
+    setBusy(true);
+    const ok = await queue(link.info);
+    setBusy(false);
+    // ล้างช่องเฉพาะตอนสำเร็จ ล้มเหลวแล้วต้องเหลือลิงก์ไว้ให้กดซ้ำได้
+    if (ok) {
+      setQ("");
+      setLink(null);
+    }
   };
 
   const run = async () => {
-    if (!searchEndpoint || !q.trim()) return;
+    if (!searchEndpoint || !typed || busy) return;
     setBusy(true);
     setErr(null);
-    const res = await searchSongs(searchEndpoint, q);
+    const res = await searchSongs(searchEndpoint, typed);
     if (res.ok) setHits(res.items);
     else {
       setHits(null);
@@ -356,126 +417,137 @@ function AddSong({
     setBusy(false);
   };
 
+  const submit = () => void (isLink ? addLink() : run());
+
   return (
-    <div className="space-y-10">
-      {/* ---------- ค้นหา ---------- */}
-      {searchEndpoint ? (
-        <div>
-          <BlockTitle htmlFor={searchId}>ค้นหาเพลง</BlockTitle>
-          <div className="flex gap-2">
-            <Input
-              id={searchId}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void run();
-              }}
-              placeholder="ชื่อเพลงหรือชื่อศิลปิน"
-              enterKeyHint="search"
-              className="min-w-0 flex-1"
-            />
-            <Button
-              variant="secondary"
-              onClick={() => void run()}
-              loading={busy}
-              disabled={!q.trim()}
-            >
-              ค้นหา
-            </Button>
-          </div>
+    <div>
+      <BlockTitle
+        htmlFor={inputId}
+        hint={
+          canSearch
+            ? "พิมพ์ชื่อเพลงแล้วกดค้นหา หรือวางลิงก์ YouTube เพลงต่อท้ายคิว ถ้าคิวว่างอยู่ก็เล่นต่อทันที"
+            : "วางลิงก์ YouTube เพลงต่อท้ายคิว ถ้าคิวว่างอยู่ก็เล่นต่อทันที"
+        }
+      >
+        ใส่เพลงเข้าคิว
+      </BlockTitle>
+      <div className="flex gap-2">
+        <Input
+          id={inputId}
+          value={q}
+          onChange={(e) => onInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+          }}
+          placeholder={canSearch ? "ชื่อเพลง ศิลปิน หรือลิงก์ YouTube" : "วางลิงก์ YouTube"}
+          enterKeyHint={isLink ? "done" : "search"}
+          autoComplete="off"
+          spellCheck={false}
+          aria-invalid={notLink || link?.state === "missing"}
+          aria-describedby={`${inputId}-status`}
+          className="min-w-0 flex-1"
+        />
+        <Button
+          variant={isLink ? "primary" : "secondary"}
+          onClick={submit}
+          loading={busy}
+          disabled={isLink ? link?.state !== "ok" : !canSearch || !typed}
+        >
+          {isLink ? "ใส่คิว" : "ค้นหา"}
+        </Button>
+      </div>
 
-          {err && (
-            <p role="alert" className="mt-3 text-sm text-danger">
-              {err}
-            </p>
-          )}
-
-          {hits?.length === 0 && (
-            <p className="mt-3 text-muted">
-              ไม่เจอเพลงที่ตรงกับคำค้นนี้ ลองพิมพ์ให้สั้นลง หรือใส่ชื่อศิลปินด้วย
-            </p>
-          )}
-
-          {!!hits?.length && (
-            <ul className="rows mt-4 max-h-112 overflow-y-auto overscroll-contain">
-              {hits.map((h) => {
-                const isAdded = added === h.videoId;
-                return (
-                  <li key={h.videoId} className="py-1">
-                    <button
-                      type="button"
-                      onClick={() => void queue(h)}
-                      title="กดเพื่อใส่คิว"
-                      className="flex w-full cursor-pointer items-center gap-3 rounded-field p-2 text-left transition-colors hover:bg-fill"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={safeImageSrc(h.thumb ?? thumbUrl(h.videoId, "mq")) ?? ""}
-                        alt=""
-                        loading="lazy"
-                        className="aspect-video w-20 shrink-0 rounded-thumb bg-fill object-cover"
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="line-clamp-2 leading-snug font-medium">{h.title}</span>
-                        <span className="mt-0.5 block truncate text-sm text-muted">
-                          {h.author}
-                        </span>
-                      </span>
-                      <span
-                        className={`inline-flex shrink-0 items-center gap-1.5 px-2 text-sm font-medium ${
-                          isAdded ? "text-open" : "text-ink"
-                        }`}
-                      >
-                        {isAdded ? (
-                          <IconCheck className="h-4 w-4" strokeWidth={2.2} />
-                        ) : (
-                          <IconPlus className="h-4 w-4" strokeWidth={2} />
-                        )}
-                        {isAdded ? "ใส่แล้ว" : "ใส่คิว"}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      ) : (
-        <div className="rounded-sheet bg-fill p-5">
-          <p className="font-bold">ยังค้นหาเพลงจากตรงนี้ไม่ได้</p>
-          <p className="mt-1 max-w-prose text-sm text-muted">
-            การค้นหาต้องใช้คีย์ YouTube Data API ซึ่งฝังไว้ในหน้าเว็บไม่ได้ (ใครเปิดดูก็หยิบไปใช้ได้)
-            ใส่คีย์ไว้ใน Worker แล้ววางลิงก์ Worker ในช่อง &ldquo;ลิงก์ Worker สำหรับค้นหา&rdquo;
-            ที่หน้าตั้งค่าช่องในสตูดิโอ ช่องค้นหาจะขึ้นตรงนี้เอง ระหว่างนี้วางลิงก์เพลงด้านล่างได้
+      <div id={`${inputId}-status`} aria-live="polite" className="mt-3 empty:hidden">
+        {notLink && (
+          <p className="text-sm text-danger">
+            ลิงก์นี้ไม่ใช่ลิงก์ YouTube ลองก๊อปจากปุ่มแชร์ของคลิปอีกครั้ง
           </p>
-        </div>
+        )}
+        {link?.state === "missing" && (
+          <p className="text-sm text-danger">หาคลิปนี้ไม่เจอ อาจถูกลบหรือตั้งเป็นส่วนตัวไว้</p>
+        )}
+        {link?.state === "loading" && (
+          <div className="flex items-center gap-3">
+            <Skeleton className="aspect-video w-24 shrink-0 rounded-thumb" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-4 w-4/5" />
+              <Skeleton className="h-3.5 w-2/5" />
+            </div>
+          </div>
+        )}
+        {link?.state === "ok" && (
+          <div className="flex items-center gap-3">
+            <Cover videoId={link.info.videoId} size="sm" className="w-24" />
+            <div className="min-w-0 flex-1">
+              <p className="line-clamp-2 leading-snug font-medium">{link.info.title}</p>
+              <p className="mt-0.5 truncate text-sm text-muted">{link.info.author}</p>
+            </div>
+          </div>
+        )}
+        {err && (
+          <p role="alert" className="text-sm text-danger">
+            {err}
+          </p>
+        )}
+        {hits?.length === 0 && (
+          <p className="text-muted">
+            ไม่เจอเพลงที่ตรงกับคำค้นนี้ ลองพิมพ์ให้สั้นลง หรือใส่ชื่อศิลปินด้วย
+          </p>
+        )}
+      </div>
+
+      {!!hits?.length && (
+        <ul className="rows mt-1 max-h-112 overflow-y-auto overscroll-contain">
+          {hits.map((h) => {
+            const isAdded = added === h.videoId;
+            return (
+              <li key={h.videoId} className="py-1">
+                <button
+                  type="button"
+                  onClick={() => void queue(h)}
+                  title="กดเพื่อใส่คิว"
+                  className="flex w-full cursor-pointer items-center gap-3 rounded-field p-2 text-left transition-colors hover:bg-fill"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={safeImageSrc(h.thumb ?? thumbUrl(h.videoId, "mq")) ?? ""}
+                    alt=""
+                    loading="lazy"
+                    className="aspect-video w-20 shrink-0 rounded-thumb bg-fill object-cover"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="line-clamp-2 leading-snug font-medium">{h.title}</span>
+                    <span className="mt-0.5 block truncate text-sm text-muted">{h.author}</span>
+                  </span>
+                  <span
+                    className={`inline-flex shrink-0 items-center gap-1.5 px-2 text-sm font-medium ${
+                      isAdded ? "text-open" : "text-ink"
+                    }`}
+                  >
+                    {isAdded ? (
+                      <IconCheck className="h-4 w-4" strokeWidth={2.2} />
+                    ) : (
+                      <IconPlus className="h-4 w-4" strokeWidth={2} />
+                    )}
+                    {isAdded ? "ใส่แล้ว" : "ใส่คิว"}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
-      <LinkBox
-        label="วางลิงก์เพลงที่อยากเปิด"
-        hint="เพลงจะต่อท้ายคิว ถ้าคิวว่างอยู่ก็เล่นต่อทันที"
-        actionLabel="ใส่คิว"
-        onPick={async (info) => {
-          const user = authStore.user();
-          if (!user) {
-            toast("ต้องล็อกอินก่อนถึงจะใส่เพลงได้", "error");
-            return;
-          }
-          await addSongToQueue(
-            channelId,
-            {
-              videoId: info.videoId,
-              title: info.title,
-              author: info.author,
-              url: info.url,
-              byUid: user.uid,
-              byName: "สตรีมเมอร์",
-            },
-            "streamer",
-          );
-          toast("ใส่คิวแล้ว", "success");
-        }}
-      />
+      {/* ไม่มี Worker = ค้นด้วยชื่อไม่ได้ (คีย์ YouTube ฝังในหน้าเว็บไม่ได้ ใครเปิดดูก็หยิบไปใช้ได้) */}
+      {!canSearch && (
+        <p className="mt-4 max-w-prose text-sm text-muted">
+          อยากค้นด้วยชื่อเพลง ใส่ลิงก์ Worker ที่{" "}
+          <Link href="/studio/channel/" className="font-medium text-ink underline underline-offset-4">
+            ตั้งค่าช่อง
+          </Link>{" "}
+          แล้วช่องนี้จะค้นหาได้เอง
+        </p>
+      )}
     </div>
   );
 }

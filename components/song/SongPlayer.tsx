@@ -413,6 +413,13 @@ export function SongPlayerCore({
           width: "100%",
           playerVars: {
             autoplay: 1,
+            /* ปุ่มของ YouTube ซ่อนหมด — ใต้จอมีแถบเวลา (กรอได้) ปุ่มเล่น/ข้าม/เสียงของเราอยู่แล้ว
+               ปล่อยไว้ = ปุ่มหยุดกับแถบเวลาสองชุดซ้อนกัน แถมเวลาสองชุดปัดเศษไม่ตรงกัน
+               ปุ่มลัดของ YouTube ปิดด้วย (disablekb) ใช้ Space / N / M ของหน้านี้ชุดเดียว */
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            iv_load_policy: 3,
             rel: 0,
             modestbranding: 1,
             playsinline: 1,
@@ -756,6 +763,8 @@ export function SongPlayerCore({
   /* สีของเวทีดูดมาจากปกเพลงที่กำลังเล่น (docs/DESIGN.md ข้อ 1) ไม่มีเพลง = เทาเรียบ */
   const palette = useArtPalette(playing?.videoId);
   const fillerOn = fillerMode !== "off" && !!filler?.length;
+  /* กล่องเพลงสำรองในคิวโชว์แค่เพลงถัดไป กางดูทั้งหมดได้ — ของเต็มอยู่ในแท็บเพลงสำรองข้างล่าง */
+  const [fillerOpen, setFillerOpen] = useState(false);
 
   const youtube = playing ? safeUrl(playing.url) : null;
 
@@ -890,7 +899,8 @@ export function SongPlayerCore({
       </div>
       <h2
         className={`mt-2 line-clamp-2 font-bold wrap-break-word ${
-          compact ? "text-title" : "text-title sm:text-headline"
+          // นับจากความกว้างของเวที ไม่ใช่ของจอ — จอกว้างชื่อเพลงอยู่คอลัมน์ขวาที่แคบกว่าเดิม
+          compact ? "text-title" : "text-title @3xl:text-headline"
         }`}
       >
         {playing.title}
@@ -966,15 +976,17 @@ export function SongPlayerCore({
           )}
         </button>
 
+        {/* มีคำว่า "ข้าม" กำกับ — ไอคอนเดี่ยวสีเทาข้างปุ่มดำใหญ่ คนหาไม่เจอตอนรีบกลางไลฟ์ */}
         <button
           type="button"
           disabled={!playing}
           onClick={() => void skip()}
           aria-label="ข้ามเพลงนี้"
           title={compact ? "ข้ามเพลงนี้" : "ข้ามเพลงนี้ (N)"}
-          className={`grid h-13 w-13 shrink-0 place-items-center rounded-full text-ink ${onStage}`}
+          className={`inline-flex h-13 shrink-0 items-center gap-2 rounded-full pr-5 pl-4 font-semibold text-ink ${onStage}`}
         >
-          <IconSkip className="h-6 w-6" />
+          <IconSkip className="h-5 w-5" />
+          ข้าม
         </button>
       </div>
 
@@ -1006,17 +1018,62 @@ export function SongPlayerCore({
     </div>
   );
 
+  /*
+    เพลงถัดไป — ตอบคำถามที่คนคุมไลฟ์ถามบ่อยที่สุดโดยไม่ต้องหันไปดูคิว
+    (หน้าภาพรวมไม่มีคิวให้ดูเลย และจอแคบคิวอยู่ใต้เวทีไกลออกไป)
+    ไม่มีเพลงต่อและไม่มีเพลงสำรอง = เตือนว่าเพลงนี้จบแล้วจะเงียบ
+  */
+  const next = queued[0] ?? null;
+  const upNext = playing ? (
+    <div className="mt-5 flex min-w-0 items-center gap-3 border-t border-ink/10 pt-4">
+      <span className="shrink-0 text-sm font-semibold">ต่อไป</span>
+      {next ? (
+        <>
+          <Cover videoId={next.videoId} size="sm" className="w-14" />
+          <span className="min-w-0 flex-1 text-sm">
+            <span className="block truncate font-medium">{next.title}</span>
+            <span className="block truncate text-muted">
+              {next.source === "filler"
+                ? "เพลงสำรอง"
+                : (next.paid ?? 0) > 0
+                  ? `ลัดคิว ${baht(next.paid ?? 0)} ขอโดย ${next.byName}`
+                  : `ขอโดย ${next.byName}`}
+            </span>
+          </span>
+        </>
+      ) : (
+        <span className="min-w-0 flex-1 truncate text-sm text-muted">
+          {fillerOn ? "กำลังหยิบเพลงสำรองมาต่อคิว" : "คิวว่าง เพลงนี้จบแล้วจะเงียบ"}
+        </span>
+      )}
+    </div>
+  ) : null;
+
+  /*
+    เวที — จอกว้างวางวิดีโอไว้ซ้าย ชื่อเพลงกับปุ่มไว้ขวา (นับจากความกว้างของเวทีเอง @container)
+    วิดีโอเต็มความกว้างสูงเกือบครึ่งจอ ทั้งที่คนคุมไลฟ์ฟังอย่างเดียว ไม่ได้ดูภาพ
+    ช่องใส่เพลงข้างใต้เลยหลุดจอทุกครั้ง · หน้าภาพรวม (compact) แคบอยู่แล้ว เรียงบนลงล่างตามเดิม
+  */
   const stage = (
     <section
       aria-label="เพลงที่กำลังเล่น"
-      className={`min-w-0 rounded-stage p-3 shadow-raise ${compact ? "sm:p-4" : "sm:p-5 lg:col-start-1 lg:row-start-1"}`}
+      className={`@container min-w-0 rounded-stage p-3 shadow-raise ${compact ? "sm:p-4" : "sm:p-5 lg:col-start-1 lg:row-start-1"}`}
       style={stageStyle(palette, !!playing)}
     >
-      {video}
-      <div className="px-1 pt-5 pb-1 sm:px-2">
-        {nowPlaying}
-        {progress}
-        {transport}
+      <div
+        className={
+          compact
+            ? undefined
+            : "grid gap-x-6 @2xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] @2xl:items-center"
+        }
+      >
+        {video}
+        <div className={`px-1 pt-5 pb-1 sm:px-2 ${compact ? "" : "@2xl:py-1"}`}>
+          {nowPlaying}
+          {progress}
+          {transport}
+          {upNext}
+        </div>
       </div>
     </section>
   );
@@ -1040,7 +1097,7 @@ export function SongPlayerCore({
             s.source === "filler"
               ? "เพลงสำรอง"
               : (s.paid ?? 0) > 0
-                ? `ลัดคิว ${baht(s.paid ?? 0)} · ขอโดย ${s.byName}`
+                ? `ลัดคิว ${baht(s.paid ?? 0)} ขอโดย ${s.byName}`
                 : s.source === "tiktok"
                   ? `ขอโดย ${s.byName} ผ่าน TikTok`
                   : `ขอโดย ${s.byName}`
@@ -1094,12 +1151,12 @@ export function SongPlayerCore({
                 <p className="text-sm text-muted">กดเพลงเพื่อเล่นทันที</p>
               )}
             </div>
+            {/* ว่างอยู่ = บรรทัดเดียว กล่องนี้อยู่บนสุดของคิวตลอดไลฟ์ ประโยคยาวสามบรรทัดดันคิวจริงลงไปเปล่าๆ */}
             {requested.length === 0 ? (
-              <p className="mt-2 text-muted">
-                ยังไม่มีใครขอเพลง เพลงที่คนดูขอจะขึ้นตรงนี้ และได้เล่นก่อนเพลงสำรองเสมอ
-                {!filler?.length && fillerQueued.length === 0 && (
-                  <> ตั้งเพลงสำรองไว้ที่แท็บเพลงสำรองด้านล่าง ไลฟ์จะได้ไม่เงียบตอนไม่มีใครขอ</>
-                )}
+              <p className="mt-1 text-muted">
+                {!filler?.length && fillerQueued.length === 0
+                  ? "ยังไม่มีใครขอ ตั้งเพลงสำรองไว้ ไลฟ์จะได้ไม่เงียบ"
+                  : "ยังไม่มีใครขอ"}
               </p>
             ) : (
               <ol className="rows mt-2">
@@ -1149,12 +1206,26 @@ export function SongPlayerCore({
                   </Button>
                 )}
               </div>
+              {/* โชว์แค่เพลงสำรองถัดไป ที่เหลือพับไว้ — กองเต็มดู/แก้ได้ที่ "จัดการ" (แท็บเพลงสำรอง) */}
               {fillerQueued.length > 0 && (
                 <ol className="rows mt-3">
-                  {fillerQueued.map((s, i) =>
+                  {(fillerOpen ? fillerQueued : fillerQueued.slice(0, 1)).map((s, i) =>
                     queueItem(s, requested.length + i + 1, fillerQueued, true),
                   )}
                 </ol>
+              )}
+              {fillerQueued.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setFillerOpen((v) => !v)}
+                  aria-expanded={fillerOpen}
+                  className="mt-1 inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-sm font-medium text-muted transition-colors hover:text-ink"
+                >
+                  <IconChevronDown
+                    className={`h-4 w-4 transition-transform ${fillerOpen ? "rotate-180" : ""}`}
+                  />
+                  {fillerOpen ? "ย่อเหลือเพลงถัดไป" : `ดูอีก ${fillerQueued.length - 1} เพลง`}
+                </button>
               )}
             </section>
           )}
