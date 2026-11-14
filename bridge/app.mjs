@@ -19,10 +19,11 @@
  * ------------------------------------------------------------------ */
 
 import { execFile } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFile, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { DEFAULT_COMMANDS, briefly, createBridge } from "./core.mjs";
 import { PAGE } from "./app-page.mjs";
 import pkg from "./package.json" with { type: "json" };
@@ -160,11 +161,26 @@ function startBridge() {
 /* ------------------------------------------------------------------ *
  * เปิดเองตอนล็อกอิน Windows — คีย์ Run ของผู้ใช้ (HKCU) แบบที่โปรแกรมทั่วไปใช้
  * ไม่ต้องใช้สิทธิ์ admin ปิดได้จากหน้าเว็บหรือจาก Task Manager → Startup
+ *
+ * คีย์ Run ชี้ไปที่สำเนาใน %LOCALAPPDATA%\Programs\kiew-bridge ไม่ใช่ตัวที่ดับเบิลคลิก
+ *   ดับเบิลคลิก exe ในไฟล์ zip โดยไม่แตกก่อน = Windows แตกไว้ใน %TEMP% ชั่วคราว
+ *   ถ้าจดที่อยู่นั้นไว้ พอ Temp ถูกล้าง ทุกครั้งที่เปิดเครื่องจะได้จอดำค้างกับกล่อง
+ *   "Windows cannot find ...kiew-bridge.exe" (ตัวใน Downloads ก็ถูกย้าย/ลบได้เหมือนกัน)
  * ------------------------------------------------------------------ */
 
 const RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const RUN_NAME = "KiewBridge";
 const canAutostart = process.platform === "win32";
+/** รันจาก .exe — ตอนพัฒนา (node app.mjs) process.execPath คือ node เอง ไม่ต้องทำสำเนา */
+const PACKAGED = !/^node(\.exe)?$/i.test(basename(process.execPath));
+const INSTALL_DIR = join(
+  process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local"),
+  "Programs",
+  "kiew-bridge",
+);
+const INSTALLED = join(INSTALL_DIR, "kiew-bridge.exe");
+/** รุ่นของสำเนา — ไม่ต้องคัดลอก 80 MB ซ้ำทุกครั้งที่เปิด */
+const INSTALLED_VERSION = join(INSTALL_DIR, "version.txt");
 let autostart = false;
 
 const run = (file, args) =>
@@ -172,14 +188,34 @@ const run = (file, args) =>
     execFile(file, args, { windowsHide: true }, (err, stdout) => resolve({ ok: !err, stdout }));
   });
 
-/** คำสั่งที่จะให้ Windows เรียกตอนล็อกอิน — ย่อหน้าต่างไว้ ไม่บังจอ */
+const samePath = (a, b) => resolve(a).toLowerCase() === resolve(b).toLowerCase();
+const runningInstalled = () => samePath(process.execPath, INSTALLED);
+
+/** วางสำเนาของตัวที่กำลังรันไว้ที่ถาวร (ถ้ายังไม่มีหรือเป็นคนละรุ่น)
+    ไม่ชนตัวที่กำลังรัน — ถ้าสำเนารันอยู่ ตัวนี้จะเจอพอร์ตไม่ว่างแล้วปิดตัวไปก่อนถึงตรงนี้ */
+async function installCopy() {
+  if (runningInstalled()) return;
+  let have = "";
+  try {
+    have = readFileSync(INSTALLED_VERSION, "utf8").trim();
+  } catch {}
+  if (have === VERSION && existsSync(INSTALLED)) return;
+  await mkdir(INSTALL_DIR, { recursive: true });
+  // คัดลอกลงชื่อชั่วคราวก่อน — ค้างกลางทางเมื่อไร ตัวเดิมยังเปิดได้
+  const part = `${INSTALLED}.part`;
+  await copyFile(process.execPath, part);
+  await rename(part, INSTALLED);
+  await writeFile(INSTALLED_VERSION, VERSION);
+}
+
+/** คำสั่งที่จะให้ Windows เรียกตอนล็อกอิน — ย่อหน้าต่างไว้ ไม่บังจอ
+    if exist กันอีกชั้น: ไฟล์หายเมื่อไรก็แค่ไม่เปิด ไม่เด้งกล่อง error ค้างกับจอดำทุกครั้งที่เปิดเครื่อง */
 function launchCommand() {
-  // ตัว .exe คือ process.execPath เอง · ตอนพัฒนา (node app.mjs) ต้องบอกไฟล์สคริปต์ด้วย
-  const packaged = !/^node(\.exe)?$/i.test(basename(process.execPath));
-  const target = packaged
-    ? `"${process.execPath}"`
-    : `"${process.execPath}" "${process.argv[1]}"`;
-  return `cmd.exe /c start "" /min ${target} --background`;
+  // ตอนพัฒนา (node app.mjs) ต้องบอกไฟล์สคริปต์ด้วย
+  const [file, target] = PACKAGED
+    ? [INSTALLED, `"${INSTALLED}"`]
+    : [process.argv[1], `"${process.execPath}" "${process.argv[1]}"`];
+  return `cmd.exe /c if exist "${file}" start "" /min ${target} --background`;
 }
 
 async function readAutostart() {
@@ -191,11 +227,24 @@ async function readAutostart() {
 
 async function setAutostart(on) {
   if (!canAutostart) throw new Error("เปิดเองตอนเปิดเครื่องได้เฉพาะบน Windows");
+  if (on && PACKAGED) {
+    try {
+      await installCopy();
+    } catch (e) {
+      // หน้าเว็บแค่ติ๊กกลับ ไม่บอกเหตุผล — จดลงรายการให้เห็น
+      record({ kind: "error", text: `ตั้งเปิดเองตอนเปิดเครื่องไม่สำเร็จ · ${briefly(e)}` });
+      throw e;
+    }
+  }
   const r = on
     ? await run("reg.exe", ["add", RUN_KEY, "/v", RUN_NAME, "/t", "REG_SZ", "/d", launchCommand(), "/f"])
     : await run("reg.exe", ["delete", RUN_KEY, "/v", RUN_NAME, "/f"]);
   await readAutostart();
   if (!r.ok && autostart !== on) throw new Error("ตั้งค่าไม่สำเร็จ");
+  // ปิดแล้วก็เก็บสำเนาทิ้ง (ราว 80 MB) — ถ้ากำลังรันจากสำเนาเองจะลบไม่ได้ ปล่อยไว้
+  if (!on && PACKAGED && !runningInstalled()) {
+    await rm(INSTALL_DIR, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 function openBrowser(url) {
@@ -354,4 +403,7 @@ server.listen(PORT, "127.0.0.1", async () => {
   await readAutostart();
   startBridge();
   if (!BACKGROUND) openBrowser(HOME);
+  /* ติ๊กไว้แล้ว = เขียนคีย์ Run ใหม่ทุกครั้งที่เปิด
+     ซ่อมเครื่องที่รุ่นก่อนจดที่อยู่ใน Temp/Downloads ไว้ และอัปเดตสำเนาเป็นรุ่นที่เพิ่งเปิด */
+  if (autostart && PACKAGED) setAutostart(true).catch(() => {});
 });
