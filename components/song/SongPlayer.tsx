@@ -43,7 +43,7 @@ import {
   watchSongQueue,
   watchRecentFinished,
 } from "@/lib/song/store";
-import { baht } from "@/lib/song/easydonate";
+import { paidText } from "@/lib/song/paid";
 import { formatClock } from "@/lib/song/progress";
 import { watchUrl } from "@/lib/song/youtube";
 import { YT_STATE, loadYouTubeApi, type YTPlayer } from "@/lib/song/yt-api";
@@ -895,7 +895,7 @@ export function SongPlayerCore({
         {status}
         {playing.source === "filler" && <Badge>เพลงสำรอง</Badge>}
         {playing.source === "tiktok" && <Badge>จากแชท TikTok</Badge>}
-        {(playing.paid ?? 0) > 0 && <Badge tone="ink">ลัดคิว {baht(playing.paid ?? 0)}</Badge>}
+        {(playing.paid ?? 0) > 0 && <Badge tone="ink">ลัดคิว {paidText(playing)}</Badge>}
       </div>
       <h2
         className={`mt-2 line-clamp-2 font-bold wrap-break-word ${
@@ -1036,7 +1036,7 @@ export function SongPlayerCore({
               {next.source === "filler"
                 ? "เพลงสำรอง"
                 : (next.paid ?? 0) > 0
-                  ? `ลัดคิว ${baht(next.paid ?? 0)} ขอโดย ${next.byName}`
+                  ? `ลัดคิว ${paidText(next)} ขอโดย ${next.byName}`
                   : `ขอโดย ${next.byName}`}
             </span>
           </span>
@@ -1097,7 +1097,7 @@ export function SongPlayerCore({
             s.source === "filler"
               ? "เพลงสำรอง"
               : (s.paid ?? 0) > 0
-                ? `ลัดคิว ${baht(s.paid ?? 0)} ขอโดย ${s.byName}`
+                ? `ลัดคิว ${paidText(s)} ขอโดย ${s.byName}`
                 : s.source === "tiktok"
                   ? `ขอโดย ${s.byName} ผ่าน TikTok`
                   : `ขอโดย ${s.byName}`

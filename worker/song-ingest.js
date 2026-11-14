@@ -495,6 +495,32 @@ export async function keyFor(env, label, channelId, gen) {
 const chatKeyFor = (env, channelId, gen) => keyFor(env, "chat", channelId, gen);
 
 /**
+ * ตรวจกุญแจของสะพาน — ใช้ร่วมกันทั้งคำขอเพลง (?ingest=1) และของขวัญลัดคิว (?gift=1 tiktok-gift.js)
+ *
+ * ยืนยันตัวได้สองแบบ
+ *   INGEST_TOKEN — กุญแจกลาง เขียนได้ทุกช่อง (ของเจ้าของระบบ/เครื่องมืออย่าง Social Stream Ninja)
+ *   รหัสต่อช่อง — โปรแกรมสะพานที่แจกสตรีมเมอร์ เขียนได้เฉพาะช่องที่รหัสออกให้
+ * เช็คลายเซ็นของรหัสก่อนแตะ Firestore เสมอ รหัสปลอมจึงไม่ทำให้บอทต้องล็อกอินหรืออ่านอะไร
+ *
+ * คืน { scoped } (null = INGEST_TOKEN) หรือ { reason } ถ้าไม่ผ่าน
+ * ผ่านแล้วยังต้องเรียก keyRevoked หลังอ่านช่อง — รุ่นของรหัสอยู่ในเอกสารช่อง
+ */
+async function checkBridgeKey(env, request, ref) {
+  const given = bearerOf(request);
+  if (safeEqual(given, env.INGEST_TOKEN)) return { scoped: null };
+  const m = CHAT_KEY.exec(given);
+  if (!m) return { reason: "bad-token" };
+  const gen = Number(m[1]);
+  if (!safeEqual(m[2], await chatKeyFor(env, ref, gen))) return { reason: "bad-token" };
+  return { scoped: { channelId: ref, gen } };
+}
+
+/** รหัสของรุ่นก่อน = เจ้าของกด "สร้างรหัสใหม่" ไปแล้ว (เช่นรหัสหลุดขึ้นจอไลฟ์) */
+const keyRevoked = (scoped, channel) =>
+  !!scoped &&
+  (channel.id !== scoped.channelId || num(channel.data?.chatKeyGen) !== scoped.gen);
+
+/**
  * ออกรหัสเชื่อมต่อให้ช่อง — หน้าสตูดิโอเรียกตอนเจ้าของกดปุ่ม
  *
  *   POST ?pair=1
@@ -591,7 +617,6 @@ export async function handleSongIngest(request, env, cors, helpers) {
 
   // ไม่ตั้ง token = ปิดทางนี้ไว้ ไม่ใช่เปิดให้ใครก็ได้
   if (!env.INGEST_TOKEN) return bad("ingest-disabled");
-  const given = bearerOf(request);
 
   let body;
   try {
@@ -604,18 +629,8 @@ export async function handleSongIngest(request, env, cors, helpers) {
   const ref = str(body.channelId) || str(body.handle);
   if (!ref) return bad("no-channel");
 
-  /* ยืนยันตัวได้สองแบบ
-       INGEST_TOKEN — กุญแจกลาง เขียนได้ทุกช่อง (ของเจ้าของระบบ/เครื่องมืออย่าง Social Stream Ninja)
-       รหัสต่อช่อง — โปรแกรมสะพานที่แจกสตรีมเมอร์ เขียนได้เฉพาะช่องที่รหัสออกให้
-     เช็คลายเซ็นของรหัสก่อนแตะ Firestore เสมอ รหัสปลอมจึงไม่ทำให้บอทต้องล็อกอินหรืออ่านอะไร */
-  let scoped = null;
-  if (!safeEqual(given, env.INGEST_TOKEN)) {
-    const m = CHAT_KEY.exec(given);
-    if (!m) return bad("bad-token");
-    const gen = Number(m[1]);
-    if (!safeEqual(m[2], await chatKeyFor(env, ref, gen))) return bad("bad-token");
-    scoped = { channelId: ref, gen };
-  }
+  const key = await checkBridgeKey(env, request, ref);
+  if (key.reason) return bad(key.reason);
 
   const platform = (str(body.platform) || "tiktok").toLowerCase();
   if (!PLATFORMS.includes(platform)) return bad("bad-platform");
@@ -657,10 +672,7 @@ export async function handleSongIngest(request, env, cors, helpers) {
   const channel = await loadChannel(env, token, ref);
   if (channel?.error) return bad(channel.error);
   if (!channel) return bad("channel-not-found");
-  // รหัสของรุ่นก่อน = เจ้าของกด "สร้างรหัสใหม่" ไปแล้ว (เช่นรหัสหลุดขึ้นจอไลฟ์)
-  if (scoped && (channel.id !== scoped.channelId || num(channel.data?.chatKeyGen) !== scoped.gen)) {
-    return bad("key-revoked");
-  }
+  if (keyRevoked(key.scoped, channel)) return bad("key-revoked");
 
   const cfg = channel.data?.songs ?? {};
   // ปิดรับแล้วต้องปิดจริง — กติกาฝั่ง Firestore ก็เช็คซ้ำอีกชั้นอยู่แล้ว
@@ -729,9 +741,11 @@ export async function handleSongIngest(request, env, cors, helpers) {
   );
 }
 
-/* ของที่ easydonate.js ยืมใช้ — เพลงลัดคิวต้องหาคลิปและเขียนคิวแบบเดียวกับคำขอจากแชททุกอย่าง */
+/* ของที่ easydonate.js กับ tiktok-gift.js ยืมใช้ — เพลงลัดคิวต้องหาคลิปและเขียนคิวแบบเดียวกับคำขอจากแชททุกอย่าง */
 export {
+  checkBridgeKey,
   createSong,
+  keyRevoked,
   docsRoot,
   loadChannel,
   loadOpenQueue,

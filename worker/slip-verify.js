@@ -27,10 +27,12 @@
  *   POST ?ingest=1   รับคำขอเพลงจากแชทไลฟ์ (song-ingest.js)
  *   POST ?pair=1     ออกรหัสเชื่อมต่อต่อช่องให้โปรแกรมสะพาน / ลิงก์ webhook (song-ingest.js)
  *   POST ?easydonate=1  รับ webhook โดเนทลัดคิวจาก EasyDonate (easydonate.js)
+ *   POST ?gift=1     ของขวัญ TikTok ครบยอด → เพลงแรกของคนส่งลัดคิว (tiktok-gift.js)
  */
 
 import { handleEasyDonate } from "./easydonate.js";
 import { handleChatPair, handleSongIngest } from "./song-ingest.js";
+import { handleGiftSkip } from "./tiktok-gift.js";
 import { isQuotaError, noteExhausted, noteSearch, searchBlock } from "./yt-quota.js";
 
 /* ------------------------------------------------------------------ *
@@ -837,6 +839,15 @@ const handler = {
 
       if (params.get("ingest") === "1") {
         return handleSongIngest(request, env, cors, {
+          reply,
+          allow,
+          botLogin: botLogin_,
+        });
+      }
+
+      // ของขวัญลัดคิว — มาจากสะพานเครื่องเดียวกับ ingest จึงอยู่ก่อนด่าน IP ด้วยเหตุผลเดียวกัน
+      if (params.get("gift") === "1") {
+        return handleGiftSkip(request, env, cors, {
           reply,
           allow,
           botLogin: botLogin_,

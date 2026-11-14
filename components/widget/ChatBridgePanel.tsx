@@ -4,12 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { getAuthClient } from "@/lib/backend/firebase";
 import type { Channel } from "@/lib/channel/types";
+import { saveGiftSkip } from "@/lib/song/config";
+import { coins } from "@/lib/song/paid";
 import Button from "../ui/Button";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { CopyBtn, MiniLink } from "../ui/MiniBtn";
 import Panel from "../ui/Panel";
 import { toast } from "../ui/Toast";
-import { Input, Label } from "../ui/kit";
+import { Badge, Input, Label, NumberInput } from "../ui/kit";
 
 /** ตัวโปรแกรมรุ่นล่าสุดบน GitHub Releases — สร้างโดย .github/workflows/bridge-release.yml */
 export const BRIDGE_DOWNLOAD_URL =
@@ -216,6 +218,8 @@ export default function ChatBridgePanel({ channel }: { channel: Channel }) {
         </Panel>
       )}
 
+      {worker && <GiftSkipSettings channel={channel} />}
+
       <ConfirmDialog
         open={confirmRotate}
         title="ยกเลิกรหัสเก่าแล้วสร้างใหม่?"
@@ -228,5 +232,72 @@ export default function ChatBridgePanel({ channel }: { channel: Channel }) {
         onClose={() => setConfirmRotate(false)}
       />
     </section>
+  );
+}
+
+/**
+ * ลัดคิวด้วยของขวัญ TikTok — ตั้งยอดเหรียญสะสม
+ *
+ * โปรแกรมสะพานนับของขวัญของแต่ละคนรวมกัน ครบยอดเมื่อไร Worker ยกเพลงแรกที่คนนั้นขอไว้
+ * ขึ้นชั้นลัดคิว (bridge/core.mjs onGift → worker/tiktok-gift.js) จับคู่ด้วยชื่อ TikTok
+ * จึงใช้ได้แค่กับเพลงที่ขอจากแชท เพลงที่ขอจากหน้าเว็บไม่มีชื่อ TikTok ให้จับคู่
+ */
+function GiftSkipSettings({ channel }: { channel: Channel }) {
+  const saved = channel.songs?.giftSkip?.min ?? 0;
+  const [min, setMin] = useState(saved);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      await saveGiftSkip(channel.id, { min });
+      toast(min > 0 ? `เปิดลัดคิวที่ ${coins(min)} แล้ว` : "ปิดลัดคิวด้วยของขวัญแล้ว", "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Panel className="p-5 sm:p-6">
+      <h3 className="font-bold">ลัดคิวด้วยของขวัญ TikTok</h3>
+      <p className="mt-1 max-w-prose text-muted">
+        คนดูที่ขอเพลงจากแชทไว้ ส่งของขวัญสะสมครบจำนวนเหรียญนี้ เพลงแรกของเขาในคิวจะลัดไปก่อนเพลงที่ขอฟรี
+        ส่งทีละน้อยก็นับรวมกัน ครบแล้วยอดเริ่มนับใหม่ ถ้าตอนครบยังไม่มีเพลงรอคิว ยอดนั้นจะไม่ถูกเก็บไว้
+      </p>
+
+      <div className="mt-4 max-w-prose space-y-3">
+        <div>
+          <Label htmlFor="gift-min" hint="ใส่ 0 = ปิด">
+            เหรียญสะสมที่ได้ลัดคิว
+          </Label>
+          <NumberInput
+            id="gift-min"
+            value={min}
+            onChange={setMin}
+            min={0}
+            max={100000}
+            className="max-w-40"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button onClick={() => void save()} loading={saving} disabled={min === saved}>
+            บันทึก
+          </Button>
+          {saved > 0 ? (
+            <Badge tone="open" dot>
+              เปิดอยู่ ครบ {coins(saved)}
+            </Badge>
+          ) : (
+            <Badge>ปิดอยู่</Badge>
+          )}
+        </div>
+        <p className="text-sm text-muted">
+          โปรแกรมต้องเปิดอยู่ตอนคนดูส่งของขวัญ ของขวัญที่ส่งตอนโปรแกรมปิดหรือหลุดจากไลฟ์จะไม่ถูกนับ
+          และใช้ได้กับโปรแกรมรุ่นล่าสุดเท่านั้น รุ่นเก่าไม่นับของขวัญ
+        </p>
+      </div>
+    </Panel>
   );
 }

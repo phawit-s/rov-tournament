@@ -2,7 +2,7 @@
 
 import { doc, updateDoc } from "firebase/firestore";
 import { getDb } from "@/lib/backend/firebase";
-import type { FillerTrack, PaidSkip } from "./types";
+import type { FillerTrack, GiftSkip, PaidSkip } from "./types";
 import { FILLER_LIMIT } from "./filler";
 
 const COL = "channels";
@@ -57,4 +57,13 @@ export function savePaidSkip(channelId: string, paidSkip: PaidSkip): Promise<voi
   const min = Math.max(0, Math.round(Number(paidSkip.min) || 0));
   const user = (paidSkip.user ?? "").trim().replace(/^@/, "").slice(0, 40);
   return patchSongs(channelId, { "songs.paidSkip": user ? { min, user } : { min } });
+}
+
+/**
+ * ลัดคิวด้วยของขวัญ TikTok — มีผลทันที (โปรแกรมสะพานถามขั้นต่ำใหม่ทุก 10 นาที)
+ * Worker อ่านค่านี้ทุกครั้งที่ยอดของใครสักคนครบ (worker/tiktok-gift.js) min เป็น 0 = ปิด
+ */
+export function saveGiftSkip(channelId: string, giftSkip: GiftSkip): Promise<void> {
+  const min = Math.max(0, Math.round(Number(giftSkip.min) || 0));
+  return patchSongs(channelId, { "songs.giftSkip": { min } });
 }

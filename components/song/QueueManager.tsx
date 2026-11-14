@@ -17,7 +17,7 @@ import {
   tierOf,
   watchRecentFinished,
 } from "@/lib/song/store";
-import { baht } from "@/lib/song/easydonate";
+import { paidText } from "@/lib/song/paid";
 import { DEFAULT_SONG_CONFIG, type SongRequest } from "@/lib/song/types";
 import { watchUrl } from "@/lib/song/youtube";
 import PageHead from "../studio/PageHead";
@@ -292,7 +292,7 @@ function SongMeta({ song, now }: { song: SongRequest; now: number }) {
         {song.source === "filler" ? "เพลงสำรอง" : `ขอโดย ${song.byName}`}
       </span>
       {/* ใบจากแชทไลฟ์เป็นชื่อ TikTok จริงที่ตามไปตอบในไลฟ์ได้ ต่างจากชื่อที่พิมพ์เองในเว็บ */}
-      {(song.paid ?? 0) > 0 && <Badge tone="ink">ลัดคิว {baht(song.paid ?? 0)}</Badge>}
+      {(song.paid ?? 0) > 0 && <Badge tone="ink">ลัดคิว {paidText(song)}</Badge>}
       {song.source === "tiktok" && <Badge>จากแชท TikTok</Badge>}
       {song.source === "streamer" && <Badge>คุณใส่เอง</Badge>}
       {now > 0 && song.source !== "filler" && <span>{timeAgo(song.createdAt, now)}</span>}

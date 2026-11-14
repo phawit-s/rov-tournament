@@ -79,6 +79,7 @@ function withLiveFields(draft: Channel, cloud: Channel | null): Channel {
       filler: cloudSongs?.filler ?? songs.filler,
       fillerMode: cloudSongs?.fillerMode ?? songs.fillerMode,
       paidSkip: cloudSongs?.paidSkip ?? songs.paidSkip,
+      giftSkip: cloudSongs?.giftSkip ?? songs.giftSkip,
     },
   };
 }

@@ -50,6 +50,11 @@ export const WHY = {
   "rate-limited": "คำขอเข้ามาถี่เกินเพดานของช่อง",
   "empty-query": "พิมพ์คำสั่งมาเปล่าๆ ไม่มีชื่อเพลง",
   "bad-platform": "platform ที่ส่งไปไม่อยู่ในรายการที่ Worker รับ",
+  // ของขวัญลัดคิว (?gift=1 worker/tiktok-gift.js)
+  "no-song": "ไม่มีเพลงรอคิวอยู่ ยอดสะสมเริ่มนับใหม่",
+  "already-skipped": "เพลงที่รอคิวของคนนี้ลัดคิวอยู่แล้วทุกเพลง ยอดสะสมเริ่มนับใหม่",
+  "song-changed": "เพลงเพิ่งถูกเล่นหรือลบไประหว่างนั้น ยอดสะสมเริ่มนับใหม่",
+  "gift-off": "ช่องนี้ยังไม่เปิดลัดคิวด้วยของขวัญ",
 };
 
 /** เหตุผลที่แปลว่า "ตั้งค่าผิด" ไม่ใช่ "คนดูขอไม่ผ่าน" — ต้องเห็นเด่นๆ */
@@ -114,6 +119,35 @@ export function readUser(payload) {
 export function readComment(payload) {
   const text = payload?.comment ?? payload?.content;
   return typeof text === "string" ? text : null;
+}
+
+/**
+ * ของขวัญหนึ่งอีเวนต์ → { coins, name } หรือ null ถ้ายังไม่ต้องนับ / อ่านไม่ออก
+ *
+ *   v2.4.3 ส่ง proto ดิบ: gift = { diamondCount, type, combo, name } · repeatCount · repeatEnd (0/1)
+ *   v1 (legacy) แบนรายละเอียดขึ้นมาไว้ชั้นบน: diamondCount · giftType · giftName · repeatEnd (true/false)
+ *
+ * ของขวัญแบบกดรัว (type 1 เช่นกุหลาบ) ส่งอีเวนต์มาทุกครั้งที่กด repeatCount โตขึ้นเรื่อยๆ
+ * แล้วปิดท้ายด้วย repeatEnd — นับครั้งเดียวตอนจบ ไม่งั้นกดรัว 10 ดอกจะถูกนับ 1+2+…+10 = 55
+ * ของขวัญแบบอื่นมาอีเวนต์เดียว
+ */
+export function readGift(payload) {
+  const g = payload?.gift ?? payload?.giftDetails ?? {};
+  const each = Number(g.diamondCount ?? payload?.diamondCount ?? payload?.extendedGiftInfo?.diamond_count);
+  if (!(each > 0)) return null;
+  const type = Number(g.type ?? g.giftType ?? payload?.giftType);
+  const streak = Number.isFinite(type) ? type === 1 : g.combo === true;
+  if (streak && !payload?.repeatEnd) return null;
+  const count = Math.max(1, Math.floor(Number(payload?.repeatCount)) || 1);
+  return { coins: each * count, name: String(g.name ?? g.giftName ?? payload?.giftName ?? "") };
+}
+
+/** ส่งให้แขกในไลฟ์หลายคน ไม่ใช่เจ้าของไลฟ์ — ไม่นับ
+ *  รู้ได้เฉพาะตอนที่ toUser มีชื่อมา ถ้าไม่มีชื่อถือว่าส่งให้เจ้าของไลฟ์ (กรณีปกติ) */
+export function toGuest(payload, host) {
+  const to = payload?.toUser;
+  const handle = String(to?.uniqueId || to?.displayId || "").toLowerCase();
+  return !!handle && handle !== String(host ?? "").toLowerCase();
 }
 
 /** ข้อความบอกเหตุจากไลบรารี มักยาวและมี stack ปน เอาแค่บรรทัดแรก
@@ -248,10 +282,10 @@ export function createBridge(cfg, onEvent = () => {}) {
 
   /* ---------------- ส่งต่อให้ Worker ---------------- */
 
-  async function submit(user, query) {
+  /** POST ?<flag>=1 — คืน { data } หรือ { error: ข้อความ } */
+  async function callWorker(flag, body) {
     const url = new URL(cfg.workerUrl);
-    url.searchParams.set("ingest", "1");
-
+    url.searchParams.set(flag, "1");
     let res;
     try {
       res = await fetch(url, {
@@ -260,17 +294,20 @@ export function createBridge(cfg, onEvent = () => {}) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${cfg.token}`,
         },
-        body: JSON.stringify({ channelId: cfg.channel, platform: "tiktok", user, query }),
+        body: JSON.stringify({ channelId: cfg.channel, platform: "tiktok", ...body }),
         signal: AbortSignal.timeout(20000),
       });
     } catch (e) {
-      emit("error", `เรียก Worker ไม่ได้ — ${e?.message ?? "network error"}`, { user: user.id, query });
-      return null;
+      return { error: `เรียก Worker ไม่ได้ — ${e?.message ?? "network error"}` };
     }
-
     const data = await res.json().catch(() => null);
-    if (!data) {
-      emit("error", `Worker ตอบกลับมาไม่ใช่ JSON (HTTP ${res.status})`, { user: user.id, query });
+    return data ? { data } : { error: `Worker ตอบกลับมาไม่ใช่ JSON (HTTP ${res.status})` };
+  }
+
+  async function submit(user, query) {
+    const { data, error } = await callWorker("ingest", { user, query });
+    if (error) {
+      emit("error", error, { user: user.id, query });
       return null;
     }
 
@@ -357,6 +394,119 @@ export function createBridge(cfg, onEvent = () => {}) {
     void submit({ id, name: String(name).slice(0, 40) }, query);
   }
 
+  /* ---------------- ของขวัญ → ลัดคิว ----------------
+
+     ของขวัญของคนเดียวกันสะสมรวมกัน (เจ้าของสั่ง พ.ย. 2569) ตั้งไว้ 30 เหรียญ แล้วคนดูส่งกุหลาบ
+     ทีละ 1 เหรียญ พอครบ 30 เพลงแรกที่เขาขอไว้ก็ลัดคิว แล้วยอดเริ่มนับใหม่
+     · ส่งทีเดียว 100 เหรียญได้ลัดคิวเพลงเดียว ทั้งก้อนใช้กับเพลงนั้น
+     · ครบแล้วแต่ไม่มีเพลงรอคิว ยอดเริ่มนับใหม่ ไม่เก็บสิทธิ์ไว้ให้เพลงที่ขอทีหลัง
+
+     ยอดสะสมอยู่ในโปรแกรมนี้ ไม่ได้อยู่ที่ Worker ของขวัญที่ยังไม่ครบจึงไม่ต้องส่งไปไหน
+     (ถ้ากุหลาบทุกดอกในไลฟ์ไปถึง Worker ทุกดอกจะกลายเป็นค่าอ่าน Firestore)
+     ข้อเสียคือปิดโปรแกรมแล้วยอดที่ยังไม่ครบหายไปด้วย
+     ขั้นต่ำเป็นค่าที่ Worker ส่งกลับมาในคำตอบ โปรแกรมจำไว้ แล้วถามใหม่ทุก GIFT_MIN_TTL */
+  const GIFT_MIN_TTL = 10 * 60_000;
+  /** ยังไม่รู้ขั้นต่ำ (Worker ล่ม/ยังไม่ deploy) — ถามใหม่ได้ทุกเท่านี้ ไม่ใช่ทุกดอก */
+  const GIFT_PROBE_MS = 30_000;
+  /** ไม่ได้ส่งเพิ่มนานเท่านี้ ยอดค้างเริ่มนับใหม่ — โปรแกรมเปิดค้างข้ามวัน ยอดเมื่อวานไม่ควรติดมาไลฟ์วันนี้ */
+  const GIFT_FORGET_MS = 6 * 3_600_000;
+  /** ผลที่ถือว่าใช้ยอดก้อนนั้นไปแล้ว — นอกนั้น (ระบบพัง ตั้งค่าผิด) เก็บยอดไว้ ไม่ให้คนดูเสียเพราะเรา */
+  const GIFT_SPENT = new Set(["no-song", "already-skipped", "song-changed", "gift-off"]);
+
+  let giftMin = null; // null = ยังไม่รู้ · 0 = ช่องปิดลัดคิวด้วยของขวัญ
+  let giftCheckedAt = 0;
+  /** ชื่อ → { coins, at } ยอดที่ยังไม่ได้ใช้ */
+  const giftTotals = new Map();
+  const giftBusy = new Set();
+
+  function learnGiftMin(min) {
+    if (min === giftMin) return;
+    giftMin = min;
+    emit(
+      "info",
+      min > 0 ? `ลัดคิวด้วยของขวัญ: สะสมครบ ${min} เหรียญ` : "ลัดคิวด้วยของขวัญ: ปิดอยู่ (ตั้งได้ในสตูดิโอ)",
+    );
+  }
+
+  function onGift(payload) {
+    const gift = readGift(payload);
+    if (!gift || toGuest(payload, cfg.user)) return;
+    const { id, name } = readUser(payload);
+    if (!id) return;
+
+    const now = Date.now();
+    const stale = now - giftCheckedAt > (giftMin === null ? GIFT_PROBE_MS : GIFT_MIN_TTL);
+    // ปิดอยู่ไม่ต้องสะสม ถึงเวลาถามใหม่ค่อยเริ่มนับ
+    if (giftMin === 0 && !stale) return;
+
+    const prev = giftTotals.get(id);
+    const coins = (prev && now - prev.at < GIFT_FORGET_MS ? prev.coins : 0) + gift.coins;
+    giftTotals.set(id, { coins, at: now });
+    if (giftMin > 0) {
+      emit("info", `🎁 @${id} ส่ง${gift.name ? ` ${gift.name}` : "ของขวัญ"} ${gift.coins} เหรียญ`, {
+        detail: `สะสม ${coins}/${giftMin}`,
+        user: id,
+      });
+    }
+
+    if (!(giftMin > 0 && coins >= giftMin) && !stale) return;
+    // กำลังส่งของคนนี้อยู่ ยอดใหม่รวมไว้แล้ว — sendGift ดูต่อเองหลังได้ผล
+    if (giftBusy.has(id)) return;
+    void sendGift({ id, name: String(name).slice(0, 40) }, coins);
+  }
+
+  async function sendGift(user, coins) {
+    giftBusy.add(user.id);
+    giftCheckedAt = Date.now();
+    let again = false;
+    try {
+      const { data, error } = await callWorker("gift", { user, coins });
+      if (error) {
+        emit("error", `ของขวัญลัดคิว: ${error}`, { user: user.id });
+        return;
+      }
+      if (typeof data.min === "number") learnGiftMin(data.min);
+      // Worker รุ่นก่อนไม่รู้จัก ?gift=1 เลยตกไปทางตรวจสลิป แล้วตอบว่าไม่มีสลิป
+      if (data.reason === "no-payload") {
+        learnGiftMin(0);
+        emit("setup", "Worker ที่ใช้อยู่ยังไม่รองรับลัดคิวด้วยของขวัญ — ต้อง deploy Worker ตัวล่าสุด");
+        return;
+      }
+      if (data.reason === "below-min") return; // ยังไม่ครบ (เพิ่งรู้ขั้นต่ำ หรือเพิ่งถูกปรับขึ้น) เก็บไว้รวมกับครั้งหน้า
+
+      if (data.ok || GIFT_SPENT.has(data.reason)) {
+        // หักเฉพาะที่ส่งไป ของที่เข้ามาระหว่างรอคำตอบยังอยู่
+        const cur = giftTotals.get(user.id);
+        const left = (cur?.coins ?? 0) - coins;
+        if (left > 0) giftTotals.set(user.id, { coins: left, at: cur.at });
+        else giftTotals.delete(user.id);
+        again = giftMin > 0 && left >= giftMin;
+      }
+
+      if (data.ok) {
+        emit("ok", `ลัดคิว · ${data.title}`, {
+          detail: `@${user.id} ส่งของขวัญครบ ${coins} เหรียญ`,
+          user: user.id,
+          title: data.title,
+        });
+      } else if (data.reason === "gift-off") {
+        // learnGiftMin บอกไปแล้ว
+      } else if (isSetupProblem(data.reason)) {
+        emit("setup", explain(data.reason, data.message), { reason: data.reason, user: user.id });
+      } else {
+        emit("skip", `@${user.id} ส่งของขวัญครบ ${coins} เหรียญ — ${explain(data.reason, data.message)}`, {
+          reason: data.reason,
+          user: user.id,
+        });
+      }
+    } finally {
+      giftBusy.delete(user.id);
+    }
+    // ระหว่างรอคำตอบเขาส่งเพิ่มจนครบอีกรอบ — ลัดเพลงถัดไปของเขาเลย ไม่ต้องรอของขวัญชิ้นหน้า
+    const rest = giftTotals.get(user.id);
+    if (again && rest) void sendGift(user, rest.coins);
+  }
+
   /* ---------------- ต่อกับ TikTok ---------------- */
 
   async function makeConnection() {
@@ -431,6 +581,7 @@ export function createBridge(cfg, onEvent = () => {}) {
   async function connectLoop() {
     const c = await makeConnection();
     c.on("chat", onChat);
+    c.on("gift", onGift);
     // ไลบรารีโยน error ระหว่างทางได้ ถ้าไม่ดักไว้ process จะตายทั้งตัว
     c.on("error", (e) => {
       // พลาดตอนต่อ ไลบรารีแจ้งซ้ำกับที่ connect() โยนออกมา — ลูปข้างล่างรายงานเองแล้ว
@@ -536,8 +687,8 @@ export function createBridge(cfg, onEvent = () => {}) {
       detail: `อีก ${wait} วิ`,
       loud: true,
     });
-    // ตัวเก่าห้ามส่งแชทต่อ เผื่อไลบรารีต่อเองข้างในแล้วซ้อนกับตัวใหม่
-    from.removeAllListeners?.("chat");
+    // ตัวเก่าห้ามส่งแชท/ของขวัญต่อ เผื่อไลบรารีต่อเองข้างในแล้วซ้อนกับตัวใหม่ (ของขวัญจะถูกนับสองรอบ)
+    mute(from);
     try {
       from.disconnect();
     } catch {
@@ -552,6 +703,11 @@ export function createBridge(cfg, onEvent = () => {}) {
     } finally {
       reconnecting = false;
     }
+  }
+
+  function mute(c) {
+    c.removeAllListeners?.("chat");
+    c.removeAllListeners?.("gift");
   }
 
   function watch(c) {
@@ -570,7 +726,7 @@ export function createBridge(cfg, onEvent = () => {}) {
       stopped = true;
       for (const wake of [...naps]) wake();
       if (!conn) return;
-      conn.removeAllListeners?.("chat");
+      mute(conn);
       try {
         conn.disconnect();
       } catch {

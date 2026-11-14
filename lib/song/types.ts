@@ -46,10 +46,17 @@ export type SongRequest = {
   source?: "viewer" | "streamer" | "filler" | "tiktok" | "easydonate";
 
   /**
-   * ยอดที่จ่ายลัดคิว (บาท) — มีเฉพาะใบจากโดเนทลัดคิว เขียนได้แค่ Worker (firestore.rules)
-   * ใบที่มีฟิลด์นี้ได้เล่นก่อนเพลงที่ขอฟรีทุกใบ เรียงกันเองตามเวลาที่โดเนท (ดู tierOf ใน store.ts)
+   * ยอดที่จ่ายลัดคิว — มีเฉพาะใบที่ลัดคิว เขียนได้แค่ Worker (firestore.rules)
+   * ใบที่มีฟิลด์นี้ได้เล่นก่อนเพลงที่ขอฟรีทุกใบ เรียงกันเองตามเวลาที่จ่าย (ดู tierOf ใน store.ts)
+   * หน่วยดูที่ paidUnit
    */
   paid?: number;
+  /**
+   * หน่วยของ paid — ไม่มี = บาท (โดเนท EasyDonate) · coin = เหรียญ TikTok
+   * coin มาจากของขวัญในไลฟ์ที่สะสมครบยอด Worker ยกเพลงแรกของคนส่งขึ้นชั้นลัดคิว
+   * แล้วตั้ง orderKey เป็นเวลาที่ครบ (worker/tiktok-gift.js)
+   */
+  paidUnit?: "coin";
 
   /**
    * คีย์ที่ใช้เรียงคิว — มีเฉพาะใบที่ถูกสลับลำดับด้วยมือ
@@ -99,6 +106,17 @@ export type SongConfig = {
    * ไม่มี / min เป็น 0 = ปิด (โดเนทที่เข้ามาไม่กลายเป็นเพลง)
    */
   paidSkip?: PaidSkip;
+
+  /**
+   * ลัดคิวด้วยของขวัญ TikTok — แก้จากหน้า "ลิงก์สำหรับ OBS" มีผลทันที
+   * ใช้ได้เฉพาะช่องที่เปิดโปรแกรมสะพานแชทไว้ (bridge/) ไม่มี / min เป็น 0 = ปิด
+   */
+  giftSkip?: GiftSkip;
+};
+
+export type GiftSkip = {
+  /** เหรียญที่คนหนึ่งส่งสะสมครบแล้วเพลงแรกของเขาได้ลัดคิว */
+  min: number;
 };
 
 export type PaidSkip = {

@@ -16,6 +16,7 @@ import {
 } from "@/lib/song/search";
 import { removeSongRequest, submitSongRequest } from "@/lib/song/store";
 import { baht, easyDonateUrl } from "@/lib/song/easydonate";
+import { coins } from "@/lib/song/paid";
 import { canEmbed } from "@/lib/song/embeddable";
 import { DEFAULT_SONG_CONFIG, type SongConfig, type SongRequest } from "@/lib/song/types";
 import { lookupVideo, thumbUrl, videoIdFrom, watchUrl, type YoutubeInfo } from "@/lib/song/youtube";
@@ -476,6 +477,7 @@ export function RequestForm({
         )}
 
         <PaidSkipNote config={config} />
+        <GiftSkipNote config={config} />
       </div>
     </section>
   );
@@ -507,6 +509,24 @@ function PaidSkipNote({ config }: { config: SongConfig }) {
           <IconExternal className="h-3.5 w-3.5" />
         </a>
       )}
+    </div>
+  );
+}
+
+/**
+ * บอกคนดูว่าลัดคิวได้ด้วยของขวัญ TikTok — โชว์เฉพาะช่องที่ตั้งยอดไว้ (ดู worker/tiktok-gift.js)
+ * จับคู่ด้วยชื่อ TikTok จึงต้องขอเพลงจากแชทไลฟ์ เพลงที่ขอจากหน้านี้ลัดด้วยของขวัญไม่ได้
+ */
+function GiftSkipNote({ config }: { config: SongConfig }) {
+  const min = config.giftSkip?.min ?? 0;
+  if (!(min > 0)) return null;
+  return (
+    <div className="rounded-field bg-fill px-4 py-3 text-sm">
+      <p>
+        <b>ดูไลฟ์ใน TikTok อยู่?</b> พิมพ์ <b>!เพลง</b> ตามด้วยชื่อเพลงในแชทไลฟ์
+        แล้วส่งของขวัญสะสมครบ <span className="num font-semibold">{coins(min)}</span>{" "}
+        เพลงแรกของคุณจะลัดคิวไปก่อนเพลงที่ขอฟรี ส่งทีละน้อยก็นับรวมกัน
+      </p>
     </div>
   );
 }
