@@ -39,9 +39,11 @@ import {
   setSongDuration,
   setSongStatus,
   splitQueue,
+  tierOf,
   watchSongQueue,
   watchRecentFinished,
 } from "@/lib/song/store";
+import { baht } from "@/lib/song/easydonate";
 import { formatClock } from "@/lib/song/progress";
 import { watchUrl } from "@/lib/song/youtube";
 import { YT_STATE, loadYouTubeApi, type YTPlayer } from "@/lib/song/yt-api";
@@ -884,6 +886,7 @@ export function SongPlayerCore({
         {status}
         {playing.source === "filler" && <Badge>เพลงสำรอง</Badge>}
         {playing.source === "tiktok" && <Badge>จากแชท TikTok</Badge>}
+        {(playing.paid ?? 0) > 0 && <Badge tone="ink">ลัดคิว {baht(playing.paid ?? 0)}</Badge>}
       </div>
       <h2
         className={`mt-2 line-clamp-2 font-bold wrap-break-word ${
@@ -1036,9 +1039,11 @@ export function SongPlayerCore({
           sub={
             s.source === "filler"
               ? "เพลงสำรอง"
-              : s.source === "tiktok"
-                ? `ขอโดย ${s.byName} ผ่าน TikTok`
-                : `ขอโดย ${s.byName}`
+              : (s.paid ?? 0) > 0
+                ? `ลัดคิว ${baht(s.paid ?? 0)} · ขอโดย ${s.byName}`
+                : s.source === "tiktok"
+                  ? `ขอโดย ${s.byName} ผ่าน TikTok`
+                  : `ขอโดย ${s.byName}`
           }
           onFill={onFill}
           onClick={() => void playNow(s)}
@@ -1098,7 +1103,15 @@ export function SongPlayerCore({
               </p>
             ) : (
               <ol className="rows mt-2">
-                {requested.map((s, i) => queueItem(s, i + 1, requested, false))}
+                {/* ปุ่มขึ้น/ลงดูเพื่อนร่วมชั้น — ลัดคิวกับขอฟรีอยู่กล่องเดียวกันแต่สลับข้ามกันไม่ได้ */}
+                {requested.map((s, i) =>
+                  queueItem(
+                    s,
+                    i + 1,
+                    requested.filter((x) => tierOf(x) === tierOf(s)),
+                    false,
+                  ),
+                )}
               </ol>
             )}
           </section>

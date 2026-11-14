@@ -39,8 +39,17 @@ export type SongRequest = {
    * (Worker เป็นคนเขียนให้ ดู worker/song-ingest.js) จัดคิวเหมือน viewer
    * ทุกอย่าง แยกไว้เพื่อให้สตรีมเมอร์เห็นว่าใบไหนมาจากไหน — ชื่อคนขอ
    * เป็นชื่อ TikTok ซึ่งกดตามไปดูในแชทได้ ต่างจากชื่อที่พิมพ์เองในหน้าเว็บ
+   *
+   * easydonate คือใบที่มาจากโดเนทลัดคิวผ่าน EasyDonate (worker/easydonate.js)
+   * ชื่อคนขอคือชื่อที่เขาพิมพ์ตอนโดเนท
    */
-  source?: "viewer" | "streamer" | "filler" | "tiktok";
+  source?: "viewer" | "streamer" | "filler" | "tiktok" | "easydonate";
+
+  /**
+   * ยอดที่จ่ายลัดคิว (บาท) — มีเฉพาะใบจากโดเนทลัดคิว เขียนได้แค่ Worker (firestore.rules)
+   * ใบที่มีฟิลด์นี้ได้เล่นก่อนเพลงที่ขอฟรีทุกใบ เรียงกันเองตามเวลาที่โดเนท (ดู tierOf ใน store.ts)
+   */
+  paid?: number;
 
   /**
    * คีย์ที่ใช้เรียงคิว — มีเฉพาะใบที่ถูกสลับลำดับด้วยมือ
@@ -84,6 +93,19 @@ export type SongConfig = {
    * คีย์ YouTube อยู่ใน Worker ไม่ได้อยู่ในหน้าเว็บ
    */
   searchEndpoint?: string;
+
+  /**
+   * ลัดคิวด้วยโดเนท EasyDonate — แก้จากหน้า "ลิงก์สำหรับ OBS" มีผลทันที Worker อ่านค่านี้
+   * ไม่มี / min เป็น 0 = ปิด (โดเนทที่เข้ามาไม่กลายเป็นเพลง)
+   */
+  paidSkip?: PaidSkip;
+};
+
+export type PaidSkip = {
+  /** ยอดโดเนทขั้นต่ำ (บาท) ที่จะได้ลัดคิว */
+  min: number;
+  /** ชื่อผู้ใช้ EasyDonate (ezdn.app/<ชื่อ>) ไว้ทำลิงก์ให้คนดูกดไปโดเนท */
+  user?: string;
 };
 
 export const DEFAULT_SONG_CONFIG: SongConfig = {

@@ -25,9 +25,11 @@
  *   GET  ?health=1   บอกว่าตั้งค่าครบไหม
  *   GET  ?search=... ค้นเพลงบน YouTube (คีย์อยู่ฝั่งนี้)
  *   POST ?ingest=1   รับคำขอเพลงจากแชทไลฟ์ (song-ingest.js)
- *   POST ?pair=1     ออกรหัสเชื่อมต่อต่อช่องให้โปรแกรมสะพาน (song-ingest.js)
+ *   POST ?pair=1     ออกรหัสเชื่อมต่อต่อช่องให้โปรแกรมสะพาน / ลิงก์ webhook (song-ingest.js)
+ *   POST ?easydonate=1  รับ webhook โดเนทลัดคิวจาก EasyDonate (easydonate.js)
  */
 
+import { handleEasyDonate } from "./easydonate.js";
 import { handleChatPair, handleSongIngest } from "./song-ingest.js";
 import { isQuotaError, noteExhausted, noteSearch, searchBlock } from "./yt-quota.js";
 
@@ -835,6 +837,16 @@ const handler = {
 
       if (params.get("ingest") === "1") {
         return handleSongIngest(request, env, cors, {
+          reply,
+          allow,
+          botLogin: botLogin_,
+        });
+      }
+
+      // webhook โดเนทลัดคิวจาก EasyDonate — ยิงจากเซิร์ฟเวอร์ของเขา ไอพีชุดเดียวกันทุกช่อง
+      // จึงต้องอยู่ก่อนด่าน IP ข้างล่างเหมือน ingest มีเพดานต่อช่องของตัวเองข้างใน
+      if (params.get("easydonate") === "1") {
+        return handleEasyDonate(request, env, cors, {
           reply,
           allow,
           botLogin: botLogin_,

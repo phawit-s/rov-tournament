@@ -14,6 +14,7 @@ import LinkRow from "../ui/LinkRow";
 import MiniBtn, { MiniLink } from "../ui/MiniBtn";
 import { EmptyState, Input, Label, Skeleton } from "../ui/kit";
 import ChatBridgePanel from "./ChatBridgePanel";
+import EasyDonatePanel from "./EasyDonatePanel";
 
 type ShapeDef = {
   shape: WidgetShape;
@@ -362,6 +363,9 @@ export default function WidgetBuilder() {
 
       {/* key = รีเซ็ตชื่อ TikTok กับรหัสที่ออกไว้ทุกครั้งที่สลับช่อง */}
       <ChatBridgePanel key={activeChannel.id} channel={activeChannel} />
+
+      {/* key = ลิงก์ webhook กับค่าที่กรอกค้างไว้ต้องไม่ติดข้ามช่อง */}
+      <EasyDonatePanel key={`ezdn-${activeChannel.id}`} channel={activeChannel} />
     </div>
   );
 }

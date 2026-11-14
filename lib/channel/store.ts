@@ -255,8 +255,9 @@ export async function pushChannelAs(channel: Channel, targetId: string): Promise
   /* รุ่นของรหัสสะพานแชทเป็นของ Worker — ร่างที่เปิดค้างไว้ถือค่าตอนโหลด ถ้าเขียนกลับ
      จะย้อนรุ่นไปทับตอนที่เจ้าของเพิ่งกดสร้างรหัสใหม่ — รหัสใหม่ใช้ไม่ได้ทันที
      แถมรหัสเก่าที่ตั้งใจยกเลิก (เช่นหลุดขึ้นจอไลฟ์) กลับมาใช้ได้อีก
-     ตัดทิ้งไว้ merge จะคงค่าบนเซิร์ฟเวอร์ไว้ */
+     ตัดทิ้งไว้ merge จะคงค่าบนเซิร์ฟเวอร์ไว้ (ลิงก์ webhook EasyDonate ก็เหตุผลเดียวกัน) */
   delete slim.chatKeyGen;
+  delete slim.donateKeyGen;
   await setDoc(
     doc(db, COL, targetId),
     { ...slim, isPublic: true, syncedAt: serverTimestamp() },

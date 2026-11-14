@@ -228,6 +228,18 @@ service cloud.firestore {
           && (get(/databases/$(database)/documents/channels/$(channelId)).data.ownerUid == request.auth.uid
               || isAdmin());
       }
+
+      /*
+        ของเฉพาะเจ้าของช่อง — ต่างจาก live/ ที่ใครก็อ่านได้
+        ตอนนี้มีใบเดียว: easydonate = ผลของโดเนทลัดคิว 10 รายการล่าสุด
+        (ชื่อคนโดเนท ยอด เพลงที่ขอ) Worker เขียนด้วยบัญชีบอท (ผู้ดูแล) ดู worker/easydonate.js
+      */
+      match /private/{docId} {
+        allow read: if request.auth != null
+          && (get(/databases/$(database)/documents/channels/$(channelId)).data.ownerUid == request.auth.uid
+              || isAdmin());
+        allow write: if isAdmin();
+      }
       allow delete: if canManageChannel();
 
       match /donations/{donationId} {
@@ -329,14 +341,23 @@ service cloud.firestore {
              บังคับว่า byUid ต้องติดป้ายแพลตฟอร์มไว้ เช่น "tiktok:someone"
              — ชนกับ uid จริงของใครไม่ได้ (uid ของ Firebase ไม่มี ':')
              และเพดาน "กี่เพลงต่อคน" ยังนับแยกรายคนได้เหมือนเดิม
+             (easydonate: = โดเนทลัดคิว ดู worker/easydonate.js)
+
+          ★ ฟิลด์ที่ตัดสินลำดับคิวเขียนได้แค่บอท ★
+          paid (จ่ายลัดคิว) กับ orderKey (สตรีมเมอร์เลื่อนลำดับ) ถ้าคนดูใส่มาเองตอนสร้างใบได้
+          ก็แค่แก้โค้ดหน้าเว็บแล้วแซงคิวทุกคนโดยไม่ได้จ่ายอะไร
+          เช็คฟิลด์ก่อน isAdmin() — ใบของคนดูทั่วไปผ่านตั้งแต่ข้อแรก ไม่ต้องเสียค่าอ่าน admins
         */
         allow create: if (
             (request.auth != null
               && request.resource.data.byUid == request.auth.uid)
             || (isAdmin()
               && request.resource.data.byUid is string
-              && request.resource.data.byUid.matches('^(tiktok|youtube|twitch):.+$'))
+              && request.resource.data.byUid.matches('^(tiktok|youtube|twitch|easydonate):.+$'))
           )
+          && ((!('paid' in request.resource.data)
+                && !('orderKey' in request.resource.data))
+              || isAdmin())
           && channel().songs.enabled == true
           && request.resource.data.status == 'queued'
           && request.resource.data.videoId is string

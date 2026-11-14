@@ -18,8 +18,8 @@ export const BRIDGE_DOWNLOAD_URL =
 /** ชื่อผู้ใช้ TikTok — ตัวอักษร ตัวเลข จุด ขีดล่าง ยาวไม่เกิน 24 */
 const TIKTOK_USER = /^[A-Za-z0-9._]{2,24}$/;
 
-/** เหตุผลที่ Worker ตอบกลับตอนออกรหัส (?pair=1 ใน worker/song-ingest.js) */
-const PAIR_WHY: Record<string, string> = {
+/** เหตุผลที่ Worker ตอบกลับตอนออกรหัส (?pair=1 ใน worker/song-ingest.js) — EasyDonatePanel ใช้ด้วย */
+export const PAIR_WHY: Record<string, string> = {
   "signed-out": "การล็อกอินหมดอายุ — ออกจากระบบแล้วล็อกอินใหม่อีกครั้ง",
   "not-owner": "บัญชีนี้ไม่มีสิทธิ์จัดการช่องนี้",
   "channel-not-found": "หาช่องนี้ไม่เจอ",

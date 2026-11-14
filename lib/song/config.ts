@@ -2,7 +2,7 @@
 
 import { doc, updateDoc } from "firebase/firestore";
 import { getDb } from "@/lib/backend/firebase";
-import type { FillerTrack } from "./types";
+import type { FillerTrack, PaidSkip } from "./types";
 import { FILLER_LIMIT } from "./filler";
 
 const COL = "channels";
@@ -47,4 +47,14 @@ export function saveFillerMode(
   mode: "off" | "order" | "shuffle",
 ): Promise<void> {
   return patchSongs(channelId, { "songs.fillerMode": mode });
+}
+
+/**
+ * ลัดคิวด้วยโดเนท EasyDonate — มีผลทันทีเหมือนเปิด/ปิดรับเพลง
+ * Worker อ่านค่านี้ทุกครั้งที่มีโดเนทเข้า (worker/easydonate.js) min เป็น 0 = ปิด
+ */
+export function savePaidSkip(channelId: string, paidSkip: PaidSkip): Promise<void> {
+  const min = Math.max(0, Math.round(Number(paidSkip.min) || 0));
+  const user = (paidSkip.user ?? "").trim().replace(/^@/, "").slice(0, 40);
+  return patchSongs(channelId, { "songs.paidSkip": user ? { min, user } : { min } });
 }

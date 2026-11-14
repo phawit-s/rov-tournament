@@ -336,6 +336,8 @@ async function loadOpenQueue(env, token, channelId) {
               { fieldPath: "byUid" },
               { fieldPath: "status" },
               { fieldPath: "source" },
+              // ใบลัดคิว — easydonate.js ใช้นับว่ามีคนจ่ายลัดคิวรออยู่ก่อนกี่ใบ
+              { fieldPath: "paid" },
             ],
           },
           where: {
@@ -361,33 +363,38 @@ async function loadOpenQueue(env, token, channelId) {
     .map((row) => plainFields(row.document.fields));
 }
 
-/** เขียนใบใหม่เข้าคิว */
-async function createSong(env, token, channelId, song) {
+/**
+ * เขียนใบใหม่เข้าคิว
+ *
+ * docId — ตั้งชื่อเอกสารเอง ใช้กันเขียนซ้ำ: ชื่อซ้ำ Firestore ตอบ 409 แทนการสร้างใบที่สอง
+ *   (โดเนทใบเดียวกันที่ EasyDonate ยิงซ้ำ ต้องได้เพลงเดียว)
+ * song.paid — ยอดที่จ่ายลัดคิว (บาท) ใบที่มีฟิลด์นี้ splitQueue จัดไว้หน้าเพลงที่ขอฟรี
+ */
+async function createSong(env, token, channelId, song, docId) {
   const S = (v) => ({ stringValue: v });
-  const res = await fetch(
-    `${docsRoot(env)}/channels/${encodeURIComponent(channelId)}/songRequests`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(10000),
-      body: JSON.stringify({
-        fields: {
-          channelId: S(channelId),
-          videoId: S(song.videoId),
-          title: S(song.title),
-          author: S(song.author),
-          url: S(watchUrl(song.videoId)),
-          byUid: S(song.byUid),
-          byName: S(song.byName),
-          message: song.message ? S(song.message) : { nullValue: null },
-          source: S(song.source),
-          status: S("queued"),
-          createdAt: S(new Date().toISOString()),
-          playedAt: { nullValue: null },
-        },
-      }),
-    },
-  );
+  const base = `${docsRoot(env)}/channels/${encodeURIComponent(channelId)}/songRequests`;
+  const res = await fetch(docId ? `${base}?documentId=${encodeURIComponent(docId)}` : base, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(10000),
+    body: JSON.stringify({
+      fields: {
+        channelId: S(channelId),
+        videoId: S(song.videoId),
+        title: S(song.title),
+        author: S(song.author),
+        url: S(watchUrl(song.videoId)),
+        byUid: S(song.byUid),
+        byName: S(song.byName),
+        message: song.message ? S(song.message) : { nullValue: null },
+        source: S(song.source),
+        ...(song.paid > 0 ? { paid: { doubleValue: song.paid } } : {}),
+        status: S("queued"),
+        createdAt: S(new Date().toISOString()),
+        playedAt: { nullValue: null },
+      },
+    }),
+  });
 
   const json = await res.json().catch(() => null);
   if (!res.ok) {
@@ -457,7 +464,18 @@ const bearerOf = (request) => {
 
 const CHAT_KEY = /^k1\.(\d{1,6})\.([A-Za-z0-9_-]{32})$/;
 
-async function chatKeyFor(env, channelId, gen) {
+/**
+ * กุญแจต่อช่องมีสองชนิด ใช้แม่กุญแจเดียวกันแต่ป้ายต่างกัน — กุญแจชนิดหนึ่งใช้แทนอีกชนิดไม่ได้
+ *   chat — โปรแกรมสะพานแชท (k1.) รุ่นเก็บใน chatKeyGen
+ *   ezdn — ลิงก์ webhook ของ EasyDonate (d1.) รุ่นเก็บใน donateKeyGen (ดู easydonate.js)
+ * แยกรุ่นกันเพื่อให้ยกเลิกลิงก์ webhook ได้โดยไม่ทำให้โปรแกรมสะพานหลุด และกลับกัน
+ */
+export const KEY_KINDS = {
+  chat: { label: "chat", prefix: "k1", genField: "chatKeyGen" },
+  donate: { label: "ezdn", prefix: "d1", genField: "donateKeyGen" },
+};
+
+export async function keyFor(env, label, channelId, gen) {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
@@ -467,19 +485,22 @@ async function chatKeyFor(env, channelId, gen) {
     ["sign"],
   );
   const sig = new Uint8Array(
-    await crypto.subtle.sign("HMAC", key, enc.encode(`chat:${channelId}:${gen}`)),
+    await crypto.subtle.sign("HMAC", key, enc.encode(`${label}:${channelId}:${gen}`)),
   );
   let bin = "";
   for (const b of sig) bin += String.fromCharCode(b);
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "").slice(0, 32);
 }
 
+const chatKeyFor = (env, channelId, gen) => keyFor(env, "chat", channelId, gen);
+
 /**
  * ออกรหัสเชื่อมต่อให้ช่อง — หน้าสตูดิโอเรียกตอนเจ้าของกดปุ่ม
  *
  *   POST ?pair=1
  *   Authorization: Bearer <Firebase ID token ของคนที่กด>
- *   JSON { channelId, rotate? }   rotate = ยกเลิกรหัสเก่า ออกรุ่นใหม่
+ *   JSON { channelId, rotate?, kind? }   rotate = ยกเลิกรหัสเก่า ออกรุ่นใหม่
+ *                                        kind = "chat" (ค่าปริยาย) | "donate" (ลิงก์ webhook EasyDonate)
  *   ตอบ { ok, channelId, handle, gen, key }
  *
  * ทุกอย่างทำในนามคนที่กด ไม่ใช่บอท: ให้ Google ตรวจโทเคน (accounts:lookup)
@@ -508,6 +529,8 @@ export async function handleChatPair(request, env, cors, helpers) {
   }
   const channelId = str(body?.channelId);
   if (!channelId) return bad("no-channel");
+  const kind = KEY_KINDS[str(body?.kind) || "chat"];
+  if (!kind) return bad("bad-kind");
 
   const who = await fetch(
     `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.FIREBASE_API_KEY}`,
@@ -528,15 +551,15 @@ export async function handleChatPair(request, env, cors, helpers) {
   if (channel?.error) return bad(channel.error);
   if (!channel || channel.id !== channelId) return bad("channel-not-found");
 
-  /* ขอเขียน chatKeyGen ด้วยโทเคนของคนที่กด — ผ่าน = มีสิทธิ์จัดการช่องนี้
+  /* ขอเขียนเลขรุ่นด้วยโทเคนของคนที่กด — ผ่าน = มีสิทธิ์จัดการช่องนี้
      ไม่หมุนรุ่นก็ยังเขียนค่าเดิมซ้ำ เพื่อใช้กติกาเป็นตัวตรวจสิทธิ์ทุกครั้ง */
-  const gen = num(channel.data?.chatKeyGen) + (body?.rotate === true ? 1 : 0);
+  const gen = num(channel.data?.[kind.genField]) + (body?.rotate === true ? 1 : 0);
   const res = await fetch(
-    `${docsRoot(env)}/channels/${encodeURIComponent(channel.id)}?updateMask.fieldPaths=chatKeyGen`,
+    `${docsRoot(env)}/channels/${encodeURIComponent(channel.id)}?updateMask.fieldPaths=${kind.genField}`,
     {
       method: "PATCH",
       headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ fields: { chatKeyGen: { integerValue: String(gen) } } }),
+      body: JSON.stringify({ fields: { [kind.genField]: { integerValue: String(gen) } } }),
       signal: AbortSignal.timeout(10000),
     },
   );
@@ -549,7 +572,7 @@ export async function handleChatPair(request, env, cors, helpers) {
       channelId: channel.id,
       handle: channel.data?.handle ?? null,
       gen,
-      key: `k1.${gen}.${await chatKeyFor(env, channel.id, gen)}`,
+      key: `${kind.prefix}.${gen}.${await keyFor(env, kind.label, channel.id, gen)}`,
     },
     cors,
   );
@@ -705,3 +728,18 @@ export async function handleSongIngest(request, env, cors, helpers) {
     cors,
   );
 }
+
+/* ของที่ easydonate.js ยืมใช้ — เพลงลัดคิวต้องหาคลิปและเขียนคิวแบบเดียวกับคำขอจากแชททุกอย่าง */
+export {
+  createSong,
+  docsRoot,
+  loadChannel,
+  loadOpenQueue,
+  lookupVideo,
+  num,
+  pickVideo,
+  plainFields,
+  safeEqual,
+  searchOne,
+  str,
+};

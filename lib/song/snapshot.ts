@@ -64,7 +64,7 @@ function slim(s: SongRequest): SongRequest {
   const out: Record<string, unknown> = {};
   const keys = [
     "id", "videoId", "title", "author", "byUid", "byName", "message",
-    "status", "createdAt", "playedAt", "duration", "source", "orderKey",
+    "status", "createdAt", "playedAt", "duration", "source", "orderKey", "paid",
   ] as const;
   for (const k of keys) {
     const v = (s as Record<string, unknown>)[k];

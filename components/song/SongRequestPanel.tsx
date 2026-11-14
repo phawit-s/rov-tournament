@@ -15,6 +15,7 @@ import {
   type SearchHit,
 } from "@/lib/song/search";
 import { removeSongRequest, submitSongRequest } from "@/lib/song/store";
+import { baht, easyDonateUrl } from "@/lib/song/easydonate";
 import { canEmbed } from "@/lib/song/embeddable";
 import { DEFAULT_SONG_CONFIG, type SongConfig, type SongRequest } from "@/lib/song/types";
 import { lookupVideo, thumbUrl, videoIdFrom, watchUrl, type YoutubeInfo } from "@/lib/song/youtube";
@@ -473,8 +474,40 @@ export function RequestForm({
               : `คุณขอได้อีก ${left} เพลง`}
           </p>
         )}
+
+        <PaidSkipNote config={config} />
       </div>
     </section>
+  );
+}
+
+/**
+ * บอกคนดูว่าลัดคิวได้ด้วยโดเนท — โชว์เฉพาะช่องที่ตั้งยอดขั้นต่ำไว้ (ดู worker/easydonate.js)
+ * อยู่ใต้ปุ่มส่งเข้าคิว เป็นทางเลือกรอง ไม่ใช่สิ่งที่ต้องอ่านก่อนขอเพลงฟรี
+ */
+function PaidSkipNote({ config }: { config: SongConfig }) {
+  const min = config.paidSkip?.min ?? 0;
+  if (!(min > 0)) return null;
+  const href = easyDonateUrl(config.paidSkip?.user);
+  return (
+    <div className="rounded-field bg-fill px-4 py-3 text-sm">
+      <p>
+        <b>อยากให้เพลงขึ้นก่อน?</b> โดเนท <span className="num font-semibold">{baht(min)}</span>{" "}
+        ขึ้นไปผ่าน EasyDonate แล้วพิมพ์ในข้อความโดเนทว่า <b>!เพลง</b> ตามด้วยชื่อเพลง
+        หรือวางลิงก์ YouTube เพลงจะลัดคิวไปก่อนเพลงที่ขอฟรี
+      </p>
+      {href && (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="mt-2 inline-flex items-center gap-1.5 font-medium underline underline-offset-4"
+        >
+          ไปหน้าโดเนท
+          <IconExternal className="h-3.5 w-3.5" />
+        </a>
+      )}
+    </div>
   );
 }
 
@@ -568,6 +601,7 @@ export function QueueList({
                         <span className="truncate">
                           {song.source === "filler" ? "เพลงสำรองของช่อง" : `ขอโดย ${song.byName}`}
                         </span>
+                        {(song.paid ?? 0) > 0 && <Badge>ลัดคิว</Badge>}
                         {mine && <Badge tone="ink">ของคุณ</Badge>}
                       </p>
                     </div>

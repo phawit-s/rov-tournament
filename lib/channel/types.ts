@@ -39,6 +39,8 @@ export type Channel = {
    * ไม่ใช่ความลับ ตัวรหัสคำนวณจากกุญแจที่อยู่ใน Worker เท่านั้น
    */
   chatKeyGen?: number;
+  /** รุ่นของลิงก์ webhook ลัดคิว EasyDonate — แบบเดียวกับ chatKeyGen แต่แยกรุ่นกัน (worker/easydonate.js) */
+  donateKeyGen?: number;
 
   ownerUid: string;
   ownerEmail?: string;

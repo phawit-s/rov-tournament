@@ -61,7 +61,7 @@ function matchesCloud(local: unknown, cloud: unknown): boolean {
 /**
  * ค่าที่ "มีผลทันที" ต้องเอาของบนคลาวด์มาทับร่างก่อนบันทึกเสมอ
  *
- * เปิด/ปิดรับเพลง ป้ายไลฟ์ และเพลย์ลิสต์สำรอง ถูกแก้จากหน้าอื่นตรงลงคลาวด์
+ * เปิด/ปิดรับเพลง ป้ายไลฟ์ เพลย์ลิสต์สำรอง และลัดคิว EasyDonate ถูกแก้จากหน้าอื่นตรงลงคลาวด์
  * (หน้าภาพรวม หน้าคิว ตัวเล่น) ระหว่างที่หน้านี้ถือร่างเก่าค้างไว้
  * ถ้าบันทึกร่างทั้งก้อน ค่าพวกนั้นจะถูกย้อนกลับเงียบๆ — เช่นปิดรับเพลงไปแล้ว
  * มากดบันทึกชื่อช่อง แล้วกลายเป็นเปิดรับใหม่โดยไม่มีใครตั้งใจ
@@ -78,6 +78,7 @@ function withLiveFields(draft: Channel, cloud: Channel | null): Channel {
       enabled: cloudSongs?.enabled ?? songs.enabled,
       filler: cloudSongs?.filler ?? songs.filler,
       fillerMode: cloudSongs?.fillerMode ?? songs.fillerMode,
+      paidSkip: cloudSongs?.paidSkip ?? songs.paidSkip,
     },
   };
 }

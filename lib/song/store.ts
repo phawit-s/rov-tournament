@@ -225,8 +225,9 @@ export async function setSongStatus(
  *
  * บนสุด = ตั้งคีย์ให้มาก่อนหัวแถวหนึ่งวินาที
  *
- * สลับได้เฉพาะในกลุ่มเดียวกัน — เพลงที่คนขอกับเพลงสำรองอยู่คนละชั้นเสมอ
- * (เพลงสำรองต้องอยู่ท้ายแถวตลอด ไม่งั้นมันจะไปแซงเพลงที่คนดูอุตส่าห์ขอมา)
+ * สลับได้เฉพาะในชั้นเดียวกัน (tierOf) — ลัดคิว / ขอฟรี / เพลงสำรอง อยู่คนละชั้นเสมอ
+ * (เพลงสำรองต้องอยู่ท้ายแถวตลอด ไม่งั้นมันจะไปแซงเพลงที่คนดูอุตส่าห์ขอมา
+ *  และเพลงฟรีต้องไม่แซงคนที่จ่ายลัดคิว)
  */
 export async function moveSongInQueue(
   channelId: string,
@@ -237,12 +238,11 @@ export async function moveSongInQueue(
   const db = getDb();
   if (!db) return;
 
-  const isFiller = (s: SongRequest) => s.source === "filler";
   const target = queued.find((s) => s.id === songId);
   if (!target) return;
 
-  // ดูเฉพาะเพื่อนร่วมกลุ่ม จะได้ไม่ข้ามชั้นไปสลับกับอีกกลุ่ม
-  const group = queued.filter((s) => isFiller(s) === isFiller(target));
+  // ดูเฉพาะเพื่อนร่วมชั้น จะได้ไม่ข้ามชั้นไปสลับกับอีกกลุ่ม
+  const group = queued.filter((s) => tierOf(s) === tierOf(target));
   const at = group.findIndex((s) => s.id === songId);
   if (at < 0) return;
 
@@ -323,13 +323,21 @@ export async function clearFinishedSongs(channelId: string, queue: SongRequest[]
 /** คีย์ที่ใช้เรียงจริง — ใบที่ยังไม่เคยถูกเลื่อนลำดับก็ใช้เวลาที่ขอไปตามเดิม */
 export const sortKeyOf = (s: SongRequest): string => s.orderKey ?? s.createdAt ?? "";
 
+/**
+ * ชั้นของคิว เลขน้อยได้เล่นก่อน — 0 จ่ายลัดคิว · 1 ขอฟรี · 2 เพลงสำรอง
+ * เรียงตามเวลา/orderKey เฉพาะในชั้นเดียวกัน และเลื่อนลำดับด้วยมือได้แค่ในชั้นเดียวกัน
+ * ใบลัดคิวจึงอยู่หน้าเพลงที่ขอฟรีเสมอ แม้สตรีมเมอร์กด "ขึ้นหัวคิว" ให้เพลงฟรีสักเพลง
+ */
+export const tierOf = (s: SongRequest): number =>
+  s.source === "filler" ? 2 : (s.paid ?? 0) > 0 ? 0 : 1;
+
 export function splitQueue(list: SongRequest[]) {
   const queued = list
     .filter((s) => s.status === "queued")
     .sort((a, b) => {
-      const fa = a.source === "filler" ? 1 : 0;
-      const fb = b.source === "filler" ? 1 : 0;
-      if (fa !== fb) return fa - fb;
+      const ta = tierOf(a);
+      const tb = tierOf(b);
+      if (ta !== tb) return ta - tb;
       const byKey = sortKeyOf(a).localeCompare(sortKeyOf(b));
       // คีย์ชนกันได้ถ้าสองใบถูกเลื่อนพร้อมกัน ใช้ id ตัดสินให้ลำดับนิ่ง
       return byKey !== 0 ? byKey : a.id.localeCompare(b.id);
