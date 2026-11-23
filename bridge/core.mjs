@@ -547,6 +547,110 @@ export function createBridge(cfg, onEvent = () => {}) {
   let conn = null;
   let reconnecting = false;
 
+  /* ---------------- เฝ้าว่ายังต่ออยู่กับห้องที่ไลฟ์จริง ----------------
+
+     เคยค้างจริง (bammmmyyi 22→23 พ.ย. 2569): ไลฟ์เมื่อวานจบโดยไม่มี streamEnd หรือ disconnected
+     มาถึงเลย สะพานเกาะห้องเก่าไว้ทั้งวัน หน้าโปรแกรมยังขึ้นว่า "ต่อกับไลฟ์แล้ว"
+     พอไลฟ์คืนถัดมาเปิดเป็นห้องใหม่ (เริ่มไลฟ์ใหม่ = เลขห้องใหม่ทุกครั้ง) แชทคืนนั้นจึงไม่เข้ามาสักข้อความ
+
+     ทุก WATCH_MS ถามเลขห้องปัจจุบันจาก TikTok ตรง (ไม่ผ่าน Euler จึงไม่กินโควตาลายเซ็น)
+       - ไม่ได้ไลฟ์แล้ว → ถือว่าไลฟ์จบ
+       - ไลฟ์อยู่แต่คนละห้องกับที่ต่อไว้ → ต่อใหม่เข้าห้องใหม่
+       ต้องเห็นแบบเดียวกันสองรอบติดค่อยทำ คำตอบเพี้ยนครั้งเดียวจะได้ไม่ทำให้ต่อใหม่ฟรีๆ (ต่อใหม่ = 1 ลายเซ็น)
+     อีกชั้น: ระหว่างไลฟ์ยอดคนดูอัปเดตทุกไม่กี่วินาที ไม่มีข้อมูลอะไรเข้ามานานเกิน SILENT_MS = สายตายแล้ว */
+  const WATCH_MS = cfg.watchMs ?? 90_000;
+  const SILENT_MS = cfg.silentMs ?? 10 * 60_000;
+  /** อีเวนต์ที่แปลว่ายังมีข้อมูลจากไลฟ์เข้ามา — decodedData คือทุกข้อความของ v2 ที่เหลือเผื่อ v1 */
+  const ALIVE_EVENTS = ["decodedData", "rawData", "roomUser", "member", "like"];
+  let lastData = 0;
+  /** ห้องที่ต่ออยู่ — จาก connect() */
+  let liveRoom = "";
+  /** คำตัดสินของรอบก่อน ต้องตรงกันสองรอบถึงจะต่อใหม่ */
+  let strike = "";
+  let checking = false;
+  let watchTimer = null;
+  let probe = null;
+  const markAlive = () => {
+    lastData = Date.now();
+  };
+
+  /** ใช้ได้ทั้ง v2 (export ตรง) และรุ่นที่ห่อไว้ใน default */
+  async function lib(name) {
+    const mod = await import("tiktok-live-connector").catch(() => null);
+    return mod?.[name] ?? mod?.default?.[name];
+  }
+
+  /** ภายในเวลาที่กำหนด ไม่งั้นคืน null — เน็ตค้างแล้วตัวเฝ้าต้องไม่ค้างตาม */
+  const within = (ms, p) =>
+    Promise.race([p, new Promise((resolve) => setTimeout(() => resolve(null), ms))]);
+
+  /**
+   * ห้องที่ไลฟ์อยู่ตอนนี้ → { live, roomId } หรือ null ถ้าถามไม่ได้
+   *
+   * เรียกเส้นทางของ TikTok เอง ไม่ใช้ fetchRoomId()/fetchIsLive() ของไลบรารี เพราะสองตัวนั้น
+   * ถอยไปถาม Euler ได้ถ้า TikTok ไม่ตอบ (กินโควตา) และ fetchRoomId เขียนทับเลขห้อง
+   * ของการเชื่อมต่อที่ใช้อยู่ — จึงสร้างตัวเปล่าไว้ถามแยก
+   * API มาก่อน: หน้าเว็บ (SIGI_STATE) โดน TikTok บล็อกบ่อย (23 พ.ย. 2569 บล็อกทุกครั้ง)
+   * status 4 = ไลฟ์จบ/ไม่ได้ไลฟ์ (เกณฑ์เดียวกับไลบรารี) ตอนไม่ไลฟ์ roomId ยังเป็นห้องล่าสุดอยู่ จึงดู status ก่อน
+   */
+  async function currentRoom() {
+    try {
+      const Ctor = await lib("TikTokLiveConnection");
+      if (!Ctor) return null;
+      probe ??= new Ctor(cfg.user, {});
+      const routes = [
+        [await lib("fetchRoomInfoFromApiLiveRoute"), (r) => r?.data],
+        [await lib("fetchRoomInfoFromHtmlRoute"), (r) => r],
+      ];
+      for (const [route, pick] of routes) {
+        if (typeof route !== "function") continue;
+        try {
+          const info = pick(await within(15_000, route({ webClient: probe.webClient, uniqueId: cfg.user })));
+          const status = info?.liveRoom?.status;
+          if (typeof status !== "number") continue;
+          return { live: status !== 4, roomId: String(info?.user?.roomId ?? "") };
+        } catch {
+          /* ทางนี้ไม่ได้ ลองทางถัดไป */
+        }
+      }
+    } catch {
+      /* ถามไม่ได้ ใช้ตัวดูความเงียบอย่างเดียว */
+    }
+    return null;
+  }
+
+  async function checkLive() {
+    const c = conn;
+    if (stopped || reconnecting || checking || !c) return;
+    checking = true;
+    try {
+      const room = await currentRoom();
+      if (stopped || reconnecting || c !== conn) return;
+
+      let verdict = "";
+      if (room && !room.live) verdict = "ended";
+      else if (room?.roomId && liveRoom && room.roomId !== liveRoom) verdict = `moved:${room.roomId}`;
+      else if (Date.now() - lastData > SILENT_MS) verdict = "silent";
+
+      if (!verdict) {
+        strike = "";
+        return;
+      }
+      // เงียบมา 10 นาทีแล้วไม่ต้องรอดูอีกรอบ ส่วนคำตอบจาก TikTok ต้องยืนยันซ้ำ
+      if (verdict !== "silent" && verdict !== strike) {
+        strike = verdict;
+        return;
+      }
+      strike = "";
+      if (verdict === "ended") void reconnect(c, "ไลฟ์จบแล้ว (TikTok ไม่ได้แจ้งมา)", true);
+      else if (verdict === "silent") {
+        void reconnect(c, `ไม่มีข้อมูลจากไลฟ์มา ${Math.round(SILENT_MS / 60_000)} นาที`, false);
+      } else void reconnect(c, `ไลฟ์เปิดห้องใหม่ (${room.roomId})`, false);
+    } finally {
+      checking = false;
+    }
+  }
+
   /* รอแบบปลุกได้ — พักรอโควตาอาจนานเป็นชั่วโมง กดหยุดแล้วต้องจบทันที ไม่ค้างรอจนครบ */
   const naps = new Set();
   const nap = (ms) =>
@@ -582,6 +686,9 @@ export function createBridge(cfg, onEvent = () => {}) {
     const c = await makeConnection();
     c.on("chat", onChat);
     c.on("gift", onGift);
+    for (const ev of ALIVE_EVENTS) c.on(ev, markAlive);
+    c.on("chat", markAlive);
+    c.on("gift", markAlive);
     // ไลบรารีโยน error ระหว่างทางได้ ถ้าไม่ดักไว้ process จะตายทั้งตัว
     c.on("error", (e) => {
       // พลาดตอนต่อ ไลบรารีแจ้งซ้ำกับที่ connect() โยนออกมา — ลูปข้างล่างรายงานเองแล้ว
@@ -615,6 +722,9 @@ export function createBridge(cfg, onEvent = () => {}) {
         }
         limitedStreak = 0;
         liveSince = Date.now();
+        lastData = Date.now();
+        liveRoom = String(state?.roomId ?? "");
+        strike = "";
         emit("status", "ต่อกับไลฟ์แล้ว", {
           state: "live",
           detail: `ห้อง ${state?.roomId ?? "?"}`,
@@ -706,8 +816,7 @@ export function createBridge(cfg, onEvent = () => {}) {
   }
 
   function mute(c) {
-    c.removeAllListeners?.("chat");
-    c.removeAllListeners?.("gift");
+    for (const ev of ["chat", "gift", ...ALIVE_EVENTS]) c.removeAllListeners?.(ev);
   }
 
   function watch(c) {
@@ -719,11 +828,16 @@ export function createBridge(cfg, onEvent = () => {}) {
     submit,
     /** ต่อไลฟ์แล้วฟังไปเรื่อยๆ — resolve เมื่อต่อสำเร็จครั้งแรก (หรือถูกสั่งหยุดก่อน) */
     async start() {
+      // ตั้งก่อนต่อ — ตอนรอไลฟ์ยังไม่มี conn ตัวเฝ้าก็แค่ข้ามไป
+      watchTimer ??= setInterval(() => void checkLive(), WATCH_MS);
+      watchTimer.unref?.();
       conn = await connectLoop();
       if (conn) watch(conn);
     },
     stop() {
       stopped = true;
+      clearInterval(watchTimer);
+      watchTimer = null;
       for (const wake of [...naps]) wake();
       if (!conn) return;
       mute(conn);
