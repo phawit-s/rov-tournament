@@ -239,8 +239,8 @@ export default function ChatBridgePanel({ channel }: { channel: Channel }) {
  * ลัดคิวด้วยของขวัญ TikTok — ตั้งยอดเหรียญสะสม
  *
  * โปรแกรมสะพานนับของขวัญของแต่ละคนรวมกัน ครบยอดเมื่อไร Worker ยกเพลงแรกที่คนนั้นขอไว้
- * ขึ้นชั้นลัดคิว (bridge/core.mjs onGift → worker/tiktok-gift.js) จับคู่ด้วยชื่อ TikTok
- * จึงใช้ได้แค่กับเพลงที่ขอจากแชท เพลงที่ขอจากหน้าเว็บไม่มีชื่อ TikTok ให้จับคู่
+ * ขึ้นชั้นลัดคิว (bridge/core.mjs onGift → worker/tiktok-gift.js) จับคู่ด้วยชื่อผู้ใช้ TikTok:
+ * เพลงจากแชทก่อน แล้วค่อยเพลงจากหน้าเว็บที่กรอกชื่อตรงกัน (ยืนยันตัวไม่ได้ จึงมาทีหลัง)
  */
 function GiftSkipSettings({ channel }: { channel: Channel }) {
   const saved = channel.songs?.giftSkip?.min ?? 0;
@@ -263,8 +263,13 @@ function GiftSkipSettings({ channel }: { channel: Channel }) {
     <Panel className="p-5 sm:p-6">
       <h3 className="font-bold">ลัดคิวด้วยของขวัญ TikTok</h3>
       <p className="mt-1 max-w-prose text-muted">
-        คนดูที่ขอเพลงจากแชทไว้ ส่งของขวัญสะสมครบจำนวนเหรียญนี้ เพลงแรกของเขาในคิวจะลัดไปก่อนเพลงที่ขอฟรี
+        คนดูส่งของขวัญสะสมครบจำนวนเหรียญนี้ เพลงแรกของเขาในคิวจะลัดไปก่อนเพลงที่ขอฟรี
         ส่งทีละน้อยก็นับรวมกัน ครบแล้วยอดเริ่มนับใหม่ ถ้าตอนครบยังไม่มีเพลงรอคิว ยอดนั้นจะไม่ถูกเก็บไว้
+      </p>
+      <p className="mt-2 max-w-prose text-sm text-muted">
+        นับเพลงที่ขอจากแชท (<b className="text-ink">!เพลง</b>) ก่อน ถ้าไม่มีค่อยนับเพลงที่ขอจากหน้าเว็บ
+        ที่กรอกชื่อตรงกับชื่อผู้ใช้ TikTok ของคนส่ง ช่องชื่อในหน้าเว็บใครจะพิมพ์อะไรก็ได้
+        ถ้ามีคนแอบใช้ชื่อคนอื่น เพลงของคนนั้นอาจได้ลัดคิวแทน
       </p>
 
       <div className="mt-4 max-w-prose space-y-3">

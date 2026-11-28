@@ -6,8 +6,13 @@
  * → เพลงแรกที่คนนั้นขอไว้ในคิว ขึ้นชั้นลัดคิว (ฟิลด์ paid เหมือนโดเนท EasyDonate)
  *
  * ต่างจาก EasyDonate ตรงที่ของขวัญไม่มีข้อความแนบ จึงสร้างเพลงใหม่ไม่ได้ ทำได้แค่เลื่อนเพลง
- * ที่ขอไว้แล้ว จับคู่ด้วย byUid "tiktok:<ชื่อ>" ตัวเดียวกับที่ song-ingest.js เขียนตอนขอจากแชท
- * ไม่มีเพลงรอคิว = ไม่เกิดอะไรขึ้น ไม่เก็บสิทธิ์ไว้ใช้ทีหลัง (เจ้าของเลือกแบบนี้ พ.ย. 2569)
+ * ที่ขอไว้แล้ว ไม่มีเพลงรอคิว = ไม่เกิดอะไรขึ้น ไม่เก็บสิทธิ์ไว้ใช้ทีหลัง (เจ้าของเลือกแบบนี้ พ.ย. 2569)
+ *
+ * เพลงของ "คนนี้" มีสองแบบ (candidatesOf) ลัดให้ตามลำดับนี้
+ *   1. ขอจากแชท — byUid "tiktok:<ชื่อผู้ใช้>" ตัวเดียวกับที่ song-ingest.js เขียน ยืนยันได้ว่าเป็นบัญชีนั้นจริง
+ *   2. ขอจากหน้าเว็บ โดยกรอก "ชื่อของคุณ" เป็นชื่อผู้ใช้ TikTok (เจ้าของขอเพิ่ม 28 พ.ย. 2569)
+ *      เทียบแบบไม่สนตัวพิมพ์และ @ · เทียบกับชื่อผู้ใช้ (@) เท่านั้น ไม่ใช่ชื่อเล่นในไลฟ์ซึ่งซ้ำกันง่าย
+ *      ช่องชื่อในหน้าเว็บใครจะพิมพ์อะไรก็ได้ (แอบใช้ชื่อคนอื่นได้) จึงมาหลังเพลงจากแชทเสมอ
  *
  * ความปลอดภัย
  *   Worker ตรวจเองไม่ได้ว่ามีของขวัญจริง ต้องเชื่อสะพานที่ถือรหัสเชื่อมต่อของช่อง (k1.)
@@ -22,7 +27,8 @@
  *     min ส่งกลับทุกครั้งที่อ่านช่องได้ — สะพานจำไว้ ของขวัญเล็กๆ ที่ยังไม่ถึงจะได้ไม่ต้องส่งมา
  *     ไม่งั้นกุหลาบ 1 เหรียญทุกดอกในไลฟ์จะกลายเป็นค่าอ่าน Firestore
  *
- * ค่าอ่านต่อครั้งที่ถึงขั้นต่ำ: ช่อง 1 + เพลงที่รอคิวของคนนั้น (ปกติ 1–2) + เขียน 1
+ * ค่าอ่านต่อครั้งที่ถึงขั้นต่ำ: ช่อง 1 + คิวสรุป 1 + ใบที่จะลัด 1 + เขียน 1
+ *   ตัวเล่นไม่ได้เปิด (ไม่มีคิวสรุป) ค้นตรงแทน: 3 คำค้น ใบละอย่างน้อย 1
  */
 
 import {
@@ -30,6 +36,7 @@ import {
   docsRoot,
   keyRevoked,
   loadChannel,
+  loadSnapshot,
   num,
   plainFields,
   str,
@@ -38,8 +45,37 @@ import {
 /** ป้ายหน่วยของ paid — ใบที่ไม่มีป้ายนี้คือบาท (โดเนท EasyDonate) ดู lib/song/types.ts */
 const UNIT = "coin";
 
-/** เพลงที่รอคิวของคนนี้ — เรียงแบบเดียวกับคิวจริง (sortKeyOf ใน lib/song/store.ts) */
-async function loadQueuedOf(env, token, channelId, byUid) {
+/** ชื่อแบบเทียบกันได้ — "@Phawit-S " กับ "phawit-s" ถือว่าตรงกัน */
+const norm = (s) => String(s ?? "").trim().replace(/^@+/, "").trim().toLowerCase();
+
+/** ใบที่คนดูขอเองจากหน้าเว็บ — ใบเก่าไม่มี source ถือว่ามาจากหน้าเว็บ (lib/song/types.ts) */
+const fromWeb = (s) => !s.source || s.source === "viewer";
+
+/** ลำดับเดียวกับคิวจริง (sortKeyOf ใน lib/song/store.ts) */
+const sortKey = (s) => s.orderKey || s.createdAt || "";
+const byQueue = (a, b) => sortKey(a).localeCompare(sortKey(b)) || String(a.id).localeCompare(String(b.id));
+
+/** แปลงแถวจาก REST เป็นใบเพลง พร้อม name (พาธเต็ม) และ updateTime ไว้เขียนแบบมีเงื่อนไข */
+const songOf = (doc) => ({
+  ...plainFields(doc.fields),
+  id: doc.name.split("/").pop(),
+  name: doc.name,
+  updateTime: doc.updateTime,
+});
+
+/** ใบเดียวตามไอดี — ใบจากคิวสรุปไม่มี updateTime และอาจช้ากว่าของจริงไม่กี่วินาที จึงอ่านซ้ำก่อนเขียน */
+async function fetchSong(env, token, channelId, id) {
+  const res = await fetch(
+    `${docsRoot(env)}/channels/${encodeURIComponent(channelId)}/songRequests/${encodeURIComponent(id)}`,
+    { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) },
+  );
+  if (!res.ok) return null;
+  const doc = await res.json().catch(() => null);
+  return doc?.fields ? songOf(doc) : null;
+}
+
+/** ใบที่รอคิวและ field เท่ากับ value — คืน { songs } หรือ { error } */
+async function queryQueued(env, token, channelId, field, value) {
   const res = await fetch(
     `${docsRoot(env)}/channels/${encodeURIComponent(channelId)}:runQuery`,
     {
@@ -56,9 +92,9 @@ async function loadQueuedOf(env, token, channelId, byUid) {
               filters: [
                 {
                   fieldFilter: {
-                    field: { fieldPath: "byUid" },
+                    field: { fieldPath: field },
                     op: "EQUAL",
-                    value: { stringValue: byUid },
+                    value: { stringValue: value },
                   },
                 },
                 {
@@ -79,18 +115,46 @@ async function loadQueuedOf(env, token, channelId, byUid) {
   if (res.status === 429) return { error: "db-quota" };
   const rows = await res.json().catch(() => null);
   if (!res.ok || !Array.isArray(rows)) return { error: `read-failed-${res.status}` };
+  return { songs: rows.filter((row) => row?.document?.fields).map((row) => songOf(row.document)) };
+}
 
-  const key = (s) => s.orderKey || s.createdAt || "";
-  return {
-    songs: rows
-      .filter((row) => row?.document?.fields)
-      .map((row) => ({
-        ...plainFields(row.document.fields),
-        name: row.document.name,
-        updateTime: row.document.updateTime,
-      }))
-      .sort((a, b) => key(a).localeCompare(key(b)) || a.name.localeCompare(b.name)),
-  };
+/**
+ * เพลงที่รอคิวของคนนี้ เรียงตามที่จะลัดให้: ขอจากแชทก่อน แล้วค่อยขอจากหน้าเว็บที่ชื่อตรง
+ * (ในแต่ละกลุ่มเรียงตามลำดับคิวจริง) — คืน { free, total } หรือ { error }
+ *   free  = ใบที่ยังไม่ได้ลัดคิว · total = ทุกใบที่รอคิว ไว้แยก "ไม่มีเพลง" กับ "ลัดอยู่แล้วทุกเพลง"
+ *
+ * คิวสรุปก่อน (1 read เทียบชื่อแบบไม่สนตัวพิมพ์ได้) ตัวเล่นไม่ได้เปิดค่อยค้นตรง
+ * ซึ่ง Firestore เทียบแบบตรงตัว จึงจับได้แค่ชื่อที่พิมพ์ตัวเล็กเหมือนชื่อผู้ใช้ TikTok (มี/ไม่มี @)
+ */
+async function candidatesOf(env, token, channelId, byUid, handle) {
+  const want = norm(handle);
+  const isWeb = (s) => !!want && fromWeb(s) && norm(s.byName) === want;
+
+  let chat;
+  let web;
+  const snap = await loadSnapshot(env, token, channelId);
+  if (snap) {
+    const queued = snap.filter((s) => s?.status === "queued" && s.id);
+    chat = queued.filter((s) => s.byUid === byUid);
+    web = queued.filter(isWeb);
+  } else {
+    const found = await Promise.all([
+      queryQueued(env, token, channelId, "byUid", byUid),
+      ...(want
+        ? [
+            queryQueued(env, token, channelId, "byName", want),
+            queryQueued(env, token, channelId, "byName", `@${want}`),
+          ]
+        : []),
+    ]);
+    const failed = found.find((f) => f.error);
+    if (failed) return { error: failed.error };
+    chat = found[0].songs;
+    web = found.slice(1).flatMap((f) => f.songs).filter(isWeb);
+  }
+
+  const free = (list) => list.filter((s) => !(num(s.paid) > 0)).sort(byQueue);
+  return { free: [...free(chat), ...free(web)], total: chat.length + web.length };
 }
 
 /**
@@ -182,15 +246,17 @@ export async function handleGiftSkip(request, env, cors, helpers) {
   if (!(min > 0)) return bad("gift-off", { min: 0 });
   if (coins < min) return bad("below-min", { min });
 
-  /* ลองสองรอบ — รอบแรกพลาดเพราะใบเพิ่งเปลี่ยน (เพลงแรกของเขาเพิ่งเริ่มเล่นพอดี)
-     อ่านใหม่แล้วยกเพลงถัดไปของเขาแทน */
-  for (let round = 0; round < 2; round++) {
-    const mine = await loadQueuedOf(env, token, channel.id, byUid);
-    if (mine.error) return bad(mine.error, { min });
+  // เทียบกับเพลงจากหน้าเว็บด้วยชื่อผู้ใช้ (who.id) เท่านั้น ไม่ใช้ชื่อเล่น
+  const mine = await candidatesOf(env, token, channel.id, byUid, str(who.id));
+  if (mine.error) return bad(mine.error, { min });
+  // ใบที่ลัดคิวอยู่แล้ว (โดเนทหรือของขวัญรอบก่อน) ไม่อยู่ใน free — ยกเพลงถัดไปของเขาแทน
+  if (!mine.free.length) return bad(mine.total ? "already-skipped" : "no-song", { min });
 
-    // ใบที่ลัดคิวอยู่แล้ว (โดเนทหรือของขวัญรอบก่อน) ข้ามไป ยกเพลงถัดไปของเขาแทน
-    const target = mine.songs.find((s) => !(num(s.paid) > 0));
-    if (!target) return bad(mine.songs.length ? "already-skipped" : "no-song", { min });
+  /* ลองไม่เกินสามใบ — ใบที่เพิ่งเปลี่ยนระหว่างนั้น (เพลงเพิ่งเริ่มเล่น ถูกลบ ถูกลัดไปแล้ว)
+     ข้ามไปเพลงถัดไปของเขา ใบจากคิวสรุปอ่านซ้ำก่อนเพื่อเอา updateTime และสถานะล่าสุด */
+  for (const s of mine.free.slice(0, 3)) {
+    const target = s.updateTime ? s : await fetchSong(env, token, channel.id, s.id);
+    if (!target || target.status !== "queued" || num(target.paid) > 0) continue;
 
     const done = await promote(token, target, coins);
     if (done.ok) {
@@ -199,9 +265,10 @@ export async function handleGiftSkip(request, env, cors, helpers) {
           ok: true,
           min,
           coins,
-          id: target.name.split("/").pop(),
+          id: target.id,
           title: target.title,
           videoId: target.videoId,
+          via: fromWeb(target) ? "web" : "chat",
         },
         cors,
       );

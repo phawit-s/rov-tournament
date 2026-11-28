@@ -297,29 +297,34 @@ async function loadChannel(env, token, ref) {
 /** คิวสรุปไม่มีใครเขียนนานเกินนี้ = ตัวเล่นปิดแล้ว — ต้องตรงกับ STALE_MS ใน lib/song/snapshot.ts */
 const SNAPSHOT_STALE_MS = 25 * 60_000;
 
-async function loadOpenQueue(env, token, channelId) {
-  /* คิวสรุปก่อน (1 read) — ตัวเล่นในสตูดิโอเขียนไว้ระหว่างไลฟ์ (lib/song/snapshot.ts)
-     คำขอจากแชทมาถี่ตอนไลฟ์ อ่านคิวจริงทุกครั้ง = จ่ายเท่าจำนวนเพลงต่อหนึ่งคำขอ
-     ใบไม่มี/เก่า/ปิดแล้ว (ตัวเล่นไม่ได้เปิด) ค่อยอ่านคิวจริงแบบเดิม */
+/** เพลงที่ยังไม่จบจากคิวสรุป (1 read) — null ถ้าใบไม่มี/เก่า/ปิดแล้ว (ตัวเล่นไม่ได้เปิด) */
+async function loadSnapshot(env, token, channelId) {
   try {
     const snapRes = await fetch(
       `${docsRoot(env)}/channels/${encodeURIComponent(channelId)}/live/queue`,
       { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) },
     );
-    if (snapRes.ok) {
-      const snap = plainFields((await snapRes.json())?.fields);
-      const at = Date.parse(snap.updatedAt);
-      const fresh =
-        snap.v === 1 &&
-        !snap.closed &&
-        Array.isArray(snap.songs) &&
-        Number.isFinite(at) &&
-        Date.now() - at < SNAPSHOT_STALE_MS;
-      if (fresh) return snap.songs;
-    }
+    if (!snapRes.ok) return null;
+    const snap = plainFields((await snapRes.json())?.fields);
+    const at = Date.parse(snap.updatedAt);
+    const fresh =
+      snap.v === 1 &&
+      !snap.closed &&
+      Array.isArray(snap.songs) &&
+      Number.isFinite(at) &&
+      Date.now() - at < SNAPSHOT_STALE_MS;
+    return fresh ? snap.songs : null;
   } catch {
-    /* อ่านใบสรุปไม่ได้ก็ใช้คิวจริง */
+    return null;
   }
+}
+
+async function loadOpenQueue(env, token, channelId) {
+  /* คิวสรุปก่อน (1 read) — ตัวเล่นในสตูดิโอเขียนไว้ระหว่างไลฟ์ (lib/song/snapshot.ts)
+     คำขอจากแชทมาถี่ตอนไลฟ์ อ่านคิวจริงทุกครั้ง = จ่ายเท่าจำนวนเพลงต่อหนึ่งคำขอ
+     ใบไม่มี/เก่า/ปิดแล้ว (ตัวเล่นไม่ได้เปิด) ค่อยอ่านคิวจริงแบบเดิม */
+  const snap = await loadSnapshot(env, token, channelId);
+  if (snap) return snap;
 
   const res = await fetch(
     `${docsRoot(env)}/channels/${encodeURIComponent(channelId)}:runQuery`,
@@ -749,6 +754,7 @@ export {
   docsRoot,
   loadChannel,
   loadOpenQueue,
+  loadSnapshot,
   lookupVideo,
   num,
   pickVideo,

@@ -442,7 +442,14 @@ export function RequestForm({
             placeholder="ชื่อนี้จะขึ้นบนจอไลฟ์"
             maxLength={40}
             autoComplete="nickname"
+            aria-describedby={(config.giftSkip?.min ?? 0) > 0 ? "song-by-gift" : undefined}
           />
+          {/* Worker จับคู่ของขวัญกับเพลงจากหน้านี้ด้วยชื่อนี้ (worker/tiktok-gift.js) */}
+          {(config.giftSkip?.min ?? 0) > 0 && (
+            <p id="song-by-gift" className="mt-1.5 text-sm text-muted">
+              จะลัดคิวด้วยของขวัญ TikTok ให้ใส่ชื่อผู้ใช้ TikTok ของคุณ (ชื่อหลัง @)
+            </p>
+          )}
         </div>
 
         {error && (
@@ -515,7 +522,7 @@ function PaidSkipNote({ config }: { config: SongConfig }) {
 
 /**
  * บอกคนดูว่าลัดคิวได้ด้วยของขวัญ TikTok — โชว์เฉพาะช่องที่ตั้งยอดไว้ (ดู worker/tiktok-gift.js)
- * จับคู่ด้วยชื่อ TikTok จึงต้องขอเพลงจากแชทไลฟ์ เพลงที่ขอจากหน้านี้ลัดด้วยของขวัญไม่ได้
+ * จับคู่ด้วยชื่อผู้ใช้ TikTok: เพลงจากแชทจับได้เอง เพลงจากหน้านี้ต้องกรอก "ชื่อของคุณ" ให้ตรง
  */
 function GiftSkipNote({ config }: { config: SongConfig }) {
   const min = config.giftSkip?.min ?? 0;
@@ -523,9 +530,10 @@ function GiftSkipNote({ config }: { config: SongConfig }) {
   return (
     <div className="rounded-field bg-fill px-4 py-3 text-sm">
       <p>
-        <b>ดูไลฟ์ใน TikTok อยู่?</b> พิมพ์ <b>!เพลง</b> ตามด้วยชื่อเพลงในแชทไลฟ์
-        แล้วส่งของขวัญสะสมครบ <span className="num font-semibold">{coins(min)}</span>{" "}
-        เพลงแรกของคุณจะลัดคิวไปก่อนเพลงที่ขอฟรี ส่งทีละน้อยก็นับรวมกัน
+        <b>ดูไลฟ์ใน TikTok อยู่?</b> ขอเพลงจากหน้านี้โดยใส่ชื่อผู้ใช้ TikTok เป็นชื่อของคุณ
+        หรือพิมพ์ <b>!เพลง</b> ตามด้วยชื่อเพลงในแชทไลฟ์ แล้วส่งของขวัญสะสมครบ{" "}
+        <span className="num font-semibold">{coins(min)}</span> เพลงแรกของคุณจะลัดคิวไปก่อนเพลงที่ขอฟรี
+        ส่งทีละน้อยก็นับรวมกัน
       </p>
     </div>
   );
