@@ -343,7 +343,7 @@ export function RequestForm({
               {searchErr && <p className="text-sm text-danger">{searchErr}</p>}
               {!searchErr && !hits && (
                 <p className="text-sm text-muted">
-                  กดค้นหาหรือ Enter · ค้นได้ทุก {VIEWER_SEARCH.cooldownMs / 1000} วินาที
+                  กดค้นหาหรือ Enter ค้นได้ทุก {VIEWER_SEARCH.cooldownMs / 1000} วินาที
                   ถ้ามีลิงก์อยู่แล้ว วางลิงก์เร็วกว่า
                 </p>
               )}
@@ -447,7 +447,7 @@ export function RequestForm({
           {/* Worker จับคู่ของขวัญกับเพลงจากหน้านี้ด้วยชื่อนี้ (worker/tiktok-gift.js) */}
           {(config.giftSkip?.min ?? 0) > 0 && (
             <p id="song-by-gift" className="mt-1.5 text-sm text-muted">
-              จะลัดคิวด้วยของขวัญ TikTok ให้ใส่ชื่อผู้ใช้ TikTok ของคุณ (ชื่อหลัง @)
+              ใส่ชื่อผู้ใช้ TikTok (ชื่อหลัง @) ถ้าจะลัดคิวด้วยของขวัญ
             </p>
           )}
         </div>
@@ -482,60 +482,75 @@ export function RequestForm({
               : `คุณขอได้อีก ${left} เพลง`}
           </p>
         )}
-
-        <PaidSkipNote config={config} />
-        <GiftSkipNote config={config} />
       </div>
     </section>
   );
 }
 
 /**
- * บอกคนดูว่าลัดคิวได้ด้วยโดเนท — โชว์เฉพาะช่องที่ตั้งยอดขั้นต่ำไว้ (ดู worker/easydonate.js)
- * อยู่ใต้ปุ่มส่งเข้าคิว เป็นทางเลือกรอง ไม่ใช่สิ่งที่ต้องอ่านก่อนขอเพลงฟรี
+ * ทางลัดคิว — โชว์เฉพาะช่องที่เปิดไว้อย่างน้อยหนึ่งทาง
+ *
+ * แยกออกจากฟอร์ม: ฟอร์มคือทางขอฟรีที่ทุกคนใช้ ส่วนนี้เป็นทางเลือก เดิมเป็นกล่องเทาสองกล่อง
+ * ซ้อนท้ายปุ่มส่ง ย่อหน้ายาว พูดซ้ำกัน และจอกว้างจมอยู่ท้ายคอลัมน์ซ้ายที่ติดอยู่กับที่
+ * (ยาวเกินจอเมื่อไรส่วนล่างเลื่อนไม่ถึง) ตอนนี้จอกว้างวางเหนือคิว ซึ่งเป็นที่ที่คนเห็นว่า
+ * เพลงลัดคิวไปอยู่ตรงไหน มือถือต่อจากฟอร์ม
+ *
+ * แต่ละทางเป็นแถว (DESIGN.md ข้อ 3) ชื่อแถวคือวิธีกับยอดในประโยคเดียว เพราะยอดคือสิ่งที่คนดูใช้ตัดสินใจ
+ * ไม่ใส่เลขลำดับ — สองทางนี้เลือกทางใดทางหนึ่ง ไม่ใช่ขั้นตอน
+ * ของขวัญมาก่อน คนดูส่วนใหญ่มาจากไลฟ์ TikTok
  */
-function PaidSkipNote({ config }: { config: SongConfig }) {
-  const min = config.paidSkip?.min ?? 0;
-  if (!(min > 0)) return null;
-  const href = easyDonateUrl(config.paidSkip?.user);
-  return (
-    <div className="rounded-field bg-fill px-4 py-3 text-sm">
-      <p>
-        <b>อยากให้เพลงขึ้นก่อน?</b> โดเนท <span className="num font-semibold">{baht(min)}</span>{" "}
-        ขึ้นไปผ่าน EasyDonate แล้วพิมพ์ในข้อความโดเนทว่า <b>!เพลง</b> ตามด้วยชื่อเพลง
-        หรือวางลิงก์ YouTube เพลงจะลัดคิวไปก่อนเพลงที่ขอฟรี
-      </p>
-      {href && (
-        <a
-          href={href}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="mt-2 inline-flex items-center gap-1.5 font-medium underline underline-offset-4"
-        >
-          ไปหน้าโดเนท
-          <IconExternal className="h-3.5 w-3.5" />
-        </a>
-      )}
-    </div>
-  );
-}
+export function SkipOptions({ config }: { config: SongConfig }) {
+  const giftMin = config.giftSkip?.min ?? 0;
+  const donateMin = config.paidSkip?.min ?? 0;
+  if (!(giftMin > 0) && !(donateMin > 0)) return null;
+  const donateHref = easyDonateUrl(config.paidSkip?.user);
 
-/**
- * บอกคนดูว่าลัดคิวได้ด้วยของขวัญ TikTok — โชว์เฉพาะช่องที่ตั้งยอดไว้ (ดู worker/tiktok-gift.js)
- * จับคู่ด้วยชื่อผู้ใช้ TikTok: เพลงจากแชทจับได้เอง เพลงจากหน้านี้ต้องกรอก "ชื่อของคุณ" ให้ตรง
- */
-function GiftSkipNote({ config }: { config: SongConfig }) {
-  const min = config.giftSkip?.min ?? 0;
-  if (!(min > 0)) return null;
   return (
-    <div className="rounded-field bg-fill px-4 py-3 text-sm">
-      <p>
-        <b>ดูไลฟ์ใน TikTok อยู่?</b> ขอเพลงจากหน้านี้โดยใส่ชื่อผู้ใช้ TikTok เป็นชื่อของคุณ
-        หรือพิมพ์ <b>!เพลง</b> ตามด้วยชื่อเพลงในแชทไลฟ์ แล้วส่งของขวัญสะสมครบ{" "}
-        <span className="num font-semibold">{coins(min)}</span> เพลงแรกของคุณจะลัดคิวไปก่อนเพลงที่ขอฟรี
-        ส่งทีละน้อยก็นับรวมกัน
-      </p>
-    </div>
+    <section aria-labelledby="skip-title" className="surface px-5 pt-5 pb-2 sm:px-6 sm:pt-6">
+      <h2 id="skip-title" className="text-lg font-bold">
+        อยากให้เพลงขึ้นก่อน
+      </h2>
+      <p className="mt-1 text-sm text-muted">เพลงที่ลัดคิวได้เล่นก่อนเพลงที่ขอฟรีทุกเพลง</p>
+
+      <ul className="rows mt-2">
+        {giftMin > 0 && (
+          <li className="py-4">
+            <p className="font-medium">
+              ส่งของขวัญใน TikTok ครบ <span className="num">{coins(giftMin)}</span>
+            </p>
+            <p className="mt-1 max-w-prose text-sm text-muted">
+              ขอเพลงจากหน้านี้โดยใส่ชื่อผู้ใช้ TikTok ในช่องชื่อ หรือพิมพ์{" "}
+              <b className="font-medium text-ink">!เพลง</b> ตามด้วยชื่อเพลงในแชทไลฟ์
+              ส่งทีละน้อยก็นับรวม ครบเมื่อไรเพลงแรกของคุณจะลัดคิว
+            </p>
+          </li>
+        )}
+        {donateMin > 0 && (
+          <li className="flex flex-wrap items-center gap-x-4 gap-y-3 py-4">
+            <div className="min-w-0 flex-1 basis-64">
+              <p className="font-medium">
+                โดเนท <span className="num">{baht(donateMin)}</span> ขึ้นไปผ่าน EasyDonate
+              </p>
+              <p className="mt-1 max-w-prose text-sm text-muted">
+                พิมพ์ <b className="font-medium text-ink">!เพลง</b> ตามด้วยชื่อเพลงในข้อความโดเนท
+                หรือวางลิงก์ YouTube ไว้ในข้อความ
+              </p>
+            </div>
+            {donateHref && (
+              <a
+                href={donateHref}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-fill px-4 text-sm font-medium transition-colors hover:bg-fill-2"
+              >
+                ไปหน้าโดเนท
+                <IconExternal className="h-3.5 w-3.5" />
+              </a>
+            )}
+          </li>
+        )}
+      </ul>
+    </section>
   );
 }
 

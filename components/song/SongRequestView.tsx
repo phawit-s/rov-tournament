@@ -13,7 +13,7 @@ import { DEFAULT_SONG_CONFIG } from "@/lib/song/types";
 import { IconArrowLeft } from "../ui/icons";
 import { Badge, EmptyState, LiveBadge, Skeleton } from "../ui/kit";
 import Stage from "./Stage";
-import { QueueList, RequestForm } from "./SongRequestPanel";
+import { QueueList, RequestForm, SkipOptions } from "./SongRequestPanel";
 
 /**
  * หน้าขอเพลงของช่อง — /song/#h=ชื่อช่อง (หรือ #ch=รหัสช่อง)
@@ -147,7 +147,10 @@ function RequestScreen({ channel }: { channel: Channel }) {
         <RequestForm channel={channel} config={config} queue={queue} queued={queued} />
       </div>
 
-      <div className="min-w-0 lg:pt-14">
+      {/* ทางลัดคิวอยู่เหนือคิว ไม่อยู่ในคอลัมน์ซ้าย — คอลัมน์ซ้ายติดอยู่กับที่บนจอกว้าง
+          ยาวเกินจอเมื่อไรส่วนล่างจะเลื่อนไม่ถึง (มือถือต่อจากฟอร์มตามลำดับเดิม) */}
+      <div className="min-w-0 space-y-10 lg:pt-14">
+        <SkipOptions config={config} />
         <QueueList channelId={channel.id} queued={queued} loading={!loaded} />
       </div>
     </div>
